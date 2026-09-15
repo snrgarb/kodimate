@@ -55,11 +55,26 @@ Where Programmes come from for a given Provider: Xtream xmltv, a playlist-declar
 A Channel name lowercased, with non-alphanumeric characters removed and a trailing HD/FHD/UHD/4K suffix stripped. Used only for EPG matching.
 
 **Catch-up**:
-Playing a past Programme from the Provider's archive. The canonical term for this feature; "archive" and "timeshift" are used only when describing the Provider's own boundary/terminology.
+Playing a past Programme from the Provider's archive. The canonical term for this feature; "archive" and "timeshift" are used only when describing the Provider's own boundary/terminology. A Programme is playable via Catch-up when its Channel has a Catch-up Window, it started within that window, and it has started (in-progress Programmes play as Start Over). Catch-up is programme-driven: a Channel with no Programmes offers no Catch-up.
 _Avoid_: Archive, timeshift (except when referring to Provider-side terminology)
 
 **Catch-up Window**:
 The number of days back a Channel supports Catch-up. Set per-Channel; if absent, falls back to the Provider's default. An Xtream Provider's `tv_archive=0` means no Catch-up regardless of any duration value. A Channel value always beats the Provider default. There is no user-configurable cap.
+
+**Start Over**:
+Playing the currently airing Programme from its beginning via Catch-up. A special case of Catch-up, not a separate feature.
+_Avoid_: restart, replay
+
+**Programme info dialog**:
+The single dialog showing a Programme's title, times, and description with actions (Play Catch-up, Watch live). Opened from the Guide, the Catch-up browser, and the OSD.
+_Avoid_: details popup, EPG popup
+
+**Catch-up browser**:
+The screen listing past Programmes per Channel, grouped by day, for Channels with a Catch-up Window.
+_Avoid_: archive browser, replay list
+
+**Origin screen**:
+The screen a playback session was started from (Guide, Catch-up browser, channel list); Back from playback returns there.
 
 **Favourite**:
 A user-marked Channel, held in a single flat user-ordered list; there are no multiple lists.

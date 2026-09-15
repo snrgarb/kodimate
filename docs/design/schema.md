@@ -6,7 +6,7 @@ An outline of the Kodimate SQLite tables: columns and keys, not final DDL. See [
 
 ### provider
 
-`id` (PK), `kind` (`'m3u' | 'xtream'`), `name`, `enabled`, `sort_order`, `m3u_url`, `xtream_host`, `xtream_username`, `xtream_password`, `epg_override_url`, `catchup_days_default` (nullable), `number_offset`, `stream_format` (`'ts' | 'm3u8' | NULL`), `last_refresh_at`, `last_error`.
+`id` (PK), `kind` (`'m3u' | 'xtream'`), `name`, `enabled`, `sort_order`, `m3u_url`, `xtream_host`, `xtream_username`, `xtream_password`, `epg_override_url`, `catchup_days_default` (nullable), `catchup_url_form` (`'path' | 'query'`, default `'path'`), `catchup_correction_hours` (default 0), `number_offset`, `stream_format` (`'ts' | 'm3u8' | NULL`), `last_refresh_at`, `last_error`.
 
 ### epg_source
 
@@ -39,6 +39,10 @@ An outline of the Kodimate SQLite tables: columns and keys, not final DDL. See [
 ## Effective Catch-up Window
 
 `channel.catchup_days`, else `provider.catchup_days_default`. `NULL` at both levels means no Catch-up.
+
+## Catch-up playability
+
+A Programme is playable when its Channel's Effective Catch-up Window is > 0, `programme.start >= now - window_days`, and `programme.start < now`. Requested duration is `min(programme.end, now) - programme.start`. Because `programme` rows older than 7 days are deleted, Catch-up is effectively capped at 7 days.
 
 ## Refresh invariants
 
