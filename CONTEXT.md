@@ -14,6 +14,22 @@ A Provider defined by a playlist URL or file.
 **Xtream Provider**:
 A Provider defined by an Xtream Codes server address, username, and password.
 
+**Provider Form**:
+The screen for adding or editing one Provider. Its fields depend on the Provider's kind, which is chosen when the Provider is created and never changes afterwards.
+_Avoid_: settings page, wizard
+
+**Test Connection**:
+An action on the Provider Form that checks the entered details against the Provider without saving anything: for an Xtream Provider, that the credentials are accepted; for an M3U Provider, that the playlist can be fetched and parsed. Its outcome never blocks saving.
+_Avoid_: verify, validate
+
+**Disabled**:
+The state of a Provider the user has switched off. Its Channels are excluded from lists, Guide, Zapping, and Favourites but nothing is deleted; re-enabling triggers a Refresh.
+_Avoid_: paused, inactive
+
+**Deleted**:
+The state of a Provider the user has removed but whose Channels, Groups, Programmes, and Overrides have not yet been purged. A Deleted Provider and everything under it is invisible everywhere; the purge happens in the background.
+_Avoid_: removed, archived
+
 **Channel**:
 A live stream offered by one Provider. The same channel offered by two Providers is two separate Channels; Channels are never merged across Providers. Each Channel has a stable **Channel Key** identifying it across Refreshes.
 _Avoid_: Stream
