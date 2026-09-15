@@ -87,6 +87,33 @@ _Avoid_: Channel switching
 **OSD**:
 The on-screen display shown over live video, presenting channel and programme information.
 
+**Playback Session**:
+One Channel's playback from the moment it is selected (by Zapping, Catch-up, or startup autoplay) until the user leaves it or selects another Channel. Moves through the states Connecting, Playing, Reconnecting, and Failed.
+_Avoid_: stream session, play session
+
+**Connecting**:
+The Playback Session state from selection until video is confirmed to be playing. Shown as black video with a spinner and the OSD bar for the selected Channel.
+
+**Playing**:
+The Playback Session state in which video is confirmed to be playing.
+
+**Reconnecting**:
+The Playback Session state entered when a Playing session's stream stops without user action. A bounded number of Attempts are made to resume; if none succeeds the session becomes Failed.
+
+**Failed**:
+The terminal Playback Session state after every Attempt (including any Live Form fallback) has failed. The user stays in the player with the Failure Reason shown and the channel list open; selecting the same Channel again starts a fresh Playback Session.
+
+**Attempt**:
+One try at starting a Channel's stream within a Playback Session. Attempts differ only by Live Form and timing; the Channel's headers are applied afresh on every Attempt.
+
+**Live Form**:
+The stream URL variant used for an Xtream Provider's live Channels: `ts` or `m3u8`. Each Xtream Provider has one Live Form in effect: the user's override if set, otherwise the form learned from a successful fallback, otherwise `ts`. M3U Providers have no Live Form.
+_Avoid_: stream format, output format, container
+
+**Failure Reason**:
+The user-facing category of a Failed Playback Session: Unavailable (stream could not be started or resumed), Login rejected (the Provider refused the credentials), or Connection limit (the Provider refused because too many connections are in use).
+_Avoid_: error code, HTTP status
+
 **Refresh**:
 Re-fetching a Provider's Channels and EPG.
 _Avoid_: Sync, reload

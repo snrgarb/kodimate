@@ -6,7 +6,7 @@ An outline of the Kodimate SQLite tables: columns and keys, not final DDL. See [
 
 ### provider
 
-`id` (PK), `kind` (`'m3u' | 'xtream'`), `name`, `enabled`, `sort_order`, `m3u_url`, `xtream_host`, `xtream_username`, `xtream_password`, `epg_override_url`, `catchup_days_default` (nullable), `catchup_url_form` (`'path' | 'query'`, default `'path'`), `catchup_correction_hours` (default 0), `number_offset`, `stream_format` (`'ts' | 'm3u8' | NULL`), `last_refresh_at`, `last_error`.
+`id` (PK), `kind` (`'m3u' | 'xtream'`), `name`, `enabled`, `sort_order`, `m3u_url`, `xtream_host`, `xtream_username`, `xtream_password`, `epg_override_url`, `catchup_days_default` (nullable), `catchup_url_form` (`'path' | 'query'`, default `'path'`), `catchup_correction_hours` (default 0), `number_offset`, `stream_format` (`'ts' | 'm3u8' | NULL`), `learned_stream_format` (`'ts' | 'm3u8' | NULL`, set when a Live Form fallback succeeds; cleared when the Provider's host or credentials are edited or when `stream_format` is set; `stream_format` always wins), `last_refresh_at`, `last_error`.
 
 ### epg_source
 
@@ -39,6 +39,10 @@ An outline of the Kodimate SQLite tables: columns and keys, not final DDL. See [
 ## Effective Catch-up Window
 
 `channel.catchup_days`, else `provider.catchup_days_default`. `NULL` at both levels means no Catch-up.
+
+## Live Form
+
+Live Form (Xtream Providers only): `provider.stream_format`, else `provider.learned_stream_format`, else `'ts'`. `'m3u8'` is only used when the Provider's `allowed_output_formats` includes it.
 
 ## Catch-up playability
 
