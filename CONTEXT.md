@@ -23,7 +23,7 @@ The stable identity of a Channel within its Provider. For an Xtream Provider, th
 _Avoid_: id, uid
 
 **Stale**:
-The state of a Channel absent from its Provider's latest Refresh. Stale Channels are excluded from lists, Guide, and Zapping but keep their Overrides; a Channel continuously Stale for 7 days is purged during Refresh.
+The state of a Channel absent from its Provider's latest Refresh. Stale Channels are excluded from lists, Guide, and Zapping but keep their Overrides; a Channel continuously Stale for 7 days is purged during Refresh. A Channel that goes Stale while playing keeps playing until the user leaves it.
 _Avoid_: deleted, orphaned
 
 **Override**:
@@ -88,7 +88,7 @@ _Avoid_: Channel switching
 The on-screen display shown over live video, presenting channel and programme information.
 
 **Playback Session**:
-One Channel's playback from the moment it is selected (by Zapping, Catch-up, or startup autoplay) until the user leaves it or selects another Channel. Moves through the states Connecting, Playing, Reconnecting, and Failed.
+One Channel's playback from the moment it is selected (by Zapping, Catch-up, or startup autoplay) until the user leaves it or selects another Channel. Moves through the states Connecting, Playing, Reconnecting, and Failed. A Playback Session keeps the Channel as it was when the session started; a Refresh never changes or interrupts a running session.
 _Avoid_: stream session, play session
 
 **Connecting**:
@@ -117,3 +117,7 @@ _Avoid_: error code, HTTP status
 **Refresh**:
 Re-fetching a Provider's Channels and EPG.
 _Avoid_: Sync, reload
+
+**Generation**:
+A counter that advances each time a Refresh commits new Channels or Programmes. Screens re-render when the Generation they were drawn from is no longer current.
+_Avoid_: version, revision, timestamp

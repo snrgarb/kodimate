@@ -1,16 +1,20 @@
 # Schema outline
 
-An outline of the Kodimate SQLite tables: columns and keys, not final DDL. See [ADR 0001](../adr/0001-channel-identity-stale-overrides.md) for Channel identity, Stale, and Overrides; [ADR 0002](../adr/0002-provider-credentials-plaintext.md) for credential storage.
+An outline of the Kodimate SQLite tables: columns and keys, not final DDL. See [ADR 0001](../adr/0001-channel-identity-stale-overrides.md) for Channel identity, Stale, and Overrides; [ADR 0002](../adr/0002-provider-credentials-plaintext.md) for credential storage; [ADR 0003](../adr/0003-service-sole-writer-wal.md) for the service/script write split and connection settings.
 
 ## Tables
 
 ### provider
 
-`id` (PK), `kind` (`'m3u' | 'xtream'`), `name`, `enabled`, `sort_order`, `m3u_url`, `xtream_host`, `xtream_username`, `xtream_password`, `epg_override_url`, `catchup_days_default` (nullable), `catchup_url_form` (`'path' | 'query'`, default `'path'`), `catchup_correction_hours` (default 0), `number_offset`, `stream_format` (`'ts' | 'm3u8' | NULL`), `learned_stream_format` (`'ts' | 'm3u8' | NULL`, set when a Live Form fallback succeeds; cleared when the Provider's host or credentials are edited or when `stream_format` is set; `stream_format` always wins), `last_refresh_at`, `last_error`.
+`id` (PK), `kind` (`'m3u' | 'xtream'`), `name`, `enabled`, `sort_order`, `m3u_url`, `xtream_host`, `xtream_username`, `xtream_password`, `epg_override_url`, `catchup_days_default` (nullable), `catchup_url_form` (`'path' | 'query'`, default `'path'`), `catchup_correction_hours` (default 0), `number_offset`, `stream_format` (`'ts' | 'm3u8' | NULL`), `learned_stream_format` (`'ts' | 'm3u8' | NULL`, set when a Live Form fallback succeeds; cleared when the Provider's host or credentials are edited or when `stream_format` is set; `stream_format` always wins), `last_refresh_at`, `last_error`, `config_version` (int, incremented on every script-side edit of kind/url/host/creds/epg_override_url; the service discards in-flight Refresh results whose start version no longer matches).
 
 ### epg_source
 
 `id` (PK), `provider_id` (FK, UNIQUE), `url`, `last_fetched_at`, `etag`/`last_modified`.
+
+### programme_staging
+
+Same columns as `programme`. Exists only during a Refresh; dropped at service startup if left over from a crash.
 
 ### channel_group
 
@@ -55,6 +59,14 @@ A Programme is playable when its Channel's Effective Catch-up Window is > 0, `pr
 - A Channel is purged once `stale_since` is older than 7 days.
 - `programme` rows for an `epg_source` are replaced inside one transaction.
 - `programme` rows older than 7 days are deleted.
+- Rebuild is performed only by the service.
+- Programme replacement uses `programme_staging` plus a short swap transaction.
+- Providers are refreshed sequentially.
+- A Refresh commits nothing if the Provider's `config_version` changed since it started.
+
+## Connections
+
+WAL journal mode, `synchronous=NORMAL`, `busy_timeout` 5 s. Both processes open through one shared helper that also runs schema migrations. See [ADR 0003](../adr/0003-service-sole-writer-wal.md).
 
 ## Visibility
 
