@@ -8,7 +8,7 @@ open_db() so that whichever process starts first creates the v1 schema
 import os
 import sqlite3
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA_STATEMENTS = [
     """CREATE TABLE IF NOT EXISTS provider (
@@ -45,18 +45,11 @@ _SCHEMA_STATEMENTS = [
         etag TEXT,
         last_modified TEXT
     )""",
-    """CREATE TABLE IF NOT EXISTS programme_staging (
+    """CREATE TABLE IF NOT EXISTS epg_channel (
         epg_source_id INTEGER NOT NULL,
         xmltv_channel_id TEXT NOT NULL,
-        start TEXT NOT NULL,
-        end TEXT NOT NULL,
-        title TEXT,
-        subtitle TEXT,
-        description TEXT,
-        icon_url TEXT,
-        category TEXT,
-        catchup_id TEXT,
-        PRIMARY KEY (epg_source_id, xmltv_channel_id, start)
+        normalised_name TEXT,
+        PRIMARY KEY (epg_source_id, xmltv_channel_id)
     )""",
     """CREATE TABLE IF NOT EXISTS channel_group (
         id INTEGER PRIMARY KEY,

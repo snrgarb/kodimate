@@ -1,7 +1,7 @@
 from kodimate import db
 
 EXPECTED_TABLES = {
-    'provider', 'epg_source', 'programme_staging', 'channel_group',
+    'provider', 'epg_source', 'epg_channel', 'channel_group',
     'channel', 'channel_override', 'programme', 'meta',
 }
 

@@ -75,3 +75,50 @@ def fetch_playlist(source, user_agent=None, timeout=20):
     if len(raw) > MAX_PLAYLIST_BYTES:
         raise FetchError("Playlist too large")
     return raw.decode(charset or 'utf-8', errors='replace')
+
+
+class StreamResponse(object):
+    def __init__(self, stream=None, etag=None, last_modified=None, not_modified=False):
+        self.stream = stream
+        self.etag = etag
+        self.last_modified = last_modified
+        self.not_modified = not_modified
+
+
+def open_stream(source, user_agent=None, etag=None, last_modified=None, timeout=20):
+    if source.startswith('file://'):
+        return _open_local_stream(source[len('file://'):])
+
+    if not source.startswith('http://') and not source.startswith('https://'):
+        return _open_local_stream(source)
+
+    headers = {'User-Agent': user_agent if user_agent else DEFAULT_USER_AGENT}
+    if etag:
+        headers['If-None-Match'] = etag
+    if last_modified:
+        headers['If-Modified-Since'] = last_modified
+    request = Request(source, headers=headers)
+    try:
+        response = urlopen(request, timeout=timeout)
+    except HTTPError as exc:
+        if exc.code == 304:
+            return StreamResponse(not_modified=True)
+        raise FetchError(http_error(exc.code))
+    except URLError as exc:
+        if isinstance(getattr(exc, 'reason', None), Exception) and 'timed out' in str(exc.reason).lower():
+            raise FetchError(ERROR_TIMED_OUT)
+        raise FetchError(ERROR_UNREACHABLE)
+    except Exception:
+        raise FetchError(ERROR_UNREACHABLE)
+
+    return StreamResponse(
+        stream=response,
+        etag=response.headers.get('ETag'),
+        last_modified=response.headers.get('Last-Modified'),
+    )
+
+
+def _open_local_stream(path):
+    if not os.path.isfile(path):
+        raise FetchError(ERROR_FILE_NOT_FOUND)
+    return StreamResponse(stream=open(path, 'rb'))

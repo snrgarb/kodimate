@@ -11,14 +11,18 @@ All Kodi interaction is injected so this is testable without xbmc*:
 - ``notify``: callable ``(generation, provider_ids)`` -> NotifyAll wake-up.
 - ``fetcher``: callable ``(source, user_agent) -> text``, defaults to
   ``fetch.fetch_playlist``.
+- ``opener``: callable ``(source, user_agent, etag, last_modified) ->
+  fetch.StreamResponse``, defaults to ``fetch.open_stream``; used for the EPG
+  fetch after channel ingest.
 - ``now``: callable returning the current UTC ``datetime``, defaults to
   ``datetime.utcnow``.
 - ``settings``: dict-like with ``refresh_interval_hours`` (default 12) and
   ``refresh_on_startup`` (default True).
 """
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
-from . import fetch, ingest, m3u, xtream
+from . import epg, fetch, ingest, m3u, xtream
 
 _ISO_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
 
@@ -28,11 +32,13 @@ def _iso(dt):
 
 
 class RefreshService(object):
-    def __init__(self, conn, props, notify, fetcher=None, now=None, settings=None):
+    def __init__(self, conn, props, notify, fetcher=None, now=None, settings=None,
+                 opener=None):
         self.conn = conn
         self.props = props
         self.notify = notify
         self.fetcher = fetcher or fetch.fetch_playlist
+        self.opener = opener or fetch.open_stream
         self.now = now or datetime.utcnow
         self.settings = settings or {}
         self.generation = 0
@@ -52,6 +58,11 @@ class RefreshService(object):
             "(SELECT id FROM epg_source WHERE provider_id = ?)",
             (provider_id,),
         )
+        self.conn.execute(
+            "DELETE FROM epg_channel WHERE epg_source_id IN "
+            "(SELECT id FROM epg_source WHERE provider_id = ?)",
+            (provider_id,),
+        )
         for table in ('epg_source', 'channel_group', 'channel', 'channel_override'):
             self.conn.execute(
                 "DELETE FROM {0} WHERE provider_id = ?".format(table), (provider_id,)
@@ -59,7 +70,7 @@ class RefreshService(object):
         self.conn.execute("DELETE FROM provider WHERE id = ?", (provider_id,))
 
     def on_start(self):
-        self.conn.execute("DELETE FROM programme_staging")
+        self.conn.execute("DROP TABLE IF EXISTS programme_staging")
 
         deleted_ids = [
             row[0] for row in self.conn.execute(
@@ -222,6 +233,7 @@ class RefreshService(object):
                     self.conn, provider_id, account, categories, streams, self.now(),
                     expected_config_version=config_version,
                 )
+            epg_error = self._refresh_epg(provider_id, row, config_version)
         except ingest.ConfigVersionChanged:
             still_here = self.conn.execute(
                 "SELECT 1 FROM provider WHERE id = ? AND deleted_at IS NULL", (provider_id,)
@@ -237,8 +249,8 @@ class RefreshService(object):
             return
 
         self.conn.execute(
-            "UPDATE provider SET last_refresh_at = ?, last_error = NULL WHERE id = ?",
-            (_iso(self.now()), provider_id),
+            "UPDATE provider SET last_refresh_at = ?, last_error = ? WHERE id = ?",
+            (_iso(self.now()), epg_error, provider_id),
         )
         self.generation += 1
         self.props.set('db_generation', str(self.generation))
@@ -247,3 +259,42 @@ class RefreshService(object):
         if requested_by_ui:
             self.props.set('refresh_result.{0}'.format(provider_id), 'ok')
         return outcome
+
+    def _refresh_epg(self, provider_id, row, config_version):
+        """Fetch/parse the provider's EPG Source (non-fatal to the channel
+        refresh) and always (re)match channel.epg_channel_id afterwards.
+        Returns an error message for `provider.last_error`, or None."""
+        epg_error = None
+        epg_row = self.conn.execute(
+            "SELECT id, url, etag, last_modified FROM epg_source WHERE provider_id = ?",
+            (provider_id,),
+        ).fetchone()
+        if epg_row is not None:
+            epg_source_id, url, etag, last_modified = epg_row
+            resp = None
+            try:
+                resp = self.opener(url, row['user_agent'], etag, last_modified)
+                if not resp.not_modified:
+                    epg.load_xmltv(
+                        self.conn, epg_source_id, resp.stream, self.now(),
+                        etag=resp.etag, last_modified=resp.last_modified,
+                        expected_config_version=config_version,
+                    )
+            except ingest.ConfigVersionChanged:
+                raise
+            except fetch.FetchError as exc:
+                epg_error = 'EPG: {0}'.format(exc)
+            except ET.ParseError:
+                epg_error = 'EPG: Malformed XMLTV'
+            except epg.EpgTooLarge:
+                epg_error = 'EPG: Too large'
+            except Exception:
+                epg_error = 'EPG: Unreachable'
+            finally:
+                if resp is not None and resp.stream is not None:
+                    resp.stream.close()
+
+            epg.prune_expired(self.conn, epg_source_id, self.now())
+
+        epg.match_channels(self.conn, provider_id)
+        return epg_error

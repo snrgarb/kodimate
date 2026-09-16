@@ -142,6 +142,41 @@ def _ensure_groups(conn, provider_id, group_names_in_order):
     return group_ids
 
 
+def _resolve_epg_source(conn, provider_id, declared_url):
+    """Upsert (or clear) the provider's epg_source row from `epg_override_url`
+    (wins) or `declared_url` (the playlist/xmltv.php default). Returns the
+    resolved URL, or None if there is no EPG Source at all."""
+    override_row = conn.execute(
+        "SELECT epg_override_url FROM provider WHERE id = ?", (provider_id,)
+    ).fetchone()
+    override = override_row[0] if override_row else None
+    resolved = override or declared_url
+
+    if resolved:
+        existing = conn.execute(
+            "SELECT url FROM epg_source WHERE provider_id = ?", (provider_id,)
+        ).fetchone()
+        if existing is None or existing[0] != resolved:
+            conn.execute(
+                "INSERT INTO epg_source (provider_id, url) VALUES (?, ?) "
+                "ON CONFLICT(provider_id) DO UPDATE SET "
+                "url = excluded.url, etag = NULL, last_modified = NULL",
+                (provider_id, resolved),
+            )
+    else:
+        conn.execute(
+            "DELETE FROM programme WHERE epg_source_id IN "
+            "(SELECT id FROM epg_source WHERE provider_id = ?)", (provider_id,)
+        )
+        conn.execute(
+            "DELETE FROM epg_channel WHERE epg_source_id IN "
+            "(SELECT id FROM epg_source WHERE provider_id = ?)", (provider_id,)
+        )
+        conn.execute("DELETE FROM epg_source WHERE provider_id = ?", (provider_id,))
+
+    return resolved
+
+
 def _mark_stale_purge_and_clean_groups(conn, provider_id, now_iso, now_dt):
     """Shared refresh tail: mark absent channels Stale, purge old-Stale rows,
     and drop groups left with no channels. Used by both M3U and Xtream
@@ -201,10 +236,10 @@ def refresh_m3u_provider(conn, provider_id, playlist_text, now, expected_config_
                 """
                 INSERT INTO channel (
                     provider_id, channel_key, name, normalised_name, stream_url,
-                    logo_url, group_id, provider_number, position,
+                    logo_url, group_id, provider_number, position, epg_channel_id,
                     catchup_days, catchup_mode, catchup_source, catchup_correction_hours,
                     headers_json, stale_since, last_seen_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
                 ON CONFLICT(provider_id, channel_key) DO UPDATE SET
                     name = excluded.name,
                     normalised_name = excluded.normalised_name,
@@ -213,6 +248,7 @@ def refresh_m3u_provider(conn, provider_id, playlist_text, now, expected_config_
                     group_id = excluded.group_id,
                     provider_number = excluded.provider_number,
                     position = excluded.position,
+                    epg_channel_id = excluded.epg_channel_id,
                     catchup_days = excluded.catchup_days,
                     catchup_mode = excluded.catchup_mode,
                     catchup_source = excluded.catchup_source,
@@ -224,7 +260,7 @@ def refresh_m3u_provider(conn, provider_id, playlist_text, now, expected_config_
                 (
                     provider_id, key, entry['name'], normalise_name(entry['name']),
                     entry['url'], entry.get('tvg_logo'), group_ids[group_name],
-                    entry.get('tvg_chno'), position,
+                    entry.get('tvg_chno'), position, entry.get('tvg_id') or None,
                     catchup['catchup_days'], catchup['catchup'],
                     catchup['catchup_source'], catchup['catchup_correction'],
                     headers_json, now_iso,
@@ -233,12 +269,7 @@ def refresh_m3u_provider(conn, provider_id, playlist_text, now, expected_config_
 
         _mark_stale_purge_and_clean_groups(conn, provider_id, now_iso, now_dt)
 
-        if epg_url:
-            conn.execute(
-                "INSERT INTO epg_source (provider_id, url) VALUES (?, ?) "
-                "ON CONFLICT(provider_id) DO UPDATE SET url = excluded.url",
-                (provider_id, epg_url),
-            )
+        resolved_epg_url = _resolve_epg_source(conn, provider_id, epg_url)
 
         conn.execute("COMMIT")
     except Exception:
@@ -252,7 +283,7 @@ def refresh_m3u_provider(conn, provider_id, playlist_text, now, expected_config_
         "SELECT COUNT(*) FROM channel WHERE provider_id = ?", (provider_id,)
     ).fetchone()[0]
     listable_count = listable_channel_count(conn, provider_id)
-    return RefreshOutcome(channel_count, listable_count, epg_url)
+    return RefreshOutcome(channel_count, listable_count, resolved_epg_url)
 
 
 def refresh_xtream_provider(conn, provider_id, account, categories, streams, now,
@@ -363,11 +394,7 @@ def refresh_xtream_provider(conn, provider_id, account, categories, streams, now
         epg_url = '{0}/xmltv.php?username={1}&password={2}'.format(
             host, quote(str(username), safe=''), quote(str(password), safe='')
         )
-        conn.execute(
-            "INSERT INTO epg_source (provider_id, url) VALUES (?, ?) "
-            "ON CONFLICT(provider_id) DO UPDATE SET url = excluded.url",
-            (provider_id, epg_url),
-        )
+        resolved_epg_url = _resolve_epg_source(conn, provider_id, epg_url)
 
         conn.execute("COMMIT")
     except Exception:
@@ -381,4 +408,4 @@ def refresh_xtream_provider(conn, provider_id, account, categories, streams, now
         "SELECT COUNT(*) FROM channel WHERE provider_id = ?", (provider_id,)
     ).fetchone()[0]
     listable_count = listable_channel_count(conn, provider_id)
-    return RefreshOutcome(channel_count, listable_count, epg_url)
+    return RefreshOutcome(channel_count, listable_count, resolved_epg_url)

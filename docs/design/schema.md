@@ -14,7 +14,11 @@ An outline of the Kodimate SQLite tables: columns and keys, not final DDL. See [
 
 ### programme_staging
 
-Same columns as `programme`. Exists only during a Refresh; dropped at service startup if left over from a crash.
+Same columns as `programme`. Created per EPG refresh, dropped by the swap and at service startup.
+
+### epg_channel
+
+`epg_source_id` (FK), `xmltv_channel_id`, `normalised_name` (nullable); PK(`epg_source_id`, `xmltv_channel_id`). Records the channel ids (and normalised first `<display-name>`) seen in the last successfully parsed XMLTV document per EPG Source, so matching can run on every refresh even when the feed returns 304.
 
 ### channel_group
 
@@ -61,6 +65,7 @@ A Programme is playable when its Channel's Effective Catch-up Window is > 0, `pr
 - `programme` rows older than 7 days are deleted.
 - Rebuild is performed only by the service.
 - Programme replacement uses `programme_staging` plus a short swap transaction.
+- A Channel's `epg_channel_id` is matched, on every Refresh, against its Provider's `epg_channel` rows: by exact `tvg-id`/`epg_channel_id` (after stripping a trailing `(srcNN)`-style suffix), else by Normalised Name, else left unmatched (`NULL`).
 - Providers are refreshed sequentially.
 - A Refresh commits nothing if the Provider's `config_version` changed since it started.
 - `provider` rows with `deleted_at` set are cascaded (epg_source, channel_group, channel, programme, channel_override) by the service, which then bumps the Generation; leftovers are also purged at service startup.

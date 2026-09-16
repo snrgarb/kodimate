@@ -1,9 +1,21 @@
 # -*- coding: utf-8 -*-
+import io
 from datetime import datetime, timedelta
+
+import pytest
 
 from kodimate import db, fetch, refresh
 
 _BASIC = '#EXTM3U\n#EXTINF:-1 tvg-id="one",Chan\nhttp://example.com/one\n'
+_WITH_EPG = (
+    '#EXTM3U url-tvg="http://epg.example/guide.xml"\n'
+    '#EXTINF:-1 tvg-id="bbcnews.uk",BBC News HD\nhttp://example.com/one\n'
+)
+_XMLTV = (
+    '<tv><channel id="bbcnews.uk"><display-name>BBC News</display-name></channel>'
+    '<programme start="20240101120000 +0000" stop="20240101123000 +0000" '
+    'channel="bbcnews.uk"><title>News</title></programme></tv>'
+)
 
 
 class FakeProps(object):
@@ -318,6 +330,7 @@ def test_manual_refresh_xtream_ok(tmp_path):
         conn, props, FakeNotify(), fetcher=counting_fetcher,
         now=lambda: datetime(2024, 1, 1),
         settings=_no_startup_settings(),
+        opener=lambda source, user_agent, etag, last_modified: fetch.StreamResponse(not_modified=True),
     )
     svc.tick()
 
@@ -402,6 +415,184 @@ def test_config_version_changed_for_gone_provider_not_requeued(tmp_path):
     svc.tick()
 
     assert svc._queue == []
+
+
+def test_epg_304_skips_parse_but_matching_still_runs(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 1, m3u_url='http://x/list.m3u')
+    props = FakeProps()
+    props.set('refresh_request', '1;ui')
+
+    opener_calls = []
+
+    def opener(source, user_agent, etag, last_modified):
+        opener_calls.append((source, etag, last_modified))
+        return fetch.StreamResponse(not_modified=True)
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=lambda s, u: _WITH_EPG,
+        now=lambda: datetime(2024, 1, 1),
+        settings=_no_startup_settings(), opener=opener,
+    )
+    svc.tick()
+
+    assert opener_calls == [('http://epg.example/guide.xml', None, None)]
+    assert props.get('refresh_result.1') == 'ok'
+    row = conn.execute(
+        "SELECT last_error FROM provider WHERE id = 1"
+    ).fetchone()
+    assert row[0] is None
+    channel = conn.execute(
+        "SELECT epg_channel_id FROM channel WHERE provider_id = 1"
+    ).fetchone()
+    assert channel == (None,)  # matching ran, found nothing in epg_channel yet
+
+
+def test_epg_opener_receives_stored_etag_and_last_modified(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 1, m3u_url='http://x/list.m3u')
+    conn.execute(
+        "INSERT INTO epg_source (provider_id, url, etag, last_modified) "
+        "VALUES (1, 'http://epg.example/guide.xml', '\"etag1\"', 'lm1')"
+    )
+    props = FakeProps()
+    props.set('refresh_request', '1;ui')
+
+    opener_calls = []
+
+    def opener(source, user_agent, etag, last_modified):
+        opener_calls.append((source, etag, last_modified))
+        return fetch.StreamResponse(not_modified=True)
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=lambda s, u: _WITH_EPG,
+        now=lambda: datetime(2024, 1, 1),
+        settings=_no_startup_settings(), opener=opener,
+    )
+    svc.tick()
+
+    assert opener_calls == [('http://epg.example/guide.xml', '"etag1"', 'lm1')]
+
+
+def test_epg_fetch_error_leaves_channels_refreshed_but_records_last_error(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 1, m3u_url='http://x/list.m3u')
+    props = FakeProps()
+    props.set('refresh_request', '1;ui')
+
+    def opener(source, user_agent, etag, last_modified):
+        raise fetch.FetchError('Unreachable')
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=lambda s, u: _WITH_EPG,
+        now=lambda: datetime(2024, 1, 1),
+        settings=_no_startup_settings(), opener=opener,
+    )
+    svc.tick()
+
+    assert props.get('refresh_result.1') == 'ok'
+    channel_count = conn.execute(
+        "SELECT COUNT(*) FROM channel WHERE provider_id = 1"
+    ).fetchone()[0]
+    assert channel_count == 1
+    row = conn.execute("SELECT last_error FROM provider WHERE id = 1").fetchone()
+    assert row[0] == 'EPG: Unreachable'
+
+
+def test_epg_fetch_error_message_is_preserved_in_last_error(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 1, m3u_url='http://x/list.m3u')
+    props = FakeProps()
+    props.set('refresh_request', '1;ui')
+
+    def opener(source, user_agent, etag, last_modified):
+        raise fetch.FetchError('HTTP 404')
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=lambda s, u: _WITH_EPG,
+        now=lambda: datetime(2024, 1, 1),
+        settings=_no_startup_settings(), opener=opener,
+    )
+    svc.tick()
+
+    row = conn.execute("SELECT last_error FROM provider WHERE id = 1").fetchone()
+    assert row[0] == 'EPG: HTTP 404'
+
+
+def test_retention_pruned_on_304_path(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 1, m3u_url='http://x/list.m3u')
+    epg_source_id = conn.execute(
+        "INSERT INTO epg_source (provider_id, url) VALUES (1, 'http://epg.example/guide.xml')"
+    ).lastrowid
+    conn.execute(
+        "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title) "
+        "VALUES (?, 'bbcnews.uk', '2023-12-01T00:00:00Z', '2023-12-01T01:00:00Z', 'Old')",
+        (epg_source_id,),
+    )
+    conn.execute(
+        "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title) "
+        "VALUES (?, 'bbcnews.uk', '2024-01-01T06:00:00Z', '2024-01-01T07:00:00Z', 'Recent')",
+        (epg_source_id,),
+    )
+    props = FakeProps()
+    props.set('refresh_request', '1;ui')
+
+    def opener(source, user_agent, etag, last_modified):
+        return fetch.StreamResponse(not_modified=True)
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=lambda s, u: _WITH_EPG,
+        now=lambda: datetime(2024, 1, 8),
+        settings=_no_startup_settings(), opener=opener,
+    )
+    svc.tick()
+
+    titles = {row[0] for row in conn.execute(
+        "SELECT title FROM programme WHERE epg_source_id = ?", (epg_source_id,)
+    ).fetchall()}
+    assert titles == {'Recent'}
+
+
+def test_successful_epg_clears_last_error(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 1, m3u_url='http://x/list.m3u')
+    conn.execute("UPDATE provider SET last_error = 'EPG: Unreachable' WHERE id = 1")
+    props = FakeProps()
+    props.set('refresh_request', '1;ui')
+
+    def opener(source, user_agent, etag, last_modified):
+        return fetch.StreamResponse(stream=io.BytesIO(_XMLTV.encode('utf-8')))
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=lambda s, u: _WITH_EPG,
+        now=lambda: datetime(2024, 1, 1),
+        settings=_no_startup_settings(), opener=opener,
+    )
+    svc.tick()
+
+    row = conn.execute("SELECT last_error FROM provider WHERE id = 1").fetchone()
+    assert row[0] is None
+    channel = conn.execute(
+        "SELECT epg_channel_id FROM channel WHERE provider_id = 1"
+    ).fetchone()
+    assert channel == ('bbcnews.uk',)
+
+
+def test_on_start_drops_precreated_programme_staging_table(tmp_path):
+    conn = _make_conn(tmp_path)
+    conn.execute(
+        "CREATE TABLE programme_staging (epg_source_id INTEGER, xmltv_channel_id TEXT, "
+        "start TEXT, end TEXT, title TEXT, subtitle TEXT, description TEXT, "
+        "icon_url TEXT, category TEXT, catchup_id TEXT)"
+    )
+    props = FakeProps()
+
+    svc = refresh.RefreshService(conn, props, FakeNotify(), settings=_no_startup_settings())
+    svc.on_start()
+
+    with pytest.raises(Exception):
+        conn.execute("SELECT * FROM programme_staging")
 
 
 def test_deleted_provider_cascaded_at_on_start(tmp_path):

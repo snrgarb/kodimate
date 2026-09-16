@@ -173,6 +173,49 @@ def test_epg_source_upserted_from_header(tmp_path):
     assert row == ('http://epg.example/guide.xml',)
 
 
+def test_epg_override_url_wins_over_playlist_header(tmp_path):
+    conn = _make_db(tmp_path)
+    conn.execute(
+        "UPDATE provider SET epg_override_url = ? WHERE id = 1",
+        ('http://override.example/guide.xml',),
+    )
+    outcome = ingest.refresh_m3u_provider(conn, 1, _read_fixture('basic.m3u'), '2024-01-01T00:00:00Z')
+    assert outcome.epg_url == 'http://override.example/guide.xml'
+    row = conn.execute("SELECT url FROM epg_source WHERE provider_id = 1").fetchone()
+    assert row == ('http://override.example/guide.xml',)
+
+
+def test_no_epg_source_url_when_no_header_and_no_override(tmp_path):
+    conn = _make_db(tmp_path)
+    outcome = ingest.refresh_m3u_provider(
+        conn, 1, _read_fixture('one_channel.m3u'), '2024-01-01T00:00:00Z'
+    )
+    assert outcome.epg_url is None
+    assert conn.execute(
+        "SELECT COUNT(*) FROM epg_source WHERE provider_id = 1"
+    ).fetchone()[0] == 0
+
+
+def test_epg_source_url_change_clears_etag(tmp_path):
+    conn = _make_db(tmp_path)
+    ingest.refresh_m3u_provider(conn, 1, _read_fixture('basic.m3u'), '2024-01-01T00:00:00Z')
+    conn.execute(
+        "UPDATE epg_source SET etag = 'stale-etag', last_modified = 'stale-lm' "
+        "WHERE provider_id = 1"
+    )
+    conn.execute(
+        "UPDATE provider SET epg_override_url = ? WHERE id = 1",
+        ('http://override.example/guide.xml',),
+    )
+
+    ingest.refresh_m3u_provider(conn, 1, _read_fixture('basic.m3u'), '2024-01-02T00:00:00Z')
+
+    row = conn.execute(
+        "SELECT url, etag, last_modified FROM epg_source WHERE provider_id = 1"
+    ).fetchone()
+    assert row == ('http://override.example/guide.xml', None, None)
+
+
 def test_config_version_changed_rolls_back(tmp_path):
     conn = _make_db(tmp_path)
     conn.execute("UPDATE provider SET config_version = 5 WHERE id = 1")

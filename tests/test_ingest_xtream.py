@@ -122,6 +122,20 @@ def test_epg_source_url_percent_encodes_password_with_ampersand(tmp_path):
     assert row == ('http://xc.example/xmltv.php?username=user&password=pa%26ss',)
 
 
+def test_epg_override_url_wins_over_xmltv_php(tmp_path):
+    conn = _make_db(tmp_path)
+    conn.execute(
+        "UPDATE provider SET epg_override_url = ? WHERE id = 1",
+        ('http://override.example/guide.xml',),
+    )
+    outcome = ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, _CATEGORIES, _STREAMS, '2026-01-01T00:00:00Z'
+    )
+    assert outcome.epg_url == 'http://override.example/guide.xml'
+    row = conn.execute("SELECT url FROM epg_source WHERE provider_id = 1").fetchone()
+    assert row == ('http://override.example/guide.xml',)
+
+
 def test_second_refresh_marks_missing_stream_stale(tmp_path):
     conn = _make_db(tmp_path)
     ingest.refresh_xtream_provider(
