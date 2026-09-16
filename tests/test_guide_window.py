@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from kodimate import db, guide
+from kodimate.windows import guide as win_guide
 from kodimate.windows.guide import GuideWindow, CHANNEL_LIST_ID
 import xbmc
 import xbmcgui
@@ -251,10 +252,10 @@ def test_next_item_and_prev_item_skip_twelve_hours(tmp_path):
         window = _window(conn)
         t0 = window._viewport_start
 
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_NEXT_ITEM))
+        window.onAction(xbmcgui.Action(win_guide._ACTION_NEXT_ITEM))
         assert window._viewport_start == t0 + timedelta(hours=guide.SKIP_HOURS)
 
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_PREV_ITEM))
+        window.onAction(xbmcgui.Action(win_guide._ACTION_PREV_ITEM))
         assert window._viewport_start == t0
     finally:
         conn.close()
@@ -270,7 +271,7 @@ def test_skip_clamps_at_ceiling(tmp_path):
         _, ceiling = window._clamp_bounds(now)
 
         for _ in range(40):  # far more than enough to hit the ceiling
-            window.onAction(xbmcgui.Action(xbmcgui.ACTION_NEXT_ITEM))
+            window.onAction(xbmcgui.Action(win_guide._ACTION_NEXT_ITEM))
 
         assert window._viewport_start <= ceiling
     finally:
@@ -283,9 +284,9 @@ def test_remote_0_jumps_to_now(tmp_path):
         pid = _provider(conn)
         _channel(conn, pid, "a", "Alpha", 0)
         window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_NEXT_ITEM))
+        window.onAction(xbmcgui.Action(win_guide._ACTION_NEXT_ITEM))
 
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_REMOTE_0))
+        window.onAction(xbmcgui.Action(win_guide._ACTION_REMOTE_0))
 
         assert window._viewport_start == guide.round_down_30_local(window._cursor_time, window._tz)
     finally:
@@ -302,7 +303,7 @@ def test_page_up_page_down_route_into_vertical_move(tmp_path):
 
         list_control = window.getControl(CHANNEL_LIST_ID)
         list_control.selectItem(1)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAGE_DOWN))
+        window.onAction(xbmcgui.Action(win_guide._ACTION_PAGE_DOWN))
 
         assert window._last_selected == 1
     finally:
@@ -329,8 +330,8 @@ def test_past_cell_is_dimmed_but_cursor_cell_is_not(tmp_path):
 
         past_image, past_label = window._pool[0][0]
         current_image, current_label = window._pool[0][1]
-        assert past_label._text_color == 'FF808080'
-        assert current_label._text_color == 'FFFFFFFF'
+        assert past_label.getLabel() == '[COLOR FF808080]Past Show[/COLOR]'
+        assert current_label.getLabel() == '[COLOR FFFFFFFF]Current Show[/COLOR]'
     finally:
         conn.close()
 
@@ -347,7 +348,7 @@ def test_no_information_cell_is_never_dimmed(tmp_path):
         window._relayout()
 
         no_info_image, no_info_label = window._pool[0][0]
-        assert no_info_label._text_color != 'FF808080'
+        assert 'FF808080' not in no_info_label.getLabel()
     finally:
         conn.close()
 
@@ -375,7 +376,7 @@ def test_relayout_highlights_nearest_cell_when_axis_in_gap(tmp_path):
         cells = window._row_cells[0]
         b_cell = next(c for c in cells if c['title'] == 'B')
         _b_image, b_label = window._pool[0][b_cell['pool_index']]
-        assert b_label._text_color == 'FFFFFFFF'
+        assert b_label.getLabel() == '[COLOR FFFFFFFF]B[/COLOR]'
     finally:
         conn.close()
 
@@ -402,7 +403,7 @@ def test_swap_cursor_cell_restores_past_color_not_plain_text_color(tmp_path):
 
         past_cell = next(c for c in window._row_cells[0] if c['title'] == 'Past Show')
         _past_image, past_label = window._pool[0][past_cell['pool_index']]
-        assert past_label._text_color == 'FF808080'
+        assert past_label.getLabel() == '[COLOR FF808080]Past Show[/COLOR]'
     finally:
         conn.close()
 
@@ -430,7 +431,7 @@ def test_swap_cursor_row_restores_past_color_not_plain_text_color(tmp_path):
 
         past_cell = next(c for c in window._row_cells[0] if c['title'] == 'Past Show')
         _past_image, past_label = window._pool[0][past_cell['pool_index']]
-        assert past_label._text_color == 'FF808080'
+        assert past_label.getLabel() == '[COLOR FF808080]Past Show[/COLOR]'
     finally:
         conn.close()
 

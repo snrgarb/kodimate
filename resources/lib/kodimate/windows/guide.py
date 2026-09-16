@@ -32,6 +32,20 @@ _TEXT_COLOR = 'FFCCCCCC'
 _CURSOR_TEXT_COLOR = 'FFFFFFFF'
 _PAST_TEXT_COLOR = 'FF808080'
 
+# Real Kodi's xbmcgui module does not export these action-id constants (only
+# xbmcgui.ACTION_MOVE_LEFT/RIGHT/UP/DOWN, ACTION_NAV_BACK, ACTION_PREVIOUS_MENU
+# and a handful of others genuinely exist there); defined here directly from
+# Kodi's ActionIDs.h numeric values instead.
+_ACTION_PAGE_UP = 5
+_ACTION_PAGE_DOWN = 6
+_ACTION_NEXT_ITEM = 14
+_ACTION_PREV_ITEM = 15
+_ACTION_REMOTE_0 = 58
+
+
+def _colored(title, color):
+    return '[COLOR %s]%s[/COLOR]' % (color, title)
+
 
 class GuideWindow(BaseWindow):
     xmlFile = 'script-kodimate-guide.xml'
@@ -75,16 +89,16 @@ class GuideWindow(BaseWindow):
         if action_id in (xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN):
             self._handle_vertical_move()
             return
-        if action_id in (xbmcgui.ACTION_PAGE_UP, xbmcgui.ACTION_PAGE_DOWN):
+        if action_id in (_ACTION_PAGE_UP, _ACTION_PAGE_DOWN):
             self._handle_vertical_move()
             return
-        if action_id == xbmcgui.ACTION_NEXT_ITEM:
+        if action_id == _ACTION_NEXT_ITEM:
             self._skip_viewport(guide.SKIP_HOURS)
             return
-        if action_id == xbmcgui.ACTION_PREV_ITEM:
+        if action_id == _ACTION_PREV_ITEM:
             self._skip_viewport(-guide.SKIP_HOURS)
             return
-        if action_id == xbmcgui.ACTION_REMOTE_0:
+        if action_id == _ACTION_REMOTE_0:
             self._jump_to_now()
             return
 
@@ -277,7 +291,7 @@ class GuideWindow(BaseWindow):
         label.setPosition(cell['x'] + _LEFT_COL_WIDTH + 8, y)
         label.setWidth(max(1, cell['width'] - 16))
         label.setHeight(_ROW_HEIGHT)
-        label.setLabel(cell['title'], textColor=text_color)
+        label.setLabel(_colored(cell['title'], text_color))
 
     def _animate(self, specs):
         # A window property flipped only when a full relayout happens
@@ -382,10 +396,10 @@ class GuideWindow(BaseWindow):
         now = datetime.utcnow()
         old_pool = self._pool[row][old_cell['pool_index']]
         old_pool[0].setColorDiffuse('FF202020')
-        old_pool[1].setLabel(old_cell['title'], textColor=self._label_color_for(old_cell, now, False))
+        old_pool[1].setLabel(_colored(old_cell['title'], self._label_color_for(old_cell, now, False)))
         new_pool = self._pool[row][new_cell['pool_index']]
         new_pool[0].setColorDiffuse('FF3A6EA5')
-        new_pool[1].setLabel(new_cell['title'], textColor=_CURSOR_TEXT_COLOR)
+        new_pool[1].setLabel(_colored(new_cell['title'], _CURSOR_TEXT_COLOR))
         return True
 
     def _handle_vertical_move(self):
@@ -424,10 +438,10 @@ class GuideWindow(BaseWindow):
         if old_cell is not None:
             old_pool = self._pool[old_row][old_cell['pool_index']]
             old_pool[0].setColorDiffuse('FF202020')
-            old_pool[1].setLabel(old_cell['title'], textColor=self._label_color_for(old_cell, now, False))
+            old_pool[1].setLabel(_colored(old_cell['title'], self._label_color_for(old_cell, now, False)))
         new_pool = self._pool[new_row][new_cell['pool_index']]
         new_pool[0].setColorDiffuse('FF3A6EA5')
-        new_pool[1].setLabel(new_cell['title'], textColor=_CURSOR_TEXT_COLOR)
+        new_pool[1].setLabel(_colored(new_cell['title'], _CURSOR_TEXT_COLOR))
         return True
 
 
