@@ -242,7 +242,9 @@ def test_edge_cell_fades_and_inner_cell_slides_on_viewport_jump(tmp_path):
         edge_image, _edge_label = window._pool[0][0]
         inner_image, _inner_label = window._pool[0][1]
         assert edge_image._animations and 'effect=fade' in edge_image._animations[0][1]
+        assert 'delay=200' in edge_image._animations[0][1]
         assert inner_image._animations and 'effect=slide' in inner_image._animations[0][1]
+        assert 'delay=' not in inner_image._animations[0][1]
         # The gate: a real viewport jump flips the guide_anim property.
         assert window.getProperty('guide_anim') == '1'
     finally:

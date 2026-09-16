@@ -26,12 +26,10 @@ _SLOT_MINUTES = 30
 _ANIM_TIME_MS = 200
 _ANIM_SLIDE_PX = 120
 
-_CELL_NOFOCUS_RELPATH = 'resources/skins/Main/media/cell-nofocus.png'
-_CELL_CURSOR_RELPATH = 'resources/skins/Main/media/cell-cursor.png'
 _NOW_LINE_RELPATH = 'resources/skins/Main/media/white.png'
 
 _TEXT_COLOR = 'FFCCCCCC'
-_CURSOR_TEXT_COLOR = 'FF101018'
+_CURSOR_TEXT_COLOR = 'FFFFFFFF'
 
 
 class GuideWindow(BaseWindow):
@@ -41,8 +39,7 @@ class GuideWindow(BaseWindow):
         addon = xbmcaddon.Addon()
         addon_path = addon.getAddonInfo('path')
         self._no_info_title = addon.getLocalizedString(_STR_NO_INFO)
-        self._tex_nofocus = _abs_path(addon_path, _CELL_NOFOCUS_RELPATH)
-        self._tex_cursor = _abs_path(addon_path, _CELL_CURSOR_RELPATH)
+        self._tex_cell = _abs_path(addon_path, _NOW_LINE_RELPATH)
 
         self._channel_rows = channels.list_channels(self.conn)
         self._top_row = 0
@@ -103,7 +100,8 @@ class GuideWindow(BaseWindow):
         for _row in range(guide.VISIBLE_ROWS):
             row_pool = []
             for _col in range(_POOL_COLS):
-                image = xbmcgui.ControlImage(0, 0, 1, _ROW_HEIGHT - 2, self._tex_nofocus)
+                image = xbmcgui.ControlImage(0, 0, 1, _ROW_HEIGHT - 2, self._tex_cell)
+                image.setColorDiffuse('FF202020')
                 label = xbmcgui.ControlLabel(0, 0, 1, _ROW_HEIGHT, '')
                 added.append(image)
                 added.append(label)
@@ -246,12 +244,11 @@ class GuideWindow(BaseWindow):
 
     def _set_cell(self, pool_entry, cell, y, is_cursor):
         image, label = pool_entry
-        texture = self._tex_cursor if is_cursor else self._tex_nofocus
         text_color = _CURSOR_TEXT_COLOR if is_cursor else _TEXT_COLOR
         image.setPosition(cell['x'] + _LEFT_COL_WIDTH, y)
         image.setWidth(max(1, cell['width'] - 2))
         image.setHeight(_ROW_HEIGHT - 2)
-        image.setImage(texture)
+        image.setColorDiffuse('FF3A6EA5' if is_cursor else 'FF202020')
         label.setPosition(cell['x'] + _LEFT_COL_WIDTH + 8, y)
         label.setWidth(max(1, cell['width'] - 16))
         label.setHeight(_ROW_HEIGHT)
@@ -269,7 +266,7 @@ class GuideWindow(BaseWindow):
         want = self._anim_parity
         for control, kind, dx, dy in specs:
             if kind == 'fade':
-                effect = 'effect=fade start=0 end=100 time=%d' % _ANIM_TIME_MS
+                effect = 'effect=fade start=0 end=100 time=%d delay=%d' % (_ANIM_TIME_MS, _ANIM_TIME_MS)
             else:
                 effect = 'effect=slide start=%d,%d end=0,0 time=%d' % (dx, dy, _ANIM_TIME_MS)
             control.setAnimations([(
@@ -317,10 +314,10 @@ class GuideWindow(BaseWindow):
         if old_cell is None or new_cell is None:
             return False
         old_pool = self._pool[row][old_cell['pool_index']]
-        old_pool[0].setImage(self._tex_nofocus)
+        old_pool[0].setColorDiffuse('FF202020')
         old_pool[1].setLabel(old_cell['title'], textColor=_TEXT_COLOR)
         new_pool = self._pool[row][new_cell['pool_index']]
-        new_pool[0].setImage(self._tex_cursor)
+        new_pool[0].setColorDiffuse('FF3A6EA5')
         new_pool[1].setLabel(new_cell['title'], textColor=_CURSOR_TEXT_COLOR)
         return True
 
@@ -362,10 +359,10 @@ class GuideWindow(BaseWindow):
             return False
         if old_cell is not None:
             old_pool = self._pool[old_row][old_cell['pool_index']]
-            old_pool[0].setImage(self._tex_nofocus)
+            old_pool[0].setColorDiffuse('FF202020')
             old_pool[1].setLabel(old_cell['title'], textColor=_TEXT_COLOR)
         new_pool = self._pool[new_row][new_cell['pool_index']]
-        new_pool[0].setImage(self._tex_cursor)
+        new_pool[0].setColorDiffuse('FF3A6EA5')
         new_pool[1].setLabel(new_cell['title'], textColor=_CURSOR_TEXT_COLOR)
         return True
 
