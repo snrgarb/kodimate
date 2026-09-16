@@ -279,3 +279,28 @@ def test_list_programmes_empty_for_channel_without_epg_match(tmp_path):
         assert result[cid] == []
     finally:
         conn.close()
+
+
+def test_now_titles_returns_title_for_channel_airing_now(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        conn.execute("UPDATE channel SET epg_channel_id = 'x1' WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        _programme(conn, eid, "x1", "2026-01-01T11:00:00Z", "2026-01-01T12:00:00Z", "Now Show")
+        result = channels.now_titles(conn, [cid], "2026-01-01T11:30:00Z")
+        assert result[cid] == "Now Show"
+    finally:
+        conn.close()
+
+
+def test_now_titles_omits_channel_without_current_programme(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        result = channels.now_titles(conn, [cid], "2026-01-01T11:30:00Z")
+        assert cid not in result
+    finally:
+        conn.close()

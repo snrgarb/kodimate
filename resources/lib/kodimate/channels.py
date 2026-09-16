@@ -96,3 +96,11 @@ def list_programmes(conn, channel_ids, window_start, window_end):
             'start': row[1], 'end': row[2], 'title': row[3], 'description': row[4] or '',
         })
     return result
+
+
+def now_titles(conn, channel_ids, now_iso):
+    """{channel_id: title} for channels with a programme airing at now_iso."""
+    programmes = list_programmes(conn, channel_ids, now_iso, now_iso)
+    return {
+        cid: rows[0]['title'] for cid, rows in programmes.items() if rows
+    }

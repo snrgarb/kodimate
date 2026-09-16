@@ -342,6 +342,36 @@ def test_ok_on_channel_row_zaps_and_closes_list(tmp_path):
     assert window.session.state == 'connecting'
 
 
+def test_overlay_channel_row_gets_now_title_property(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
+    eid = _epg_source(conn, provider_id)
+    _programme(conn, eid, 'a', '2026-01-01T11:00:00Z', '2026-01-01T12:00:00Z', 'Now Show')
+    now = datetime(2026, 1, 1, 11, 30)
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+    channels_control = window.getControl(201)
+    alpha = next(
+        item for item in channels_control._items if item.getProperty('channel_key') == 'a'
+    )
+    assert alpha.getProperty('now_title') == 'Now Show'
+
+
+def test_overlay_channel_row_now_title_empty_when_no_current_programme(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
+    _channel(conn, provider_id, 'b', name='Bravo', position=1)
+    window = _window(conn, snapshot, now_fn=FakeNow(datetime(2026, 1, 1, 11, 30)))
+    window.onInit()
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+    channels_control = window.getControl(201)
+    bravo = next(
+        item for item in channels_control._items if item.getProperty('channel_key') == 'b'
+    )
+    assert bravo.getProperty('now_title') == ''
+
+
 def test_bar_shows_new_channel_name_while_connecting_after_zap(tmp_path):
     conn = _conn(tmp_path)
     provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')

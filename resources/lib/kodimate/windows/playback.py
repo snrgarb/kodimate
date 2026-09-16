@@ -359,6 +359,9 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         rows = channels.list_channels(
             self.conn, group_id=group_id, favourites=favourites, show_hidden=False,
         )
+        now_titles = channels.now_titles(
+            self.conn, [row['id'] for row in rows], guide.format_iso(self.now_fn())
+        )
         items = []
         select_position = 0
         current_provider_id = self.snapshot.get('provider_id') if self.snapshot else None
@@ -368,6 +371,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             list_item.setLabel2(str(row['number']))
             list_item.setProperty('channel_key', row['channel_key'])
             list_item.setProperty('provider_id', str(row['provider_id']))
+            list_item.setProperty('now_title', now_titles.get(row['id']) or '')
             if row['logo_url']:
                 list_item.setArt({'icon': row['logo_url']})
             items.append(list_item)

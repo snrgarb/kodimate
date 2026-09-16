@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """ChannelListWindow: Groups pane and Channels pane (issue #19, browsing only)."""
 import threading
+from datetime import datetime
 
 import xbmcaddon
 import xbmcgui
 
-from .. import channels, playback
+from .. import channels, guide, playback
 from .base import BaseWindow
 from .playback import PlaybackWindow
 
@@ -21,6 +22,7 @@ _GROUP_SELECTION_DEBOUNCE_SECONDS = 0.35
 
 class ChannelListWindow(BaseWindow):
     xmlFile = 'script-kodimate-channel-list.xml'
+    now_fn = datetime.utcnow
 
     def onInit(self):
         self._show_hidden = False
@@ -126,16 +128,21 @@ class ChannelListWindow(BaseWindow):
         control = self.getControl(CHANNELS_LIST_ID)
         control.reset()
         items = []
-        for row in channels.list_channels(
+        rows = channels.list_channels(
             self.conn, group_id=group_id, favourites=favourites,
             show_hidden=self._show_hidden,
-        ):
+        )
+        now_titles = channels.now_titles(
+            self.conn, [row['id'] for row in rows], guide.format_iso(self.now_fn())
+        )
+        for row in rows:
             list_item = xbmcgui.ListItem(label=row['name'])
             list_item.setLabel2(str(row['number']))
             list_item.setProperty('number', str(row['number']))
             list_item.setProperty('hidden', '1' if row['hidden'] else '0')
             list_item.setProperty('channel_key', row['channel_key'])
             list_item.setProperty('provider_id', str(row['provider_id']))
+            list_item.setProperty('now_title', now_titles.get(row['id']) or '')
             if row['logo_url']:
                 list_item.setArt({'icon': row['logo_url']})
             items.append(list_item)

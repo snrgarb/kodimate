@@ -120,20 +120,40 @@
                 </control>
                 <control type="label">
                     <posx>260</posx>
-                    <posy>0</posy>
+                    <posy>2</posy>
                     <width>760</width>
-                    <height>68</height>
+                    <height>38</height>
                     <textcolor>ffcccccc</textcolor>
                     <label>$INFO[ListItem.Label]</label>
                     <visible>!String.IsEqual(ListItem.Property(hidden),1)</visible>
                 </control>
                 <control type="label">
                     <posx>260</posx>
-                    <posy>0</posy>
+                    <posy>2</posy>
                     <width>760</width>
-                    <height>68</height>
+                    <height>38</height>
                     <textcolor>ff606060</textcolor>
                     <label>$INFO[ListItem.Label]</label>
+                    <visible>String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>260</posx>
+                    <posy>36</posy>
+                    <width>760</width>
+                    <height>30</height>
+                    <font>font12</font>
+                    <textcolor>ff8a8a8a</textcolor>
+                    <label>$INFO[ListItem.Property(now_title)]</label>
+                    <visible>!String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>260</posx>
+                    <posy>36</posy>
+                    <width>760</width>
+                    <height>30</height>
+                    <font>font12</font>
+                    <textcolor>ff606060</textcolor>
+                    <label>$INFO[ListItem.Property(now_title)]</label>
                     <visible>String.IsEqual(ListItem.Property(hidden),1)</visible>
                 </control>
                 <control type="label">
@@ -193,20 +213,40 @@
                 </control>
                 <control type="label">
                     <posx>260</posx>
-                    <posy>0</posy>
+                    <posy>2</posy>
                     <width>760</width>
-                    <height>68</height>
+                    <height>38</height>
                     <textcolor>ffffffff</textcolor>
                     <label>$INFO[ListItem.Label]</label>
                     <visible>!String.IsEqual(ListItem.Property(hidden),1)</visible>
                 </control>
                 <control type="label">
                     <posx>260</posx>
-                    <posy>0</posy>
+                    <posy>2</posy>
                     <width>760</width>
-                    <height>68</height>
+                    <height>38</height>
                     <textcolor>ff606060</textcolor>
                     <label>$INFO[ListItem.Label]</label>
+                    <visible>String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>260</posx>
+                    <posy>36</posy>
+                    <width>760</width>
+                    <height>30</height>
+                    <font>font12</font>
+                    <textcolor>ffcfcfcf</textcolor>
+                    <label>$INFO[ListItem.Property(now_title)]</label>
+                    <visible>!String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>260</posx>
+                    <posy>36</posy>
+                    <width>760</width>
+                    <height>30</height>
+                    <font>font12</font>
+                    <textcolor>ff606060</textcolor>
+                    <label>$INFO[ListItem.Property(now_title)]</label>
                     <visible>String.IsEqual(ListItem.Property(hidden),1)</visible>
                 </control>
                 <control type="label">

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from kodimate import db
 from kodimate.windows.channel_list import ChannelListWindow, GROUPS_LIST_ID, CHANNELS_LIST_ID, \
     TOGGLE_HIDDEN_ID
@@ -6,6 +8,29 @@ import xbmcgui
 
 def _conn(tmp_path):
     return db.open_db(str(tmp_path / "kodimate.db"))
+
+
+def _epg_source(conn, provider_id, url="http://epg"):
+    cursor = conn.execute(
+        "INSERT INTO epg_source (provider_id, url) VALUES (?, ?)", (provider_id, url)
+    )
+    return cursor.lastrowid
+
+
+def _programme(conn, epg_source_id, xmltv_channel_id, start, end, title):
+    conn.execute(
+        "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (epg_source_id, xmltv_channel_id, start, end, title),
+    )
+
+
+class FakeNow(object):
+    def __init__(self, value):
+        self.value = value
+
+    def __call__(self):
+        return self.value
 
 
 def _seed(conn):
@@ -37,9 +62,11 @@ def _seed(conn):
     return p1, p2, g1
 
 
-def _window(conn):
+def _window(conn, **overrides):
+    kwargs = dict(conn=conn)
+    kwargs.update(overrides)
     window = ChannelListWindow('script-kodimate-channel-list.xml', '/addon', 'Main', '1080i',
-                                conn=conn)
+                                **kwargs)
     window.onInit()
     return window
 
@@ -169,5 +196,33 @@ def test_ok_on_channel_row_opens_playback(tmp_path, monkeypatch):
         assert opened['conn'] is conn
         assert opened['snapshot']['channel_key'] == 'a'
         assert opened['snapshot']['name'] == 'Alpha'
+    finally:
+        conn.close()
+
+
+def test_channel_row_gets_now_title_property(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        p1, p2, g1 = _seed(conn)
+        conn.execute("UPDATE channel SET epg_channel_id = 'a' WHERE channel_key = 'a'")
+        eid = _epg_source(conn, p1)
+        _programme(conn, eid, 'a', '2026-01-01T11:00:00Z', '2026-01-01T12:00:00Z', 'Now Show')
+        now = datetime(2026, 1, 1, 11, 30)
+        window = _window(conn, now_fn=FakeNow(now))
+        channels_control = window.getControl(CHANNELS_LIST_ID)
+        alpha = channels_control._items[0]
+        assert alpha.getProperty('now_title') == 'Now Show'
+    finally:
+        conn.close()
+
+
+def test_channel_row_now_title_empty_when_no_current_programme(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        _seed(conn)
+        window = _window(conn, now_fn=FakeNow(datetime(2026, 1, 1, 11, 30)))
+        channels_control = window.getControl(CHANNELS_LIST_ID)
+        alpha = channels_control._items[0]
+        assert alpha.getProperty('now_title') == ''
     finally:
         conn.close()
