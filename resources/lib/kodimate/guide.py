@@ -144,20 +144,18 @@ def clamp_viewport(viewport_start, now, tz=None):
     return viewport_start
 
 
-def scroll_for_target(viewport_start, target_start, target_end, direction, tz, floor, ceiling):
-    """New viewport_start to bring an off-screen target programme's near
-    edge into view (30-minute aligned, capped at one page per call, then
-    clamped to floor/ceiling), or None if the target already overlaps the
-    current viewport."""
+def scroll_for_target(viewport_start, target_start, target_end, direction, floor, ceiling):
+    """New viewport_start to scroll by one 30-minute slot toward an
+    off-screen target programme (then clamped to floor/ceiling), or None
+    if the target already overlaps the current viewport."""
     end = viewport_end(viewport_start)
     if target_end > viewport_start and target_start < end:
         return None
-    page = timedelta(hours=VISIBLE_HOURS)
-    rounded = round_down_30_local(target_start, tz)
+    slot = timedelta(minutes=30)
     if direction > 0:
-        new_start = min(rounded, viewport_start + page)
+        new_start = viewport_start + slot
     else:
-        new_start = max(rounded, viewport_start - page)
+        new_start = viewport_start - slot
     if new_start < floor:
         new_start = floor
     if new_start > ceiling:

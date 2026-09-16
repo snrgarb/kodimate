@@ -116,12 +116,12 @@ sits on screen and deriving the underlying programme separately per move.
 2. **Update the cursor column only on explicit Left/Right/paging, never on Up/Down** — mirror
    `SetBlock`'s `bUpdateBlockTravelAxis` split. `move_cursor_vertical` should resolve against the
    clamped column and never write back a value that could be off-screen.
-3. **Cap the horizontal viewport jump; stop snapping to the target's absolute start.** Fixes bug
-   (2): replace the current `round_down_30_local(target_start)` jump (Kodi's rejected naive
-   approach) with a minimal-bring-into-view shift — align the target programme's near edge to the
-   viewport edge, capped at one page width (`VISIBLE_HOURS`) per move. This is a deliberate,
-   flagged **deviation** from the spec's current wording ("jumps to the nearest 30-minute
-   boundary, uncapped"): keep the 30-minute grid-alignment (Kodi does the same), drop "uncapped."
+3. **Scroll by one 30-minute slot per move; stop snapping to the target's absolute start.** Fixes
+   bug (2): replace the current `round_down_30_local(target_start)` jump (Kodi's rejected naive
+   approach) with a minimal-bring-into-view shift — the viewport scrolls 30 minutes (one slot) per
+   key press toward the target programme. This is a deliberate, flagged **deviation** from the
+   spec's current wording ("jumps to the nearest 30-minute boundary, uncapped"): keep the
+   30-minute grid-alignment (Kodi does the same), drop "uncapped."
 4. **Clamp viewport starts to a floor of "now minus a small fixed padding" and a ceiling at the
    EPG retention window**, matching Kodi's `GetGridStartPadding()` floor and Android TV's
    `mStartUtcMillis`/`mEndUtcMillis` clamp. Kodimate already fixes retention at 7 days; add an

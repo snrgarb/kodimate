@@ -126,21 +126,21 @@ def test_scroll_for_target_none_when_target_already_visible():
     floor = datetime(2020, 1, 1)
     ceiling = datetime(2030, 1, 1)
     result = guide.scroll_for_target(
-        viewport_start, datetime(2026, 1, 1, 13, 0), datetime(2026, 1, 1, 14, 0), 1, None, floor, ceiling
+        viewport_start, datetime(2026, 1, 1, 13, 0), datetime(2026, 1, 1, 14, 0), 1, floor, ceiling
     )
     assert result is None
 
 
-def test_scroll_for_target_left_caps_at_one_page_regression_bug2():
+def test_scroll_for_target_left_scrolls_one_slot_regression_bug2():
     # Left onto an off-screen 4-hour programme must scroll back by exactly
-    # one page (VISIBLE_HOURS), not snap straight to the programme's start.
+    # one 30-minute slot, not snap straight to the programme's start.
     viewport_start = datetime(2026, 1, 1, 12, 0)
     target_start = datetime(2026, 1, 1, 6, 0)
     target_end = datetime(2026, 1, 1, 10, 0)
     floor = datetime(2020, 1, 1)
     ceiling = datetime(2030, 1, 1)
-    new_start = guide.scroll_for_target(viewport_start, target_start, target_end, -1, None, floor, ceiling)
-    assert new_start == viewport_start - timedelta(hours=guide.VISIBLE_HOURS)
+    new_start = guide.scroll_for_target(viewport_start, target_start, target_end, -1, floor, ceiling)
+    assert new_start == viewport_start - timedelta(minutes=30)
     # The travel axis lands on the programme's now-visible tail, not its
     # original start.
     axis = max(target_start, new_start)
@@ -148,26 +148,38 @@ def test_scroll_for_target_left_caps_at_one_page_regression_bug2():
     assert axis != target_start
 
 
-def test_scroll_for_target_right_caps_at_one_page():
+def test_scroll_for_target_right_scrolls_one_slot():
     viewport_start = datetime(2026, 1, 1, 12, 0)
     target_start = datetime(2026, 1, 1, 20, 0)
     target_end = datetime(2026, 1, 1, 21, 0)
     floor = datetime(2020, 1, 1)
     ceiling = datetime(2030, 1, 1)
-    new_start = guide.scroll_for_target(viewport_start, target_start, target_end, 1, None, floor, ceiling)
-    assert new_start == viewport_start + timedelta(hours=guide.VISIBLE_HOURS)
+    new_start = guide.scroll_for_target(viewport_start, target_start, target_end, 1, floor, ceiling)
+    assert new_start == viewport_start + timedelta(minutes=30)
+
+
+def test_scroll_for_target_left_repeated_presses_scroll_by_one_slot_each():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    target_start = datetime(2026, 1, 1, 6, 0)
+    target_end = datetime(2026, 1, 1, 10, 0)
+    floor = datetime(2020, 1, 1)
+    ceiling = datetime(2030, 1, 1)
+    first = guide.scroll_for_target(viewport_start, target_start, target_end, -1, floor, ceiling)
+    second = guide.scroll_for_target(first, target_start, target_end, -1, floor, ceiling)
+    assert first == viewport_start - timedelta(minutes=30)
+    assert second == first - timedelta(minutes=30)
 
 
 def test_scroll_for_target_clamped_to_floor_and_ceiling():
     viewport_start = datetime(2026, 1, 1, 12, 0)
-    floor = datetime(2026, 1, 1, 11, 0)
-    ceiling = datetime(2026, 1, 1, 13, 0)
+    floor = datetime(2026, 1, 1, 11, 45)
+    ceiling = datetime(2026, 1, 1, 12, 15)
     left = guide.scroll_for_target(
-        viewport_start, datetime(2026, 1, 1, 1, 0), datetime(2026, 1, 1, 2, 0), -1, None, floor, ceiling
+        viewport_start, datetime(2026, 1, 1, 1, 0), datetime(2026, 1, 1, 2, 0), -1, floor, ceiling
     )
     assert left == floor
     right = guide.scroll_for_target(
-        viewport_start, datetime(2026, 1, 2, 1, 0), datetime(2026, 1, 2, 2, 0), 1, None, floor, ceiling
+        viewport_start, datetime(2026, 1, 2, 1, 0), datetime(2026, 1, 2, 2, 0), 1, floor, ceiling
     )
     assert right == ceiling
 

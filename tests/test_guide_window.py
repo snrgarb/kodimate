@@ -219,9 +219,9 @@ def test_down_over_long_past_starting_programme_does_not_move_viewport(tmp_path)
         conn.close()
 
 
-def test_left_onto_several_hour_programme_scrolls_capped_at_one_page(tmp_path):
+def test_left_onto_several_hour_programme_scrolls_one_slot(tmp_path):
     # Regression for bug 2: Left onto an off-screen multi-hour programme
-    # must scroll by at most one page, not snap to the programme's start.
+    # must scroll by one 30-minute slot, not snap to the programme's start.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -238,7 +238,7 @@ def test_left_onto_several_hour_programme_scrolls_capped_at_one_page(tmp_path):
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
 
-        assert window._viewport_start == t0 - timedelta(hours=guide.VISIBLE_HOURS)
+        assert window._viewport_start == t0 - timedelta(minutes=30)
         assert window._cursor_time == window._viewport_start
     finally:
         conn.close()
@@ -436,14 +436,14 @@ def test_swap_cursor_row_restores_past_color_not_plain_text_color(tmp_path):
         conn.close()
 
 
-def test_right_onto_far_off_screen_target_after_capped_scroll_lands_on_last_visible_cell(tmp_path):
-    # Review fix 3: when even a capped one-page scroll doesn't bring the
-    # target programme into view, the travel axis must land on a real
-    # on-screen cell (here, the still-airing previous programme's raw
-    # start), not an arbitrary offset before the new viewport's end. The
-    # real EPG-loading window buffer (VISIBLE_HOURS either side) never lets
-    # a genuinely off-screen-even-after-one-page target load in practice,
-    # so this seeds the programme data directly to exercise the clamp.
+def test_right_onto_far_off_screen_target_after_one_slot_scroll_lands_on_last_visible_cell(tmp_path):
+    # Review fix 3: when even a one-slot scroll doesn't bring the target
+    # programme into view, the travel axis must land on a real on-screen
+    # cell (here, the still-airing previous programme's raw start), not an
+    # arbitrary offset before the new viewport's end. The real EPG-loading
+    # window buffer (VISIBLE_HOURS either side) never lets a genuinely
+    # off-screen-even-after-one-slot target load in practice, so this
+    # seeds the programme data directly to exercise the clamp.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -462,8 +462,44 @@ def test_right_onto_far_off_screen_target_after_capped_scroll_lands_on_last_visi
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
 
-        assert window._viewport_start == t0 + timedelta(hours=guide.VISIBLE_HOURS)
+        assert window._viewport_start == t0 + timedelta(minutes=30)
         assert window._cursor_time == t0
+    finally:
+        conn.close()
+
+
+def test_left_at_retention_floor_off_screen_target_is_a_no_op(tmp_path):
+    # A clamped scroll that lands exactly back on the current viewport_start
+    # (Left at the retention floor) must not relayout: nothing moved, so
+    # programmes should not be reloaded and no animation should fire.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        window = _window(conn)
+        floor, _ceiling = window._clamp_bounds(datetime.utcnow())
+        channel_id = window._channel_rows[0]['id']
+        window._viewport_start = floor
+        window._cursor_time = floor
+        window._programmes_by_channel = {
+            channel_id: [
+                {'start': floor - timedelta(hours=1), 'end': floor, 'title': 'Prev Show'},
+                {'start': floor, 'end': floor + timedelta(hours=1), 'title': 'Current Show'},
+            ]
+        }
+        window._load_programmes = lambda: None  # keep the seeded data
+        window._relayout()
+
+        calls = []
+        window._load_programmes = lambda: calls.append(1)
+        anim_parity_before = window._anim_parity
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+
+        assert window._viewport_start == floor
+        assert window._cursor_time == floor
+        assert calls == []
+        assert window._anim_parity == anim_parity_before
     finally:
         conn.close()
 

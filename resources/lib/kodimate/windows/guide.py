@@ -346,7 +346,7 @@ class GuideWindow(BaseWindow):
         target = guide.programme_at(programmes, target_start)
         floor, ceiling = self._clamp_bounds(datetime.utcnow())
         new_viewport_start = guide.scroll_for_target(
-            self._viewport_start, target['start'], target['end'], direction, self._tz, floor, ceiling
+            self._viewport_start, target['start'], target['end'], direction, floor, ceiling
         )
         if new_viewport_start is None:
             old_time = self._cursor_time
@@ -354,6 +354,8 @@ class GuideWindow(BaseWindow):
             self._cursor_time = new_time
             if not self._swap_cursor_cell(focused_row, old_time, new_time):
                 self._relayout()
+            return
+        if new_viewport_start == self._viewport_start:
             return
         self._viewport_start = new_viewport_start
         self._load_programmes()
