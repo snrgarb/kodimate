@@ -26,27 +26,23 @@ _CATEGORIES = [
     {'category_id': 6, 'category_name': 'Sport', 'parent_id': 0},
 ]
 
-_STREAMS = {
-    '5': [
-        {
-            'num': '101', 'name': 'BBC News HD', 'stream_id': '12345',
-            'stream_icon': 'http://xc.example/logos/bbcnews.png',
-            'epg_channel_id': 'bbcnews.uk', 'tv_archive': '1', 'tv_archive_duration': '7',
-        },
-        {
-            'num': 102, 'name': 'Sky News', 'stream_id': 12346,
-            'stream_icon': '', 'epg_channel_id': 'skynews.uk',
-            'tv_archive': '0', 'tv_archive_duration': '7',
-        },
-    ],
-    '6': [
-        {
-            'num': 201, 'name': 'Sky Sports', 'stream_id': 22345,
-            'stream_icon': 'http://xc.example/logos/skysports.png',
-            'epg_channel_id': 'skysports.uk', 'tv_archive': 1, 'tv_archive_duration': 3,
-        },
-    ],
-}
+_STREAMS = [
+    {
+        'num': '101', 'name': 'BBC News HD', 'stream_id': '12345', 'category_id': '5',
+        'stream_icon': 'http://xc.example/logos/bbcnews.png',
+        'epg_channel_id': 'bbcnews.uk', 'tv_archive': '1', 'tv_archive_duration': '7',
+    },
+    {
+        'num': 102, 'name': 'Sky News', 'stream_id': 12346, 'category_id': '5',
+        'stream_icon': '', 'epg_channel_id': 'skynews.uk',
+        'tv_archive': '0', 'tv_archive_duration': '7',
+    },
+    {
+        'num': 201, 'name': 'Sky Sports', 'stream_id': 22345, 'category_id': 6,
+        'stream_icon': 'http://xc.example/logos/skysports.png',
+        'epg_channel_id': 'skysports.uk', 'tv_archive': 1, 'tv_archive_duration': 3,
+    },
+]
 
 
 def _channels_by_key(conn, provider_id=1):
@@ -121,16 +117,31 @@ def test_second_refresh_marks_missing_stream_stale(tmp_path):
     ingest.refresh_xtream_provider(
         conn, 1, _ACCOUNT, _CATEGORIES, _STREAMS, '2026-01-01T00:00:00Z'
     )
-    streams_without_sky_news = {
-        '5': [_STREAMS['5'][0]],
-        '6': _STREAMS['6'],
-    }
+    streams_without_sky_news = [s for s in _STREAMS if s['stream_id'] != 12346]
     ingest.refresh_xtream_provider(
         conn, 1, _ACCOUNT, _CATEGORIES, streams_without_sky_news, '2026-01-02T00:00:00Z'
     )
     channels = _channels_by_key(conn)
     assert channels['12346']['stale_since'] == '2026-01-02T00:00:00Z'
     assert channels['12345']['stale_since'] is None
+
+
+def test_stream_with_unmatched_category_id_lands_in_uncategorised(tmp_path):
+    conn = _make_db(tmp_path)
+    streams = _STREAMS + [
+        {
+            'num': 301, 'name': 'Mystery Channel', 'stream_id': 99999, 'category_id': '99',
+            'stream_icon': '', 'epg_channel_id': None, 'tv_archive': 0, 'tv_archive_duration': 0,
+        },
+    ]
+    ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, _CATEGORIES, streams, '2026-01-01T00:00:00Z'
+    )
+    groups = dict(conn.execute("SELECT id, name FROM channel_group WHERE provider_id = 1").fetchall())
+    assert set(groups.values()) == {'News', 'Sport', ingest.UNCATEGORISED}
+
+    channels = _channels_by_key(conn)
+    assert groups[channels['99999']['group_id']] == ingest.UNCATEGORISED
 
 
 def test_config_version_changed_rolls_back(tmp_path):

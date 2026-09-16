@@ -18,5 +18,15 @@
     "category_id": "5",
     "tv_archive": "0",
     "tv_archive_duration": "7"
+  },
+  {
+    "num": 201,
+    "name": "Sky Sports",
+    "stream_id": 22345,
+    "stream_icon": "http://xc.example/logos/skysports.png",
+    "epg_channel_id": "skysports.uk",
+    "category_id": 6,
+    "tv_archive": 1,
+    "tv_archive_duration": 3
   }
 ]

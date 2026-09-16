@@ -187,15 +187,9 @@ class RefreshService(object):
                 host, username, password = row['xtream_host'], row['xtream_username'], row['xtream_password']
                 account = xtream.fetch_account(host, username, password, row['user_agent'], self.fetcher)
                 categories = xtream.fetch_categories(host, username, password, row['user_agent'], self.fetcher)
-                streams_by_category = {
-                    str(category.get('category_id')): xtream.fetch_streams(
-                        host, username, password, category.get('category_id'),
-                        row['user_agent'], self.fetcher,
-                    )
-                    for category in categories
-                }
+                streams = xtream.fetch_streams(host, username, password, row['user_agent'], self.fetcher)
                 outcome = ingest.refresh_xtream_provider(
-                    self.conn, provider_id, account, categories, streams_by_category, self.now(),
+                    self.conn, provider_id, account, categories, streams, self.now(),
                     expected_config_version=config_version,
                 )
         except ingest.ConfigVersionChanged:

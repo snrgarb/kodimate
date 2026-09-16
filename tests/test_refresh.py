@@ -249,8 +249,14 @@ def test_manual_refresh_xtream_ok(tmp_path):
     props = FakeProps()
     props.set('refresh_request', '3;ui')
 
+    seen_sources = []
+
+    def counting_fetcher(source, user_agent):
+        seen_sources.append(source)
+        return _xtream_fetcher(source, user_agent)
+
     svc = refresh.RefreshService(
-        conn, props, FakeNotify(), fetcher=_xtream_fetcher,
+        conn, props, FakeNotify(), fetcher=counting_fetcher,
         now=lambda: datetime(2024, 1, 1),
         settings=_no_startup_settings(),
     )
@@ -259,6 +265,8 @@ def test_manual_refresh_xtream_ok(tmp_path):
     assert props.get('refresh_result.3') == 'ok'
     channel = conn.execute("SELECT name FROM channel WHERE provider_id = 3").fetchone()
     assert channel == ('Chan',)
+    stream_calls = [s for s in seen_sources if 'action=get_live_streams' in s]
+    assert len(stream_calls) == 1
 
 
 def test_xtream_malformed_account_yields_last_error_not_crash(tmp_path):

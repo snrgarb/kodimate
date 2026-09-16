@@ -67,7 +67,7 @@ def test_fetch_categories_returns_list():
 
 def test_fetch_streams_tolerates_string_typed_fields():
     streams = xtream.fetch_streams(
-        'http://xc.example', 'user', 'pass', '5', None, _fetcher_from('xtream_streams_news.json')
+        'http://xc.example', 'user', 'pass', None, _fetcher_from('xtream_streams.json')
     )
     assert streams[0]['stream_id'] == '12345'
     assert streams[0]['num'] == '101'
@@ -91,4 +91,4 @@ def test_fetch_streams_raises_not_an_xtream_server_when_element_not_dict():
         return '["not", "a", "dict"]'
 
     with pytest.raises(fetch.FetchError, match='Not an Xtream server'):
-        xtream.fetch_streams('http://xc.example', 'user', 'pass', '5', None, fetcher)
+        xtream.fetch_streams('http://xc.example', 'user', 'pass', None, fetcher)

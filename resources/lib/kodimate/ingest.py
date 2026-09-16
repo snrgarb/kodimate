@@ -264,13 +264,12 @@ def refresh_m3u_provider(conn, provider_id, playlist_text, now, expected_config_
     return RefreshOutcome(channel_count, listable_count, epg_url)
 
 
-def refresh_xtream_provider(conn, provider_id, account, categories, streams_by_category, now,
+def refresh_xtream_provider(conn, provider_id, account, categories, streams, now,
                              expected_config_version=None):
     """Ingest an Xtream account/categories/streams triple (from xtream.py) for one provider.
 
-    `streams_by_category` maps each category's `category_id` (as given in
-    `categories`, coerced to `str`) to that category's list of raw
-    `get_live_streams` stream dicts.
+    `streams` is the flat list of raw `get_live_streams` stream dicts (in
+    server response order), each carrying its own `category_id`.
     """
     now_dt = _to_datetime(now)
     now_iso = _to_iso(now_dt)
@@ -298,51 +297,66 @@ def refresh_xtream_provider(conn, provider_id, account, categories, streams_by_c
         for category in categories:
             cid = str(category.get('category_id'))
             category_names[cid] = category.get('category_name') or UNCATEGORISED
+        cid_by_norm = {}
+        for cid in category_names:
+            norm = m3u._to_int(cid)
+            if norm is not None:
+                cid_by_norm[norm] = cid
+
+        def _matched_cid(stream):
+            norm = m3u._to_int(stream.get('category_id'))
+            if norm is None:
+                return None
+            return cid_by_norm.get(norm)
+
         group_names_in_order = list(category_names.values())
+        if UNCATEGORISED not in group_names_in_order and \
+                any(_matched_cid(stream) is None for stream in streams):
+            group_names_in_order.append(UNCATEGORISED)
         group_ids = _ensure_groups(conn, provider_id, group_names_in_order)
 
         present_keys = []
         position = 0
-        for cid, category_name in category_names.items():
-            streams = streams_by_category.get(cid) or []
-            for stream in streams:
-                position += 1
-                stream_id = str(stream.get('stream_id'))
-                tv_archive = m3u._to_int(stream.get('tv_archive'))
-                catchup_days = (
-                    m3u._to_int(stream.get('tv_archive_duration')) if tv_archive else None
-                )
+        for stream in streams:
+            cid = _matched_cid(stream)
+            category_name = category_names[cid] if cid is not None else UNCATEGORISED
+            position += 1
+            stream_id = str(stream.get('stream_id'))
+            tv_archive = m3u._to_int(stream.get('tv_archive'))
+            catchup_days = (
+                m3u._to_int(stream.get('tv_archive_duration')) if tv_archive else None
+            )
 
-                conn.execute(
-                    """
-                    INSERT INTO channel (
-                        provider_id, channel_key, name, normalised_name, stream_url,
-                        logo_url, group_id, provider_number, position,
-                        epg_channel_id, catchup_days, stale_since, last_seen_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-                    ON CONFLICT(provider_id, channel_key) DO UPDATE SET
-                        name = excluded.name,
-                        normalised_name = excluded.normalised_name,
-                        stream_url = excluded.stream_url,
-                        logo_url = excluded.logo_url,
-                        group_id = excluded.group_id,
-                        provider_number = excluded.provider_number,
-                        position = excluded.position,
-                        epg_channel_id = excluded.epg_channel_id,
-                        catchup_days = excluded.catchup_days,
-                        stale_since = NULL,
-                        last_seen_at = excluded.last_seen_at
-                    """,
-                    (
-                        provider_id, stream_id, stream.get('name') or '',
-                        normalise_name(stream.get('name')),
-                        urls.xtream_live_url(host, username, password, stream_id, form),
-                        stream.get('stream_icon') or None, group_ids[category_name],
-                        m3u._to_int(stream.get('num')), position,
-                        stream.get('epg_channel_id') or None, catchup_days, now_iso,
-                    ),
-                )
-                present_keys.append(stream_id)
+            conn.execute(
+                """
+                INSERT INTO channel (
+                    provider_id, channel_key, name, normalised_name, stream_url,
+                    logo_url, group_id, provider_number, position,
+                    epg_channel_id, catchup_days, stale_since, last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                ON CONFLICT(provider_id, channel_key) DO UPDATE SET
+                    name = excluded.name,
+                    normalised_name = excluded.normalised_name,
+                    stream_url = excluded.stream_url,
+                    logo_url = excluded.logo_url,
+                    group_id = excluded.group_id,
+                    provider_number = excluded.provider_number,
+                    position = excluded.position,
+                    epg_channel_id = excluded.epg_channel_id,
+                    catchup_days = excluded.catchup_days,
+                    stale_since = NULL,
+                    last_seen_at = excluded.last_seen_at
+                """,
+                (
+                    provider_id, stream_id, stream.get('name') or '',
+                    normalise_name(stream.get('name')),
+                    urls.xtream_live_url(host, username, password, stream_id, form),
+                    stream.get('stream_icon') or None, group_ids[category_name],
+                    m3u._to_int(stream.get('num')), position,
+                    stream.get('epg_channel_id') or None, catchup_days, now_iso,
+                ),
+            )
+            present_keys.append(stream_id)
 
         _mark_stale_purge_and_clean_groups(conn, provider_id, present_keys, now_iso, now_dt)
 

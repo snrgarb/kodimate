@@ -80,11 +80,9 @@ def fetch_categories(host, username, password, user_agent, fetcher):
     return _require_list_of_dicts(data)
 
 
-def fetch_streams(host, username, password, category_id, user_agent, fetcher):
+def fetch_streams(host, username, password, user_agent, fetcher):
     data = _fetch_json(
-        _player_api_url(
-            host, username, password, action='get_live_streams', category_id=category_id
-        ),
+        _player_api_url(host, username, password, action='get_live_streams'),
         user_agent, fetcher,
     )
     return _require_list_of_dicts(data)
