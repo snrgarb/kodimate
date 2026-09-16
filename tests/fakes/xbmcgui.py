@@ -50,10 +50,17 @@ class Control(object):
     def __init__(self):
         self._items = []
         self._selected = 0
+        self._label = ''
 
     def reset(self):
         self._items = []
         self._selected = 0
+
+    def setLabel(self, label):
+        self._label = label
+
+    def getLabel(self):
+        return self._label
 
     def addItem(self, item):
         self._items.append(item)

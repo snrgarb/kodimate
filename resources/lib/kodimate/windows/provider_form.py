@@ -24,6 +24,10 @@ _STR_ENTER_URL = 32018
 _STR_BROWSE_FILE = 32019
 _STR_DISCARD = 32036
 _STR_GET_PHP_PARSED = 32050
+_STR_TITLE_M3U = 32017
+_STR_TITLE_XTREAM = 32052
+_STR_ENABLED_ON = 32053
+_STR_ENABLED_OFF = 32054
 
 _PASSWORD_MASK = '••••'
 
@@ -44,6 +48,9 @@ class ProviderFormWindow(BaseWindow):
         self.needs_refresh = False
         existing = providers.get_provider(self.conn, self.provider_id) if self.provider_id else None
         self._kind = existing['kind'] if existing else getattr(self, 'kind', 'm3u')
+        self.getControl(100).setLabel(self._addon.getLocalizedString(
+            _STR_TITLE_XTREAM if self._kind == 'xtream' else _STR_TITLE_M3U
+        ))
         self._name = existing['name'] if existing else ''
         self._m3u_url = existing['m3u_url'] if existing else ''
         self._host = (existing['xtream_host'] if existing else '') or ''
@@ -108,7 +115,7 @@ class ProviderFormWindow(BaseWindow):
             return self._username
         if row_type == 'password':
             return _PASSWORD_MASK if self._password else ''
-        return '1' if self._enabled else '0'
+        return self._addon.getLocalizedString(_STR_ENABLED_ON if self._enabled else _STR_ENABLED_OFF)
 
     def _edit_selected_row(self):
         row_type = self._rows[self.getControl(LIST_ID).getSelectedPosition()]

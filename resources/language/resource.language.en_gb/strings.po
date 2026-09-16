@@ -223,3 +223,15 @@ msgstr ""
 msgctxt "#32051"
 msgid "Expires %s"
 msgstr ""
+
+msgctxt "#32052"
+msgid "Xtream provider"
+msgstr ""
+
+msgctxt "#32053"
+msgid "On"
+msgstr ""
+
+msgctxt "#32054"
+msgid "Off"
+msgstr ""
