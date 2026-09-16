@@ -79,6 +79,7 @@
             <onup>500</onup>
             <ondown>500</ondown>
             <onback>9000</onback>
+            <scrolltime>0</scrolltime>
             <itemlayout width="300" height="98">
                 <control type="label">
                     <posx>12</posx>
