@@ -5,8 +5,9 @@ import threading
 import xbmcaddon
 import xbmcgui
 
-from .. import channels
+from .. import channels, playback
 from .base import BaseWindow
+from .playback import PlaybackWindow
 
 TOGGLE_HIDDEN_ID = 300
 GROUPS_LIST_ID = 200
@@ -51,6 +52,18 @@ class ChannelListWindow(BaseWindow):
             self._last_group_position = self.getControl(GROUPS_LIST_ID).getSelectedPosition()
             self._render_channels()
             self.setFocusId(CHANNELS_LIST_ID)
+        elif control_id == CHANNELS_LIST_ID:
+            self._open_playback()
+
+    def _open_playback(self):
+        item = self.getControl(CHANNELS_LIST_ID).getSelectedItem()
+        if item is None:
+            return
+        provider_id = int(item.getProperty('provider_id'))
+        channel_key = item.getProperty('channel_key')
+        snapshot = playback.load_snapshot(self.conn, provider_id, channel_key)
+        if snapshot is not None:
+            PlaybackWindow.open(conn=self.conn, snapshot=snapshot)
 
     def close(self):
         self._closed = True

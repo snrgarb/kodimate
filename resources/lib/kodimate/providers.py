@@ -164,6 +164,17 @@ def update_provider(conn, provider_id, name, m3u_url, enabled, epg_override_url=
     return _execute_with_retry(conn, _do)
 
 
+def set_learned_stream_format(conn, provider_id, form):
+    """Persist the Live Form learned from a successful Xtream fallback Attempt."""
+    def _do(conn):
+        conn.execute(
+            "UPDATE provider SET learned_stream_format = ? WHERE id = ?",
+            (form, provider_id),
+        )
+
+    return _execute_with_retry(conn, _do)
+
+
 def set_enabled(conn, provider_id, enabled):
     """Enable/disable a provider of either kind; returns needs_refresh."""
     def _do(conn):

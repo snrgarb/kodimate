@@ -145,3 +145,29 @@ def test_logo_art_set_only_when_logo_url_present(tmp_path):
         assert beta.getArt('icon') == ''
     finally:
         conn.close()
+
+
+def test_ok_on_channel_row_opens_playback(tmp_path, monkeypatch):
+    conn = _conn(tmp_path)
+    try:
+        _seed(conn)
+        window = _window(conn)
+
+        opened = {}
+
+        @classmethod
+        def fake_open(cls, **kwargs):
+            opened.update(kwargs)
+
+        from kodimate.windows.channel_list import PlaybackWindow
+        monkeypatch.setattr(PlaybackWindow, 'open', fake_open)
+
+        channels_control = window.getControl(CHANNELS_LIST_ID)
+        channels_control.selectItem(0)
+        window.onClick(CHANNELS_LIST_ID)
+
+        assert opened['conn'] is conn
+        assert opened['snapshot']['channel_key'] == 'a'
+        assert opened['snapshot']['name'] == 'Alpha'
+    finally:
+        conn.close()

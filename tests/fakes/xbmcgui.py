@@ -19,11 +19,24 @@ class Action(object):
 
 
 class ListItem(object):
-    def __init__(self, label='', label2=''):
+    def __init__(self, label='', label2='', path=''):
         self._label = label
         self._label2 = label2
+        self._path = path
         self._properties = {}
         self._art = {}
+
+    def getPath(self):
+        return self._path
+
+    def setPath(self, path):
+        self._path = path
+
+    def setMimeType(self, mime_type):
+        self._mime_type = mime_type
+
+    def setContentLookup(self, enabled):
+        self._content_lookup = enabled
 
     def setLabel(self, label):
         self._label = label
@@ -235,6 +248,10 @@ class WindowXML(object):
 
     def onClick(self, control_id):
         pass
+
+
+class WindowXMLDialog(WindowXML):
+    pass
 
 
 class Dialog(object):

@@ -574,3 +574,18 @@ def test_set_sort_order_persists_and_channels_follow(tmp_path):
         assert [g['provider_id'] for g in group_rows] == [p2, p1]
     finally:
         conn.close()
+
+
+def test_set_learned_stream_format_writes_column(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        p1 = providers.create_xtream_provider(conn, "One", "http://x.example", "u", "p")
+
+        providers.set_learned_stream_format(conn, p1, 'm3u8')
+
+        row = conn.execute(
+            "SELECT learned_stream_format FROM provider WHERE id = ?", (p1,)
+        ).fetchone()
+        assert row[0] == 'm3u8'
+    finally:
+        conn.close()

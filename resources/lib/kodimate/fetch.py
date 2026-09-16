@@ -7,10 +7,12 @@ Error catalogue raised as `FetchError(message)`: `Unreachable`, `Timed out`,
 import os
 
 try:
-    from urllib.request import Request, urlopen
+    from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
     from urllib.error import HTTPError, URLError
+    from urllib.parse import urlparse
 except ImportError:  # pragma: no cover - Python 2 fallback, unused on target
-    from urllib2 import Request, urlopen, HTTPError, URLError
+    from urllib2 import Request, urlopen, HTTPError, URLError, build_opener, HTTPRedirectHandler
+    from urlparse import urlparse
 
 # Playlists are read fully into memory; cap how much we'll pull from an
 # untrusted HTTP response or local file.
@@ -116,6 +118,58 @@ def open_stream(source, user_agent=None, etag=None, last_modified=None, timeout=
         etag=response.headers.get('ETag'),
         last_modified=response.headers.get('Last-Modified'),
     )
+
+
+# Headers that must not be replayed to a different host than the one the
+# probe originally targeted (session cookies, auth tokens, CORS origin).
+_CROSS_ORIGIN_SENSITIVE_HEADERS = ('Cookie', 'Authorization', 'Origin')
+
+
+class _SafeRedirectHandler(HTTPRedirectHandler):
+    """HTTPRedirectHandler that strips credential-bearing headers when a
+    redirect points at a different host (channel headers such as Cookie/
+    Authorization/Origin must not be replayed cross-origin)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new_request = HTTPRedirectHandler.redirect_request(
+            self, req, fp, code, msg, headers, newurl
+        )
+        if new_request is None:
+            return None
+        if urlparse(newurl).netloc != urlparse(req.full_url).netloc:
+            for header_name in _CROSS_ORIGIN_SENSITIVE_HEADERS:
+                new_request.remove_header(header_name)
+        return new_request
+
+
+def probe_stream(url, headers=None, timeout=5):
+    """Out-of-band Range GET used to classify a playback start failure.
+
+    Returns the int HTTP status on success (or from an HTTPError), the
+    string 'timeout' on a socket timeout, or 'error' on any other failure
+    (including a non-http(s) URL, which is never followed).
+    """
+    if urlparse(url).scheme not in ('http', 'https'):
+        return 'error'
+    request_headers = {'User-Agent': DEFAULT_USER_AGENT, 'Range': 'bytes=0-0'}
+    if headers:
+        request_headers.update(headers)
+    request = Request(url, headers=request_headers)
+    opener = build_opener(_SafeRedirectHandler)
+    try:
+        response = opener.open(request, timeout=timeout)
+    except HTTPError as exc:
+        return exc.code
+    except URLError as exc:
+        if isinstance(getattr(exc, 'reason', None), Exception) and 'timed out' in str(exc.reason).lower():
+            return 'timeout'
+        return 'error'
+    except Exception:
+        return 'error'
+    try:
+        return response.getcode()
+    finally:
+        response.close()
 
 
 def _open_local_stream(path):

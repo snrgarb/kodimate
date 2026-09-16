@@ -5,10 +5,46 @@ LOGERROR = 3
 LOGFATAL = 4
 
 log_calls = []
+executebuiltin_calls = []
+play_calls = []
 
 
 def log(msg, level=LOGINFO):
     log_calls.append((msg, level))
+
+
+def executebuiltin(cmd):
+    executebuiltin_calls.append(cmd)
+
+
+def sleep(ms):
+    pass
+
+
+class Player(object):
+    def __init__(self):
+        pass
+
+    def play(self, item='', listitem=None, windowed=False, startpos=-1):
+        play_calls.append((item, listitem))
+
+    def stop(self):
+        pass
+
+    def isPlaying(self):
+        return False
+
+    def onAVStarted(self):
+        pass
+
+    def onPlayBackError(self):
+        pass
+
+    def onPlayBackStopped(self):
+        pass
+
+    def onPlayBackEnded(self):
+        pass
 
 
 class Monitor(object):
