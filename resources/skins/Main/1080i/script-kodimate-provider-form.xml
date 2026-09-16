@@ -59,6 +59,16 @@
                     <height>68</height>
                     <texture>white.png</texture>
                     <colordiffuse>ff3a6ea5</colordiffuse>
+                    <visible>Control.HasFocus(200)</visible>
+                </control>
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>1760</width>
+                    <height>68</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff2c3e50</colordiffuse>
+                    <visible>!Control.HasFocus(200)</visible>
                 </control>
                 <control type="label">
                     <posx>20</posx>
