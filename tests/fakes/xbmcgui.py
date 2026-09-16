@@ -96,8 +96,6 @@ class WindowXML(object):
         self._controls = {}
         self._focus_id = 0
         self._window_properties = {}
-        for key, value in kwargs.items():
-            setattr(self, key, value)
 
     def setProperty(self, key, value):
         self._window_properties[key] = value

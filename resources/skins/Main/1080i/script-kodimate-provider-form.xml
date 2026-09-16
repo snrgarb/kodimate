@@ -13,7 +13,6 @@
             <posy>40</posy>
             <width>1760</width>
             <height>60</height>
-            <font>font13</font>
             <label>$ADDON[script.kodimate 32017]</label>
         </control>
         <control type="list" id="200">
@@ -40,7 +39,6 @@
                     <posy>0</posy>
                     <width>500</width>
                     <height>68</height>
-                    <font>font13</font>
                     <textcolor>ffcccccc</textcolor>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
@@ -49,7 +47,6 @@
                     <posy>0</posy>
                     <width>1180</width>
                     <height>68</height>
-                    <font>font13</font>
                     <textcolor>ff808080</textcolor>
                     <label>$INFO[ListItem.Label2]</label>
                 </control>
@@ -68,7 +65,6 @@
                     <posy>0</posy>
                     <width>500</width>
                     <height>68</height>
-                    <font>font13</font>
                     <textcolor>ffffffff</textcolor>
                     <label>$INFO[ListItem.Label]</label>
                 </control>
@@ -77,7 +73,6 @@
                     <posy>0</posy>
                     <width>1180</width>
                     <height>68</height>
-                    <font>font13</font>
                     <textcolor>ffe0e0e0</textcolor>
                     <label>$INFO[ListItem.Label2]</label>
                 </control>
@@ -88,7 +83,6 @@
             <posy>940</posy>
             <width>360</width>
             <height>60</height>
-            <font>font13</font>
             <label>$ADDON[script.kodimate 32015]</label>
             <texturefocus>white.png</texturefocus>
             <texturenofocus>white.png</texturenofocus>
@@ -104,7 +98,6 @@
             <posy>940</posy>
             <width>360</width>
             <height>60</height>
-            <font>font13</font>
             <label>$ADDON[script.kodimate 32016]</label>
             <texturefocus>white.png</texturefocus>
             <texturenofocus>white.png</texturenofocus>

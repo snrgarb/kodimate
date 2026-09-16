@@ -9,6 +9,11 @@ class BaseWindow(xbmcgui.WindowXML):
     theme = 'Main'
     res = '1080i'
 
+    def __init__(self, *args, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        super(BaseWindow, self).__init__(*args)
+
     @classmethod
     def open(cls, **kwargs):
         path = xbmcaddon.Addon().getAddonInfo('path')

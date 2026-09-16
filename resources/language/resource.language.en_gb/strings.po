@@ -1,9 +1,20 @@
-# Kodimate language file
+# Kodi Media Center language file
 # Addon Name: Kodimate
 # Addon id: script.kodimate
-# Lang: en_GB
+# Addon Provider: Kodimate
 msgid ""
 msgstr ""
+"Project-Id-Version: Kodimate\n"
+"Report-Msgid-Bugs-To: https://github.com/snrgarb/kodimate/issues\n"
+"POT-Creation-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: Kodimate\n"
+"Language-Team: English\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: en_GB\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 msgctxt "#32000"
 msgid "Kodimate"

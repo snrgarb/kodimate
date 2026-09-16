@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <window>
-    <defaultcontrol>100</defaultcontrol>
+    <defaultcontrol always="true">201</defaultcontrol>
     <coordinates>
         <system>1</system>
         <posx>0</posx>
@@ -13,7 +13,6 @@
             <posy>60</posy>
             <width>1760</width>
             <height>60</height>
-            <font>font13</font>
             <label>$ADDON[script.kodimate 32000]</label>
         </control>
         <control type="button" id="201">
@@ -21,7 +20,6 @@
             <posy>140</posy>
             <width>360</width>
             <height>60</height>
-            <font>font13</font>
             <label>$ADDON[script.kodimate 32037]</label>
             <texturefocus>white.png</texturefocus>
             <texturenofocus>white.png</texturenofocus>
@@ -34,7 +32,6 @@
             <posy>220</posy>
             <width>360</width>
             <height>60</height>
-            <font>font13</font>
             <label>$ADDON[script.kodimate 32007]</label>
             <texturefocus>white.png</texturefocus>
             <texturenofocus>white.png</texturenofocus>

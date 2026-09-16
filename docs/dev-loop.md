@@ -60,6 +60,22 @@
   for the file contents themselves, but Kodi's addon cache still needs
   `UpdateLocalAddons()` if `addon.xml` changed (version bump, new deps, etc).
   WindowXML changes (none yet in this addon) take effect on next window open.
+- Kodi caches an addon's `strings.po` once per process. Adding or fixing the
+  language file needs a full Kodi restart (`Application.Quit` then
+  `open -a Kodi`); `UpdateLocalAddons()` is not enough. Symptom: every
+  `$ADDON[...]` label and `getLocalizedString()` returns an empty string.
+- `strings.po` needs a real PO header (Project-Id-Version, Content-Type
+  charset=UTF-8, etc.). With only a bare `msgid ""`/`msgstr ""` header,
+  `msgfmt -c` reports "PO file header missing or invalid" and Kodi loads no
+  strings.
+- Real `xbmcgui.WindowXML` drops unknown constructor kwargs;
+  `BaseWindow.__init__` copies them onto the instance before calling the
+  parent. The test fake mirrors real Kodi (does not store kwargs).
+- Kodi cannot read files under the sandboxed scratchpad path; for throwaway
+  probe scripts use `~/Library/Application Support/Kodi/temp/` and
+  `RunScript(<absolute path>)` via `builtin.py`.
+- Screenshots: set `debug.screenshotpath` via `rpc.py
+  Settings.SetSettingValue`, then `builtin.py 'TakeScreenshot()'`.
 
 ## Verified (2026-09-15, Kodi 21.3, xbmc.python 3.0.1)
 
