@@ -54,10 +54,36 @@
                 <control type="label">
                     <posx>940</posx>
                     <posy>0</posy>
-                    <width>780</width>
+                    <width>500</width>
                     <height>68</height>
                     <textcolor>ff808080</textcolor>
                     <label>$INFO[ListItem.Label2]</label>
+                </control>
+                <control type="label">
+                    <posx>1450</posx>
+                    <posy>0</posy>
+                    <width>90</width>
+                    <height>68</height>
+                    <textcolor>ff808080</textcolor>
+                    <label>$INFO[ListItem.Property(kind)]</label>
+                </control>
+                <control type="label">
+                    <posx>1550</posx>
+                    <posy>0</posy>
+                    <width>210</width>
+                    <height>68</height>
+                    <textcolor>ff808080</textcolor>
+                    <label>$INFO[ListItem.Property(expiry)]</label>
+                    <visible>!String.IsEqual(ListItem.Property(expiry_state),warning)</visible>
+                </control>
+                <control type="label">
+                    <posx>1550</posx>
+                    <posy>0</posy>
+                    <width>210</width>
+                    <height>68</height>
+                    <textcolor>ffe0a030</textcolor>
+                    <label>$INFO[ListItem.Property(expiry)]</label>
+                    <visible>String.IsEqual(ListItem.Property(expiry_state),warning)</visible>
                 </control>
             </itemlayout>
             <focusedlayout height="70" width="1760">
@@ -90,10 +116,36 @@
                 <control type="label">
                     <posx>940</posx>
                     <posy>0</posy>
-                    <width>780</width>
+                    <width>500</width>
                     <height>68</height>
                     <textcolor>ffe0e0e0</textcolor>
                     <label>$INFO[ListItem.Label2]</label>
+                </control>
+                <control type="label">
+                    <posx>1450</posx>
+                    <posy>0</posy>
+                    <width>90</width>
+                    <height>68</height>
+                    <textcolor>ffcccccc</textcolor>
+                    <label>$INFO[ListItem.Property(kind)]</label>
+                </control>
+                <control type="label">
+                    <posx>1550</posx>
+                    <posy>0</posy>
+                    <width>210</width>
+                    <height>68</height>
+                    <textcolor>ffcccccc</textcolor>
+                    <label>$INFO[ListItem.Property(expiry)]</label>
+                    <visible>!String.IsEqual(ListItem.Property(expiry_state),warning)</visible>
+                </control>
+                <control type="label">
+                    <posx>1550</posx>
+                    <posy>0</posy>
+                    <width>210</width>
+                    <height>68</height>
+                    <textcolor>ffffb347</textcolor>
+                    <label>$INFO[ListItem.Property(expiry)]</label>
+                    <visible>String.IsEqual(ListItem.Property(expiry_state),warning)</visible>
                 </control>
             </focusedlayout>
         </control>

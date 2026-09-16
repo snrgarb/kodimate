@@ -1,0 +1,22 @@
+[
+  {
+    "num": "101",
+    "name": "BBC News HD",
+    "stream_id": "12345",
+    "stream_icon": "http://xc.example/logos/bbcnews.png",
+    "epg_channel_id": "bbcnews.uk",
+    "category_id": "5",
+    "tv_archive": "1",
+    "tv_archive_duration": "7"
+  },
+  {
+    "num": 102,
+    "name": "Sky News",
+    "stream_id": 12346,
+    "stream_icon": "",
+    "epg_channel_id": "skynews.uk",
+    "category_id": "5",
+    "tv_archive": "0",
+    "tv_archive_duration": "7"
+  }
+]

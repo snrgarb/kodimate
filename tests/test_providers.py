@@ -198,3 +198,176 @@ def test_error_snippet_short_passthrough():
 
 def test_error_snippet_none():
     assert providers.error_snippet(None) is None
+
+
+# -- Xtream provider CRUD -----------------------------------------------
+
+def test_create_xtream_provider_stores_kind_and_fields(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_xtream_provider(
+            conn, "My XC", "http://xc.example:80", "user", "pass"
+        )
+        row = providers.get_provider(conn, pid)
+        assert row['kind'] == 'xtream'
+        assert row['xtream_host'] == 'http://xc.example:80'
+        assert row['xtream_username'] == 'user'
+        assert row['xtream_password'] == 'pass'
+        assert row['enabled'] == 1
+    finally:
+        conn.close()
+
+
+def test_create_xtream_provider_strips_path_from_host(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_xtream_provider(
+            conn, "My XC", "http://xc.example/get.php?x=1", "user", "pass"
+        )
+        row = providers.get_provider(conn, pid)
+        assert row['xtream_host'] == 'http://xc.example'
+    finally:
+        conn.close()
+
+
+def test_update_xtream_provider_bumps_config_version_and_clears_learned_format(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_xtream_provider(conn, "One", "http://xc.example", "user", "pass")
+        conn.execute(
+            "UPDATE provider SET learned_stream_format = 'm3u8' WHERE id = ?", (pid,)
+        )
+        before = providers.get_provider(conn, pid)
+        needs_refresh = providers.update_xtream_provider(
+            conn, pid, "One", "http://xc.example", "user", "newpass", True
+        )
+        after = providers.get_provider(conn, pid)
+        assert needs_refresh is True
+        assert after['config_version'] == before['config_version'] + 1
+        learned = conn.execute(
+            "SELECT learned_stream_format FROM provider WHERE id = ?", (pid,)
+        ).fetchone()[0]
+        assert learned is None
+    finally:
+        conn.close()
+
+
+def test_update_xtream_provider_no_refresh_for_name_only_change(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_xtream_provider(conn, "One", "http://xc.example", "user", "pass")
+        needs_refresh = providers.update_xtream_provider(
+            conn, pid, "Renamed", "http://xc.example", "user", "pass", True
+        )
+        after = providers.get_provider(conn, pid)
+        assert needs_refresh is False
+        assert after['name'] == "Renamed"
+    finally:
+        conn.close()
+
+
+def test_update_xtream_provider_needs_refresh_when_disabled_to_enabled(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_xtream_provider(
+            conn, "One", "http://xc.example", "user", "pass", enabled=False
+        )
+        needs_refresh = providers.update_xtream_provider(
+            conn, pid, "One", "http://xc.example", "user", "pass", True
+        )
+        assert needs_refresh is True
+    finally:
+        conn.close()
+
+
+def test_set_enabled_true_from_false_needs_refresh(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_m3u_provider(conn, "One", "http://x/one.m3u", enabled=False)
+        needs_refresh = providers.set_enabled(conn, pid, True)
+        assert needs_refresh is True
+        assert providers.get_provider(conn, pid)['enabled'] == 1
+    finally:
+        conn.close()
+
+
+def test_set_enabled_false_no_refresh(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_m3u_provider(conn, "One", "http://x/one.m3u", enabled=True)
+        needs_refresh = providers.set_enabled(conn, pid, False)
+        assert needs_refresh is False
+        assert providers.get_provider(conn, pid)['enabled'] == 0
+    finally:
+        conn.close()
+
+
+# -- normalise_xtream_host -------------------------------------------------
+
+def test_normalise_xtream_host_strips_path_query_fragment_and_slash():
+    assert providers.normalise_xtream_host(
+        "http://xc.example:8080/get.php?x=1#frag"
+    ) == "http://xc.example:8080"
+    assert providers.normalise_xtream_host("http://xc.example/") == "http://xc.example"
+
+
+# -- validate_xtream ---------------------------------------------------
+
+def test_validate_xtream_requires_host_username_password():
+    errors = providers.validate_xtream("Name", "", "", "")
+    fields = {field for field, _ in errors}
+    assert fields == {'xtream_host', 'xtream_username', 'xtream_password'}
+
+
+def test_validate_xtream_accepts_valid_host():
+    assert providers.validate_xtream("Name", "http://xc.example:80", "user", "pass") == []
+
+
+def test_validate_xtream_rejects_non_url_host():
+    errors = providers.validate_xtream("Name", "not-a-url", "user", "pass")
+    assert any(field == 'xtream_host' for field, _ in errors)
+
+
+# -- split_get_php_url ---------------------------------------------------
+
+def test_split_get_php_url_parses_username_password():
+    result = providers.split_get_php_url(
+        "http://xc.example:80/get.php?username=bob&password=secret&type=m3u_plus"
+    )
+    assert result == ("http://xc.example:80", "bob", "secret")
+
+
+def test_split_get_php_url_returns_none_for_non_matching_text():
+    assert providers.split_get_php_url("http://xc.example/live/bob/secret/1.ts") is None
+    assert providers.split_get_php_url("just some text") is None
+
+
+# -- auto_name for Xtream -------------------------------------------------
+
+def test_auto_name_xtream_uses_host_netloc():
+    assert providers.auto_name_xtream("http://xc.example:80") == "xc.example:80"
+
+
+# -- expiry_state ---------------------------------------------------------
+
+def test_expiry_state_none_when_absent():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert providers.expiry_state(None, now) is None
+
+
+def test_expiry_state_warning_under_seven_days():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    state, _ = providers.expiry_state("2026-01-05T00:00:00Z", now)
+    assert state == 'warning'
+
+
+def test_expiry_state_ok_when_far_off():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    state, _ = providers.expiry_state("2026-06-01T00:00:00Z", now)
+    assert state == 'ok'
+
+
+def test_expiry_state_expired_when_in_past():
+    now = datetime(2026, 1, 10, tzinfo=timezone.utc)
+    state, _ = providers.expiry_state("2026-01-01T00:00:00Z", now)
+    assert state == 'expired'

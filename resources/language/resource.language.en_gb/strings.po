@@ -183,3 +183,43 @@ msgstr ""
 msgctxt "#32041"
 msgid "Hidden"
 msgstr ""
+
+msgctxt "#32042"
+msgid "Kind"
+msgstr ""
+
+msgctxt "#32043"
+msgid "Server URL"
+msgstr ""
+
+msgctxt "#32044"
+msgid "Username"
+msgstr ""
+
+msgctxt "#32045"
+msgid "Password"
+msgstr ""
+
+msgctxt "#32046"
+msgid "Enter a server URL"
+msgstr ""
+
+msgctxt "#32047"
+msgid "Server must be a URL like http://host[:port]"
+msgstr ""
+
+msgctxt "#32048"
+msgid "Enter a username"
+msgstr ""
+
+msgctxt "#32049"
+msgid "Enter a password"
+msgstr ""
+
+msgctxt "#32050"
+msgid "Server details filled in from URL"
+msgstr ""
+
+msgctxt "#32051"
+msgid "Expires %s"
+msgstr ""

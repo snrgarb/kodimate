@@ -221,6 +221,67 @@ def test_interval_elapsed_enqueues_all_again(tmp_path):
     assert props.get('db_generation') == '1'
 
 
+_XTREAM_ACCOUNT_JSON = (
+    '{"user_info": {"auth": 1, "status": "Active", "exp_date": null, '
+    '"max_connections": "1", "allowed_output_formats": ["ts"]}}'
+)
+_XTREAM_CATEGORIES_JSON = '[{"category_id": "5", "category_name": "News"}]'
+_XTREAM_STREAMS_JSON = (
+    '[{"num": "1", "name": "Chan", "stream_id": "100", "tv_archive": "0", '
+    '"tv_archive_duration": "0"}]'
+)
+
+
+def _xtream_fetcher(source, user_agent):
+    if 'action=get_live_categories' in source:
+        return _XTREAM_CATEGORIES_JSON
+    if 'action=get_live_streams' in source:
+        return _XTREAM_STREAMS_JSON
+    return _XTREAM_ACCOUNT_JSON
+
+
+def test_manual_refresh_xtream_ok(tmp_path):
+    conn = _make_conn(tmp_path)
+    conn.execute(
+        "INSERT INTO provider (id, kind, name, enabled, xtream_host, xtream_username, "
+        "xtream_password) VALUES (3, 'xtream', 'P3', 1, 'http://xc.example', 'user', 'pass')"
+    )
+    props = FakeProps()
+    props.set('refresh_request', '3;ui')
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=_xtream_fetcher,
+        now=lambda: datetime(2024, 1, 1),
+        settings=_no_startup_settings(),
+    )
+    svc.tick()
+
+    assert props.get('refresh_result.3') == 'ok'
+    channel = conn.execute("SELECT name FROM channel WHERE provider_id = 3").fetchone()
+    assert channel == ('Chan',)
+
+
+def test_xtream_malformed_account_yields_last_error_not_crash(tmp_path):
+    conn = _make_conn(tmp_path)
+    conn.execute(
+        "INSERT INTO provider (id, kind, name, enabled, xtream_host, xtream_username, "
+        "xtream_password) VALUES (3, 'xtream', 'P3', 1, 'http://xc.example', 'user', 'pass')"
+    )
+    props = FakeProps()
+    props.set('refresh_request', '3;ui')
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=lambda source, user_agent: '<html>not json</html>',
+        now=lambda: datetime(2024, 1, 1),
+        settings=_no_startup_settings(),
+    )
+    svc.tick()
+
+    assert props.get('refresh_result.3').startswith('error:')
+    row = conn.execute("SELECT last_error FROM provider WHERE id = 3").fetchone()
+    assert row[0]
+
+
 def test_deleted_provider_cascaded_at_on_start(tmp_path):
     conn = _make_conn(tmp_path)
     _add_provider(conn, 1, deleted_at='2024-01-01T00:00:00Z')

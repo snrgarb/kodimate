@@ -1,0 +1,19 @@
+{
+  "user_info": {
+    "username": "user",
+    "password": "pass",
+    "auth": 1,
+    "status": "Active",
+    "exp_date": "1735689600",
+    "is_trial": "0",
+    "active_cons": "0",
+    "max_connections": "1",
+    "allowed_output_formats": ["m3u8", "ts"]
+  },
+  "server_info": {
+    "url": "xc.example",
+    "port": "80",
+    "server_protocol": "http",
+    "timezone": "Europe/London"
+  }
+}

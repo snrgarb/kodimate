@@ -18,7 +18,7 @@ All Kodi interaction is injected so this is testable without xbmc*:
 """
 from datetime import datetime, timedelta
 
-from . import fetch, ingest, m3u
+from . import fetch, ingest, m3u, xtream
 
 _ISO_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
 
@@ -176,16 +176,28 @@ class RefreshService(object):
 
         config_version = row['config_version']
 
-        if row['kind'] != 'm3u':
-            self._fail(provider_id, requested_by_ui, 'Not supported yet')
-            return
-
         try:
-            text = self.fetcher(row['m3u_url'], row['user_agent'])
-            outcome = ingest.refresh_m3u_provider(
-                self.conn, provider_id, text, self.now(),
-                expected_config_version=config_version,
-            )
+            if row['kind'] == 'm3u':
+                text = self.fetcher(row['m3u_url'], row['user_agent'])
+                outcome = ingest.refresh_m3u_provider(
+                    self.conn, provider_id, text, self.now(),
+                    expected_config_version=config_version,
+                )
+            else:
+                host, username, password = row['xtream_host'], row['xtream_username'], row['xtream_password']
+                account = xtream.fetch_account(host, username, password, row['user_agent'], self.fetcher)
+                categories = xtream.fetch_categories(host, username, password, row['user_agent'], self.fetcher)
+                streams_by_category = {
+                    str(category.get('category_id')): xtream.fetch_streams(
+                        host, username, password, category.get('category_id'),
+                        row['user_agent'], self.fetcher,
+                    )
+                    for category in categories
+                }
+                outcome = ingest.refresh_xtream_provider(
+                    self.conn, provider_id, account, categories, streams_by_category, self.now(),
+                    expected_config_version=config_version,
+                )
         except ingest.ConfigVersionChanged:
             still_here = self.conn.execute(
                 "SELECT 1 FROM provider WHERE id = ? AND deleted_at IS NULL", (provider_id,)

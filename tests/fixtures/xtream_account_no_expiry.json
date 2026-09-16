@@ -1,0 +1,9 @@
+{
+  "user_info": {
+    "auth": 1,
+    "status": "Active",
+    "exp_date": null,
+    "max_connections": "1",
+    "allowed_output_formats": ["ts"]
+  }
+}

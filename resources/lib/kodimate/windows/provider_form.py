@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ProviderFormWindow: add/edit an M3U Provider (issue #18 tracer bullet)."""
+"""ProviderFormWindow: add/edit an M3U or Xtream Provider (issue #18, #20)."""
 import xbmc
 import xbmcaddon
 import xbmcgui
@@ -11,16 +11,28 @@ LIST_ID = 200
 SAVE_BUTTON_ID = 300
 CANCEL_BUTTON_ID = 301
 
-_ROW_NAME = 0
-_ROW_PLAYLIST = 1
-_ROW_ENABLED = 2
-
+_STR_KIND = 32042
+_STR_KIND_M3U = 32029
+_STR_KIND_XTREAM = 32030
 _STR_NAME = 32012
 _STR_PLAYLIST = 32013
 _STR_ENABLED = 32014
+_STR_SERVER = 32043
+_STR_USERNAME = 32044
+_STR_PASSWORD = 32045
 _STR_ENTER_URL = 32018
 _STR_BROWSE_FILE = 32019
 _STR_DISCARD = 32036
+_STR_GET_PHP_PARSED = 32050
+
+_PASSWORD_MASK = '••••'
+
+# Field -> validation-error-field mapping per kind, used to focus the
+# offending row on Save.
+_M3U_ERROR_ROWS = {'m3u_url': 'playlist'}
+_XTREAM_ERROR_ROWS = {
+    'xtream_host': 'server', 'xtream_username': 'username', 'xtream_password': 'password',
+}
 
 
 class ProviderFormWindow(BaseWindow):
@@ -31,11 +43,21 @@ class ProviderFormWindow(BaseWindow):
         self.result = None
         self.needs_refresh = False
         existing = providers.get_provider(self.conn, self.provider_id) if self.provider_id else None
+        self._kind = existing['kind'] if existing else getattr(self, 'kind', 'm3u')
         self._name = existing['name'] if existing else ''
         self._m3u_url = existing['m3u_url'] if existing else ''
+        self._host = (existing['xtream_host'] if existing else '') or ''
+        self._username = (existing['xtream_username'] if existing else '') or ''
+        self._password = (existing['xtream_password'] if existing else '') or ''
         self._enabled = bool(existing['enabled']) if existing else True
         self._dirty = False
+        self._rows = self._row_types()
         self._render()
+
+    def _row_types(self):
+        if self._kind == 'xtream':
+            return ['kind', 'name', 'server', 'username', 'password', 'enabled']
+        return ['kind', 'name', 'playlist', 'enabled']
 
     def onAction(self, action):
         action_id = action.getId()
@@ -50,26 +72,59 @@ class ProviderFormWindow(BaseWindow):
         elif control_id == LIST_ID:
             self._edit_selected_row()
 
+    def _kind_label(self):
+        string_id = _STR_KIND_XTREAM if self._kind == 'xtream' else _STR_KIND_M3U
+        return self._addon.getLocalizedString(string_id)
+
     def _render(self):
         control = self.getControl(LIST_ID)
         control.reset()
-        name_item = xbmcgui.ListItem(label=self._addon.getLocalizedString(_STR_NAME))
-        name_item.setLabel2(self._name)
-        control.addItem(name_item)
-        playlist_item = xbmcgui.ListItem(label=self._addon.getLocalizedString(_STR_PLAYLIST))
-        playlist_item.setLabel2(self._m3u_url)
-        control.addItem(playlist_item)
-        enabled_item = xbmcgui.ListItem(label=self._addon.getLocalizedString(_STR_ENABLED))
-        enabled_item.setLabel2('1' if self._enabled else '0')
-        control.addItem(enabled_item)
+        for row_type in self._rows:
+            item = xbmcgui.ListItem(label=self._row_label(row_type))
+            item.setLabel2(self._row_value(row_type))
+            control.addItem(item)
+
+    def _row_label(self, row_type):
+        return self._addon.getLocalizedString({
+            'kind': _STR_KIND,
+            'name': _STR_NAME,
+            'playlist': _STR_PLAYLIST,
+            'server': _STR_SERVER,
+            'username': _STR_USERNAME,
+            'password': _STR_PASSWORD,
+            'enabled': _STR_ENABLED,
+        }[row_type])
+
+    def _row_value(self, row_type):
+        if row_type == 'kind':
+            return self._kind_label()
+        if row_type == 'name':
+            return self._name
+        if row_type == 'playlist':
+            return self._m3u_url
+        if row_type == 'server':
+            return self._host
+        if row_type == 'username':
+            return self._username
+        if row_type == 'password':
+            return _PASSWORD_MASK if self._password else ''
+        return '1' if self._enabled else '0'
 
     def _edit_selected_row(self):
-        position = self.getControl(LIST_ID).getSelectedPosition()
-        if position == _ROW_NAME:
+        row_type = self._rows[self.getControl(LIST_ID).getSelectedPosition()]
+        if row_type == 'kind':
+            return
+        if row_type == 'name':
             self._edit_name()
-        elif position == _ROW_PLAYLIST:
+        elif row_type == 'playlist':
             self._edit_playlist()
-        elif position == _ROW_ENABLED:
+        elif row_type == 'server':
+            self._edit_server()
+        elif row_type == 'username':
+            self._edit_username()
+        elif row_type == 'password':
+            self._edit_password()
+        elif row_type == 'enabled':
             self._enabled = not self._enabled
             self._dirty = True
             self._render()
@@ -104,28 +159,83 @@ class ProviderFormWindow(BaseWindow):
                 self._dirty = True
                 self._render()
 
+    def _edit_server(self):
+        keyboard = xbmc.Keyboard(self._host, self._addon.getLocalizedString(_STR_SERVER))
+        keyboard.doModal()
+        if not keyboard.isConfirmed():
+            return
+        text = keyboard.getText()
+        split = providers.split_get_php_url(text)
+        if split:
+            self._host, self._username, self._password = split
+            xbmcgui.Dialog().notification(
+                self._addon.getLocalizedString(32000),
+                self._addon.getLocalizedString(_STR_GET_PHP_PARSED),
+            )
+        else:
+            self._host = text
+        self._dirty = True
+        self._render()
+
+    def _edit_username(self):
+        keyboard = xbmc.Keyboard(self._username, self._addon.getLocalizedString(_STR_USERNAME))
+        keyboard.doModal()
+        if keyboard.isConfirmed():
+            self._username = keyboard.getText()
+            self._dirty = True
+            self._render()
+
+    def _edit_password(self):
+        keyboard = xbmc.Keyboard(self._password, self._addon.getLocalizedString(_STR_PASSWORD), True)
+        keyboard.doModal()
+        if keyboard.isConfirmed():
+            self._password = keyboard.getText()
+            self._dirty = True
+            self._render()
+
     def _save(self):
-        errors = providers.validate_m3u(self._name, self._m3u_url)
+        if self._kind == 'xtream':
+            errors = providers.validate_xtream(self._name, self._host, self._username, self._password)
+            error_rows = _XTREAM_ERROR_ROWS
+        else:
+            errors = providers.validate_m3u(self._name, self._m3u_url)
+            error_rows = _M3U_ERROR_ROWS
         if errors:
             field, message_id = errors[0]
-            row = {'m3u_url': _ROW_PLAYLIST}.get(field, _ROW_NAME)
-            self.getControl(LIST_ID).selectItem(row)
+            row_type = error_rows.get(field, 'name')
+            self.getControl(LIST_ID).selectItem(self._rows.index(row_type))
             xbmcgui.Dialog().notification(
                 self._addon.getLocalizedString(32000),
                 self._addon.getLocalizedString(message_id),
             )
             return
-        name = self._name.strip() or providers.auto_name(self._m3u_url)
-        if self.provider_id:
-            self.needs_refresh = providers.update_provider(
-                self.conn, self.provider_id, name, self._m3u_url, self._enabled
-            )
-            self.result = self.provider_id
+
+        if self._kind == 'xtream':
+            name = self._name.strip() or providers.auto_name_xtream(self._host)
+            if self.provider_id:
+                self.needs_refresh = providers.update_xtream_provider(
+                    self.conn, self.provider_id, name, self._host, self._username,
+                    self._password, self._enabled,
+                )
+                self.result = self.provider_id
+            else:
+                self.result = providers.create_xtream_provider(
+                    self.conn, name, self._host, self._username, self._password,
+                    enabled=self._enabled,
+                )
+                self.needs_refresh = True
         else:
-            self.result = providers.create_m3u_provider(
-                self.conn, name, self._m3u_url, enabled=self._enabled
-            )
-            self.needs_refresh = True
+            name = self._name.strip() or providers.auto_name(self._m3u_url)
+            if self.provider_id:
+                self.needs_refresh = providers.update_provider(
+                    self.conn, self.provider_id, name, self._m3u_url, self._enabled
+                )
+                self.result = self.provider_id
+            else:
+                self.result = providers.create_m3u_provider(
+                    self.conn, name, self._m3u_url, enabled=self._enabled
+                )
+                self.needs_refresh = True
         self.close()
 
     def _cancel(self):

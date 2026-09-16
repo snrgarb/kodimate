@@ -15,7 +15,7 @@ try:
 except ImportError:  # pragma: no cover - Python 2 fallback, unused on target
     from urlparse import urlsplit
 
-from . import db, m3u
+from . import db, m3u, urls
 
 UNCATEGORISED = 'Uncategorised'
 
@@ -141,6 +141,39 @@ def _ensure_groups(conn, provider_id, group_names_in_order):
     return group_ids
 
 
+def _mark_stale_purge_and_clean_groups(conn, provider_id, present_keys, now_iso, now_dt):
+    """Shared refresh tail: mark absent channels Stale, purge old-Stale rows,
+    and drop groups left with no channels. Used by both M3U and Xtream
+    ingest (docs/design/schema.md "Stale"; CONTEXT.md "Group")."""
+    if present_keys:
+        placeholders = ','.join('?' * len(present_keys))
+        conn.execute(
+            "UPDATE channel SET stale_since = ? "
+            "WHERE provider_id = ? AND stale_since IS NULL "
+            "AND channel_key NOT IN ({0})".format(placeholders),
+            [now_iso, provider_id] + present_keys,
+        )
+    else:
+        conn.execute(
+            "UPDATE channel SET stale_since = ? "
+            "WHERE provider_id = ? AND stale_since IS NULL",
+            (now_iso, provider_id),
+        )
+
+    purge_cutoff = _to_iso(now_dt - timedelta(days=_STALE_PURGE_DAYS))
+    conn.execute(
+        "DELETE FROM channel WHERE provider_id = ? "
+        "AND stale_since IS NOT NULL AND stale_since <= ?",
+        (provider_id, purge_cutoff),
+    )
+    conn.execute(
+        "DELETE FROM channel_group WHERE provider_id = ? AND id NOT IN "
+        "(SELECT DISTINCT group_id FROM channel WHERE provider_id = ? "
+        "AND group_id IS NOT NULL)",
+        (provider_id, provider_id),
+    )
+
+
 def refresh_m3u_provider(conn, provider_id, playlist_text, now, expected_config_version=None):
     playlist = m3u.parse(playlist_text)
     now_dt = _to_datetime(now)
@@ -207,33 +240,7 @@ def refresh_m3u_provider(conn, provider_id, playlist_text, now, expected_config_
             )
             present_keys.append(key)
 
-        if present_keys:
-            placeholders = ','.join('?' * len(present_keys))
-            conn.execute(
-                "UPDATE channel SET stale_since = ? "
-                "WHERE provider_id = ? AND stale_since IS NULL "
-                "AND channel_key NOT IN ({0})".format(placeholders),
-                [now_iso, provider_id] + present_keys,
-            )
-        else:
-            conn.execute(
-                "UPDATE channel SET stale_since = ? "
-                "WHERE provider_id = ? AND stale_since IS NULL",
-                (now_iso, provider_id),
-            )
-
-        purge_cutoff = _to_iso(now_dt - timedelta(days=_STALE_PURGE_DAYS))
-        conn.execute(
-            "DELETE FROM channel WHERE provider_id = ? "
-            "AND stale_since IS NOT NULL AND stale_since <= ?",
-            (provider_id, purge_cutoff),
-        )
-        conn.execute(
-            "DELETE FROM channel_group WHERE provider_id = ? AND id NOT IN "
-            "(SELECT DISTINCT group_id FROM channel WHERE provider_id = ? "
-            "AND group_id IS NOT NULL)",
-            (provider_id, provider_id),
-        )
+        _mark_stale_purge_and_clean_groups(conn, provider_id, present_keys, now_iso, now_dt)
 
         if epg_url:
             conn.execute(
@@ -241,6 +248,121 @@ def refresh_m3u_provider(conn, provider_id, playlist_text, now, expected_config_
                 "ON CONFLICT(provider_id) DO UPDATE SET url = excluded.url",
                 (provider_id, epg_url),
             )
+
+        conn.execute("COMMIT")
+    except Exception:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise
+
+    channel_count = conn.execute(
+        "SELECT COUNT(*) FROM channel WHERE provider_id = ?", (provider_id,)
+    ).fetchone()[0]
+    listable_count = listable_channel_count(conn, provider_id)
+    return RefreshOutcome(channel_count, listable_count, epg_url)
+
+
+def refresh_xtream_provider(conn, provider_id, account, categories, streams_by_category, now,
+                             expected_config_version=None):
+    """Ingest an Xtream account/categories/streams triple (from xtream.py) for one provider.
+
+    `streams_by_category` maps each category's `category_id` (as given in
+    `categories`, coerced to `str`) to that category's list of raw
+    `get_live_streams` stream dicts.
+    """
+    now_dt = _to_datetime(now)
+    now_iso = _to_iso(now_dt)
+
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        if expected_config_version is not None:
+            row = conn.execute(
+                "SELECT config_version FROM provider WHERE id = ?", (provider_id,)
+            ).fetchone()
+            if row is None or row[0] != expected_config_version:
+                conn.execute("ROLLBACK")
+                raise ConfigVersionChanged()
+
+        provider_row = conn.execute(
+            "SELECT xtream_host, xtream_username, xtream_password, "
+            "stream_format, learned_stream_format FROM provider WHERE id = ?",
+            (provider_id,),
+        ).fetchone()
+        host, username, password, stream_format, learned_stream_format = provider_row
+        provider = {'stream_format': stream_format, 'learned_stream_format': learned_stream_format}
+        form = urls.live_form(provider, account.get('allowed_output_formats'))
+
+        category_names = OrderedDict()
+        for category in categories:
+            cid = str(category.get('category_id'))
+            category_names[cid] = category.get('category_name') or UNCATEGORISED
+        group_names_in_order = list(category_names.values())
+        group_ids = _ensure_groups(conn, provider_id, group_names_in_order)
+
+        present_keys = []
+        position = 0
+        for cid, category_name in category_names.items():
+            streams = streams_by_category.get(cid) or []
+            for stream in streams:
+                position += 1
+                stream_id = str(stream.get('stream_id'))
+                tv_archive = m3u._to_int(stream.get('tv_archive'))
+                catchup_days = (
+                    m3u._to_int(stream.get('tv_archive_duration')) if tv_archive else None
+                )
+
+                conn.execute(
+                    """
+                    INSERT INTO channel (
+                        provider_id, channel_key, name, normalised_name, stream_url,
+                        logo_url, group_id, provider_number, position,
+                        epg_channel_id, catchup_days, stale_since, last_seen_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                    ON CONFLICT(provider_id, channel_key) DO UPDATE SET
+                        name = excluded.name,
+                        normalised_name = excluded.normalised_name,
+                        stream_url = excluded.stream_url,
+                        logo_url = excluded.logo_url,
+                        group_id = excluded.group_id,
+                        provider_number = excluded.provider_number,
+                        position = excluded.position,
+                        epg_channel_id = excluded.epg_channel_id,
+                        catchup_days = excluded.catchup_days,
+                        stale_since = NULL,
+                        last_seen_at = excluded.last_seen_at
+                    """,
+                    (
+                        provider_id, stream_id, stream.get('name') or '',
+                        normalise_name(stream.get('name')),
+                        urls.xtream_live_url(host, username, password, stream_id, form),
+                        stream.get('stream_icon') or None, group_ids[category_name],
+                        m3u._to_int(stream.get('num')), position,
+                        stream.get('epg_channel_id') or None, catchup_days, now_iso,
+                    ),
+                )
+                present_keys.append(stream_id)
+
+        _mark_stale_purge_and_clean_groups(conn, provider_id, present_keys, now_iso, now_dt)
+
+        conn.execute(
+            "UPDATE provider SET account_expires_at = ?, max_connections = ?, "
+            "allowed_output_formats = ? WHERE id = ?",
+            (
+                account.get('account_expires_at'), account.get('max_connections'),
+                json.dumps(account['allowed_output_formats'])
+                if account.get('allowed_output_formats') is not None else None,
+                provider_id,
+            ),
+        )
+
+        epg_url = '{0}/xmltv.php?username={1}&password={2}'.format(host, username, password)
+        conn.execute(
+            "INSERT INTO epg_source (provider_id, url) VALUES (?, ?) "
+            "ON CONFLICT(provider_id) DO UPDATE SET url = excluded.url",
+            (provider_id, epg_url),
+        )
 
         conn.execute("COMMIT")
     except Exception:

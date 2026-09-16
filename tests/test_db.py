@@ -34,6 +34,35 @@ def test_open_db_sets_pragmas(tmp_path):
         conn.close()
 
 
+def test_v1_db_migrates_and_gains_allowed_output_formats_column(tmp_path):
+    path = str(tmp_path / "kodimate.db")
+    import sqlite3
+    conn = sqlite3.connect(path)
+    conn.execute(
+        """CREATE TABLE provider (
+            id INTEGER PRIMARY KEY,
+            kind TEXT NOT NULL,
+            name TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1
+        )"""
+    )
+    conn.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
+    conn.execute("INSERT INTO meta (key, value) VALUES ('schema_version', '1')")
+    conn.commit()
+    conn.close()
+
+    conn = db.open_db(path)
+    try:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(provider)").fetchall()}
+        assert 'allowed_output_formats' in columns
+        version = conn.execute(
+            "SELECT value FROM meta WHERE key='schema_version'"
+        ).fetchone()[0]
+        assert version == str(db.SCHEMA_VERSION)
+    finally:
+        conn.close()
+
+
 def test_open_db_second_open_is_a_no_op(tmp_path):
     path = str(tmp_path / "kodimate.db")
 

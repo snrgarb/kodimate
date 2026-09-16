@@ -32,10 +32,10 @@ _STR_SERVICE_NOT_RUNNING = 32027
 _STR_SELECT_KIND = 32028
 _STR_KIND_M3U = 32029
 _STR_KIND_XTREAM = 32030
-_STR_XTREAM_UNAVAILABLE = 32031
 _STR_REFRESH_NOW = 32033
 _STR_ENABLE = 32034
 _STR_DISABLE = 32035
+_STR_EXPIRES = 32051
 
 
 def _format_relative_time(addon, rel):
@@ -99,6 +99,11 @@ class ProvidersWindow(BaseWindow):
             item.setProperty('enabled', '1' if row['enabled'] else '0')
             item.setProperty('refreshing', '1' if str(row['id']) in refreshing else '0')
             item.setProperty('provider_id', str(row['id']))
+            expiry = providers.expiry_state(row.get('account_expires_at'), datetime.now(timezone.utc))
+            if expiry:
+                state, date_text = expiry
+                item.setProperty('expiry_state', state)
+                item.setProperty('expiry', self._addon.getLocalizedString(_STR_EXPIRES) % date_text)
             control.addItem(item)
 
     def _status_text(self, row, refreshing):
@@ -127,15 +132,10 @@ class ProvidersWindow(BaseWindow):
         choice = xbmcgui.Dialog().select(
             self._addon.getLocalizedString(_STR_SELECT_KIND), options
         )
-        if choice == 1:
-            xbmcgui.Dialog().notification(
-                self._addon.getLocalizedString(32000),
-                self._addon.getLocalizedString(_STR_XTREAM_UNAVAILABLE),
-            )
+        if choice not in (0, 1):
             return
-        if choice != 0:
-            return
-        form = ProviderFormWindow.open(conn=self.conn, provider_id=None)
+        kind = 'm3u' if choice == 0 else 'xtream'
+        form = ProviderFormWindow.open(conn=self.conn, provider_id=None, kind=kind)
         if getattr(form, 'result', None) is not None:
             self._after_save(form.result, form.needs_refresh)
 
@@ -192,10 +192,7 @@ class ProvidersWindow(BaseWindow):
         if action == 'refresh':
             self._request_refresh([provider_id])
         elif action in ('enable', 'disable'):
-            needs_refresh = providers.update_provider(
-                self.conn, provider_id, row['name'], row['m3u_url'],
-                action == 'enable',
-            )
+            needs_refresh = providers.set_enabled(self.conn, provider_id, action == 'enable')
             self._render()
             if needs_refresh:
                 self._request_refresh([provider_id])

@@ -8,7 +8,7 @@ open_db() so that whichever process starts first creates the v1 schema
 import os
 import sqlite3
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA_STATEMENTS = [
     """CREATE TABLE IF NOT EXISTS provider (
@@ -25,6 +25,7 @@ _SCHEMA_STATEMENTS = [
         user_agent TEXT,
         account_expires_at TEXT,
         max_connections INTEGER,
+        allowed_output_formats TEXT,
         epg_override_url TEXT,
         catchup_days_default INTEGER,
         catchup_url_form TEXT NOT NULL DEFAULT 'path',
@@ -148,6 +149,12 @@ def listable_channel_count(conn, provider_id):
     return row[0]
 
 
+def _add_allowed_output_formats_column_if_missing(conn):
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(provider)").fetchall()}
+    if 'allowed_output_formats' not in columns:
+        conn.execute("ALTER TABLE provider ADD COLUMN allowed_output_formats TEXT")
+
+
 def migrate(conn):
     """Idempotently bring the schema up to SCHEMA_VERSION under BEGIN IMMEDIATE."""
     conn.execute("BEGIN IMMEDIATE")
@@ -157,6 +164,8 @@ def migrate(conn):
         if version < SCHEMA_VERSION:
             for statement in _SCHEMA_STATEMENTS:
                 conn.execute(statement)
+            if version >= 1:
+                _add_allowed_output_formats_column_if_missing(conn)
             conn.execute(
                 "INSERT INTO meta (key, value) VALUES ('schema_version', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",

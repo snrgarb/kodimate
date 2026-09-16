@@ -1,0 +1,144 @@
+# -*- coding: utf-8 -*-
+import json
+
+import pytest
+
+from kodimate import db, ingest
+
+
+def _make_db(tmp_path):
+    conn = db.open_db(str(tmp_path / 'k.db'))
+    conn.execute(
+        "INSERT INTO provider (id, kind, name, enabled, xtream_host, xtream_username, "
+        "xtream_password) VALUES (1, 'xtream', 'Test', 1, 'http://xc.example', 'user', 'pass')"
+    )
+    return conn
+
+
+_ACCOUNT = {
+    'account_expires_at': '2026-01-08T00:00:00Z',
+    'max_connections': 1,
+    'allowed_output_formats': ['ts', 'm3u8'],
+}
+
+_CATEGORIES = [
+    {'category_id': '5', 'category_name': 'News', 'parent_id': 0},
+    {'category_id': 6, 'category_name': 'Sport', 'parent_id': 0},
+]
+
+_STREAMS = {
+    '5': [
+        {
+            'num': '101', 'name': 'BBC News HD', 'stream_id': '12345',
+            'stream_icon': 'http://xc.example/logos/bbcnews.png',
+            'epg_channel_id': 'bbcnews.uk', 'tv_archive': '1', 'tv_archive_duration': '7',
+        },
+        {
+            'num': 102, 'name': 'Sky News', 'stream_id': 12346,
+            'stream_icon': '', 'epg_channel_id': 'skynews.uk',
+            'tv_archive': '0', 'tv_archive_duration': '7',
+        },
+    ],
+    '6': [
+        {
+            'num': 201, 'name': 'Sky Sports', 'stream_id': 22345,
+            'stream_icon': 'http://xc.example/logos/skysports.png',
+            'epg_channel_id': 'skysports.uk', 'tv_archive': 1, 'tv_archive_duration': 3,
+        },
+    ],
+}
+
+
+def _channels_by_key(conn, provider_id=1):
+    rows = conn.execute(
+        "SELECT channel_key, name, normalised_name, stream_url, group_id, "
+        "provider_number, epg_channel_id, catchup_days, logo_url, stale_since "
+        "FROM channel WHERE provider_id = ?",
+        (provider_id,),
+    ).fetchall()
+    cols = [
+        'channel_key', 'name', 'normalised_name', 'stream_url', 'group_id',
+        'provider_number', 'epg_channel_id', 'catchup_days', 'logo_url', 'stale_since',
+    ]
+    return {row[0]: dict(zip(cols, row)) for row in rows}
+
+
+def test_creates_group_per_category_and_channel_per_stream(tmp_path):
+    conn = _make_db(tmp_path)
+    ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, _CATEGORIES, _STREAMS, '2026-01-01T00:00:00Z'
+    )
+    groups = dict(conn.execute("SELECT id, name FROM channel_group WHERE provider_id = 1").fetchall())
+    assert set(groups.values()) == {'News', 'Sport'}
+
+    channels = _channels_by_key(conn)
+    assert set(channels) == {'12345', '12346', '22345'}
+    assert channels['12345']['name'] == 'BBC News HD'
+    assert channels['12345']['provider_number'] == 101
+    assert channels['12345']['epg_channel_id'] == 'bbcnews.uk'
+    assert channels['12345']['stream_url'] == 'http://xc.example/live/user/pass/12345.ts'
+    assert groups[channels['12345']['group_id']] == 'News'
+    assert groups[channels['22345']['group_id']] == 'Sport'
+
+
+def test_catchup_days_only_set_when_tv_archive_truthy(tmp_path):
+    conn = _make_db(tmp_path)
+    ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, _CATEGORIES, _STREAMS, '2026-01-01T00:00:00Z'
+    )
+    channels = _channels_by_key(conn)
+    assert channels['12345']['catchup_days'] == 7
+    # tv_archive == '0' -> no catch-up even though a duration is present.
+    assert channels['12346']['catchup_days'] is None
+    assert channels['22345']['catchup_days'] == 3
+
+
+def test_account_fields_written_on_every_refresh(tmp_path):
+    conn = _make_db(tmp_path)
+    ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, _CATEGORIES, _STREAMS, '2026-01-01T00:00:00Z'
+    )
+    row = conn.execute(
+        "SELECT account_expires_at, max_connections, allowed_output_formats "
+        "FROM provider WHERE id = 1"
+    ).fetchone()
+    assert row[0] == '2026-01-08T00:00:00Z'
+    assert row[1] == 1
+    assert json.loads(row[2]) == ['ts', 'm3u8']
+
+
+def test_epg_source_registered_from_xmltv_php(tmp_path):
+    conn = _make_db(tmp_path)
+    ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, _CATEGORIES, _STREAMS, '2026-01-01T00:00:00Z'
+    )
+    row = conn.execute("SELECT url FROM epg_source WHERE provider_id = 1").fetchone()
+    assert row == ('http://xc.example/xmltv.php?username=user&password=pass',)
+
+
+def test_second_refresh_marks_missing_stream_stale(tmp_path):
+    conn = _make_db(tmp_path)
+    ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, _CATEGORIES, _STREAMS, '2026-01-01T00:00:00Z'
+    )
+    streams_without_sky_news = {
+        '5': [_STREAMS['5'][0]],
+        '6': _STREAMS['6'],
+    }
+    ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, _CATEGORIES, streams_without_sky_news, '2026-01-02T00:00:00Z'
+    )
+    channels = _channels_by_key(conn)
+    assert channels['12346']['stale_since'] == '2026-01-02T00:00:00Z'
+    assert channels['12345']['stale_since'] is None
+
+
+def test_config_version_changed_rolls_back(tmp_path):
+    conn = _make_db(tmp_path)
+    conn.execute("UPDATE provider SET config_version = 5 WHERE id = 1")
+    with pytest.raises(ingest.ConfigVersionChanged):
+        ingest.refresh_xtream_provider(
+            conn, 1, _ACCOUNT, _CATEGORIES, _STREAMS, '2026-01-01T00:00:00Z',
+            expected_config_version=4,
+        )
+    assert conn.execute("SELECT COUNT(*) FROM channel WHERE provider_id = 1").fetchone()[0] == 0
