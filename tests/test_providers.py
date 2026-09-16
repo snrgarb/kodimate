@@ -371,3 +371,149 @@ def test_expiry_state_expired_when_in_past():
     now = datetime(2026, 1, 10, tzinfo=timezone.utc)
     state, _ = providers.expiry_state("2026-01-01T00:00:00Z", now)
     assert state == 'expired'
+
+
+# -- new provider fields: round-trip and validation ------------------------
+
+def test_create_m3u_provider_round_trips_new_fields(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_m3u_provider(
+            conn, "One", "http://example.com/one.m3u",
+            epg_override_url="http://example.com/epg.xml",
+            catchup_days_default=3, user_agent="MyAgent/1.0",
+            catchup_correction_hours=-2, number_offset=100,
+        )
+        row = providers.get_provider(conn, pid)
+        assert row['epg_override_url'] == "http://example.com/epg.xml"
+        assert row['catchup_days_default'] == 3
+        assert row['user_agent'] == "MyAgent/1.0"
+        assert row['catchup_correction_hours'] == -2
+        assert row['number_offset'] == 100
+        listed = providers.list_providers(conn)[0]
+        assert listed['epg_override_url'] == "http://example.com/epg.xml"
+    finally:
+        conn.close()
+
+
+def test_create_m3u_provider_stores_empty_optional_text_as_none(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_m3u_provider(
+            conn, "One", "http://example.com/one.m3u",
+            epg_override_url="", user_agent="",
+        )
+        row = providers.get_provider(conn, pid)
+        assert row['epg_override_url'] is None
+        assert row['user_agent'] is None
+    finally:
+        conn.close()
+
+
+def test_create_xtream_provider_round_trips_new_fields(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_xtream_provider(
+            conn, "One", "http://xc.example", "user", "pass",
+            stream_format="ts", catchup_url_form="query",
+        )
+        row = providers.get_provider(conn, pid)
+        assert row['stream_format'] == 'ts'
+        assert row['catchup_url_form'] == 'query'
+    finally:
+        conn.close()
+
+
+def test_update_provider_epg_override_bumps_config_version(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_m3u_provider(conn, "One", "http://example.com/one.m3u")
+        before = providers.get_provider(conn, pid)
+        needs_refresh = providers.update_provider(
+            conn, pid, "One", "http://example.com/one.m3u", True,
+            epg_override_url="http://example.com/epg.xml",
+        )
+        after = providers.get_provider(conn, pid)
+        assert needs_refresh is True
+        assert after['config_version'] == before['config_version'] + 1
+    finally:
+        conn.close()
+
+
+def test_update_provider_offset_and_correction_do_not_bump_version(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_m3u_provider(conn, "One", "http://example.com/one.m3u")
+        before = providers.get_provider(conn, pid)
+        needs_refresh = providers.update_provider(
+            conn, pid, "One", "http://example.com/one.m3u", True,
+            number_offset=5, catchup_correction_hours=3, user_agent="A/1.0",
+        )
+        after = providers.get_provider(conn, pid)
+        assert needs_refresh is False
+        assert after['config_version'] == before['config_version']
+        assert after['number_offset'] == 5
+    finally:
+        conn.close()
+
+
+def test_update_xtream_provider_explicit_stream_format_clears_learned(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_xtream_provider(conn, "One", "http://xc.example", "user", "pass")
+        conn.execute("UPDATE provider SET learned_stream_format = 'ts' WHERE id = ?", (pid,))
+        needs_refresh = providers.update_xtream_provider(
+            conn, pid, "One", "http://xc.example", "user", "pass", True,
+            stream_format='m3u8',
+        )
+        after = providers.get_provider(conn, pid)
+        assert needs_refresh is False
+        assert after['learned_stream_format'] is None
+        assert after['stream_format'] == 'm3u8'
+    finally:
+        conn.close()
+
+
+def test_validate_m3u_rejects_bad_epg_override_url():
+    errors = providers.validate_m3u("Name", "http://x/list.m3u", epg_override_url="not-a-url")
+    assert any(field == 'epg_override_url' for field, _ in errors)
+
+
+def test_validate_accepts_valid_epg_override_url():
+    assert providers.validate_m3u("Name", "http://x/list.m3u", epg_override_url="http://x/epg.xml") == []
+
+
+def test_validate_rejects_negative_catchup_days_default():
+    errors = providers.validate_m3u("Name", "http://x/list.m3u", catchup_days_default=-1)
+    assert any(field == 'catchup_days_default' for field, _ in errors)
+
+
+def test_validate_rejects_negative_number_offset():
+    errors = providers.validate_m3u("Name", "http://x/list.m3u", number_offset=-1)
+    assert any(field == 'number_offset' for field, _ in errors)
+
+
+def test_validate_rejects_out_of_range_catchup_correction():
+    errors = providers.validate_xtream(
+        "Name", "http://xc.example", "user", "pass", catchup_correction_hours=13
+    )
+    assert any(field == 'catchup_correction_hours' for field, _ in errors)
+
+
+def test_validate_reports_correction_before_number_offset_when_both_invalid():
+    # Row order (both kinds) shows Catch-up correction before Number offset,
+    # so "first invalid row" must report correction first.
+    errors = providers.validate_xtream(
+        "Name", "http://xc.example", "user", "pass",
+        number_offset=-1, catchup_correction_hours=13,
+    )
+    assert errors[0][0] == 'catchup_correction_hours'
+
+
+def test_validate_accepts_boundary_catchup_correction():
+    assert providers.validate_xtream(
+        "Name", "http://xc.example", "user", "pass", catchup_correction_hours=-12
+    ) == []
+    assert providers.validate_xtream(
+        "Name", "http://xc.example", "user", "pass", catchup_correction_hours=12
+    ) == []

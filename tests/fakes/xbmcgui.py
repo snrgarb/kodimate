@@ -1,3 +1,5 @@
+ACTION_MOVE_UP = 3
+ACTION_MOVE_DOWN = 4
 ACTION_SELECT_ITEM = 7
 ACTION_PREVIOUS_MENU = 10
 ACTION_NAV_BACK = 92
@@ -154,3 +156,29 @@ class Dialog(object):
     def browse(self, type_, heading, shares, mask='', use_thumbs=False,
                treat_as_folder=False, default=''):
         return ''
+
+    def numeric(self, type_, heading, default=''):
+        return ''
+
+
+class DialogProgress(object):
+    def __init__(self):
+        self._canceled = False
+        self._percent = 0
+        self._heading = ''
+        self._message = ''
+
+    def create(self, heading, message=''):
+        self._heading = heading
+        self._message = message
+
+    def update(self, percent, message=''):
+        self._percent = percent
+        if message:
+            self._message = message
+
+    def iscanceled(self):
+        return self._canceled
+
+    def close(self):
+        pass

@@ -23,7 +23,7 @@
             <onup>200</onup>
             <ondown>200</ondown>
             <onleft>200</onleft>
-            <onright>300</onright>
+            <onright>302</onright>
             <onback>9000</onback>
             <itemlayout height="70" width="1760">
                 <control type="image">
@@ -33,6 +33,7 @@
                     <height>68</height>
                     <texture>white.png</texture>
                     <colordiffuse>ff202020</colordiffuse>
+                    <visible>String.IsEmpty(ListItem.Property(heading))</visible>
                 </control>
                 <control type="label">
                     <posx>20</posx>
@@ -41,6 +42,7 @@
                     <height>68</height>
                     <textcolor>ffcccccc</textcolor>
                     <label>$INFO[ListItem.Label]</label>
+                    <visible>String.IsEmpty(ListItem.Property(heading))</visible>
                 </control>
                 <control type="label">
                     <posx>540</posx>
@@ -49,6 +51,25 @@
                     <height>68</height>
                     <textcolor>ff808080</textcolor>
                     <label>$INFO[ListItem.Label2]</label>
+                    <visible>String.IsEmpty(ListItem.Property(heading))</visible>
+                </control>
+                <control type="label">
+                    <posx>20</posx>
+                    <posy>0</posy>
+                    <width>1720</width>
+                    <height>68</height>
+                    <textcolor>ff707070</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>!String.IsEmpty(ListItem.Property(heading))</visible>
+                </control>
+                <control type="label">
+                    <posx>540</posx>
+                    <posy>44</posy>
+                    <width>1180</width>
+                    <height>24</height>
+                    <textcolor>ffe05050</textcolor>
+                    <label>$INFO[ListItem.Property(hint)]</label>
+                    <visible>String.IsEmpty(ListItem.Property(heading)) + !String.IsEmpty(ListItem.Property(hint))</visible>
                 </control>
             </itemlayout>
             <focusedlayout height="70" width="1760">
@@ -59,7 +80,7 @@
                     <height>68</height>
                     <texture>white.png</texture>
                     <colordiffuse>ff3a6ea5</colordiffuse>
-                    <visible>Control.HasFocus(200)</visible>
+                    <visible>Control.HasFocus(200) + String.IsEmpty(ListItem.Property(heading))</visible>
                 </control>
                 <control type="image">
                     <posx>0</posx>
@@ -68,7 +89,7 @@
                     <height>68</height>
                     <texture>white.png</texture>
                     <colordiffuse>ff2c3e50</colordiffuse>
-                    <visible>!Control.HasFocus(200)</visible>
+                    <visible>!Control.HasFocus(200) + String.IsEmpty(ListItem.Property(heading))</visible>
                 </control>
                 <control type="label">
                     <posx>20</posx>
@@ -77,6 +98,7 @@
                     <height>68</height>
                     <textcolor>ffffffff</textcolor>
                     <label>$INFO[ListItem.Label]</label>
+                    <visible>String.IsEmpty(ListItem.Property(heading))</visible>
                 </control>
                 <control type="label">
                     <posx>540</posx>
@@ -85,11 +107,46 @@
                     <height>68</height>
                     <textcolor>ffe0e0e0</textcolor>
                     <label>$INFO[ListItem.Label2]</label>
+                    <visible>String.IsEmpty(ListItem.Property(heading))</visible>
+                </control>
+                <control type="label">
+                    <posx>20</posx>
+                    <posy>0</posy>
+                    <width>1720</width>
+                    <height>68</height>
+                    <textcolor>ff707070</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>!String.IsEmpty(ListItem.Property(heading))</visible>
+                </control>
+                <control type="label">
+                    <posx>540</posx>
+                    <posy>44</posy>
+                    <width>1180</width>
+                    <height>24</height>
+                    <textcolor>ffe05050</textcolor>
+                    <label>$INFO[ListItem.Property(hint)]</label>
+                    <visible>String.IsEmpty(ListItem.Property(heading)) + !String.IsEmpty(ListItem.Property(hint))</visible>
                 </control>
             </focusedlayout>
         </control>
-        <control type="button" id="300">
+        <control type="button" id="302">
             <posx>80</posx>
+            <posy>940</posy>
+            <width>360</width>
+            <height>60</height>
+            <label>$ADDON[script.kodimate 32068]</label>
+            <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
+            <texturenofocus colordiffuse="ff202020">white.png</texturenofocus>
+            <textcolor>ffcccccc</textcolor>
+            <focusedcolor>ffffffff</focusedcolor>
+            <onleft>200</onleft>
+            <onright>300</onright>
+            <onup>200</onup>
+            <ondown>200</ondown>
+            <onback>9000</onback>
+        </control>
+        <control type="button" id="300">
+            <posx>460</posx>
             <posy>940</posy>
             <width>360</width>
             <height>60</height>
@@ -98,14 +155,14 @@
             <texturenofocus colordiffuse="ff202020">white.png</texturenofocus>
             <textcolor>ffcccccc</textcolor>
             <focusedcolor>ffffffff</focusedcolor>
-            <onleft>200</onleft>
+            <onleft>302</onleft>
             <onright>301</onright>
             <onup>200</onup>
             <ondown>200</ondown>
             <onback>9000</onback>
         </control>
         <control type="button" id="301">
-            <posx>460</posx>
+            <posx>840</posx>
             <posy>940</posy>
             <width>360</width>
             <height>60</height>

@@ -11,6 +11,8 @@ dropped, since a future ticket (stream playback) may need them.
 """
 import re
 
+from . import fetch
+
 _ATTR_RE = re.compile(r'([A-Za-z0-9_-]+)=("([^"]*)"|(\S*))')
 
 _CANONICAL_HEADERS = {
@@ -103,7 +105,7 @@ def parse(text):
         elif stripped.startswith('#EXTINF'):
             has_extinf = True
     if not has_extm3u and not has_extinf:
-        raise M3UError("Not an M3U playlist")
+        raise M3UError(fetch.ERROR_NOT_M3U)
 
     header_attrs = {}
     entries = []

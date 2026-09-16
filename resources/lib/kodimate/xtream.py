@@ -35,7 +35,7 @@ def _fetch_json(url, user_agent, fetcher):
     try:
         return json.loads(text)
     except ValueError:
-        raise fetch.FetchError("Not an Xtream server")
+        raise fetch.FetchError(fetch.ERROR_NOT_XTREAM)
 
 
 def _exp_date_iso(exp_date):
@@ -50,10 +50,10 @@ def fetch_account(host, username, password, user_agent, fetcher):
     data = _fetch_json(_player_api_url(host, username, password), user_agent, fetcher)
     user_info = data.get('user_info') if isinstance(data, dict) else None
     if not isinstance(user_info, dict):
-        raise fetch.FetchError("Not an Xtream server")
+        raise fetch.FetchError(fetch.ERROR_NOT_XTREAM)
 
     if not m3u._to_int(user_info.get('auth')) or user_info.get('status') in _BANNED_STATUSES:
-        raise fetch.FetchError("Login rejected")
+        raise fetch.FetchError(fetch.ERROR_LOGIN_REJECTED)
 
     allowed_formats = user_info.get('allowed_output_formats')
     if not isinstance(allowed_formats, list):
@@ -63,12 +63,14 @@ def fetch_account(host, username, password, user_agent, fetcher):
         'account_expires_at': _exp_date_iso(user_info.get('exp_date')),
         'max_connections': m3u._to_int(user_info.get('max_connections')),
         'allowed_output_formats': allowed_formats,
+        'status': user_info.get('status'),
+        'active_connections': m3u._to_int(user_info.get('active_cons')),
     }
 
 
 def _require_list_of_dicts(data):
     if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
-        raise fetch.FetchError("Not an Xtream server")
+        raise fetch.FetchError(fetch.ERROR_NOT_XTREAM)
     return data
 
 

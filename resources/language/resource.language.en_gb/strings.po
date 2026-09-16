@@ -235,3 +235,95 @@ msgstr ""
 msgctxt "#32054"
 msgid "Off"
 msgstr ""
+
+msgctxt "#32055"
+msgid "EPG URL override must be a URL"
+msgstr ""
+
+msgctxt "#32056"
+msgid "Catch-up days must be a whole number ≥ 0"
+msgstr ""
+
+msgctxt "#32057"
+msgid "Number offset must be a whole number ≥ 0"
+msgstr ""
+
+msgctxt "#32058"
+msgid "Catch-up correction must be between -12 and +12"
+msgstr ""
+
+msgctxt "#32059"
+msgid "EPG URL override"
+msgstr ""
+
+msgctxt "#32060"
+msgid "Catch-up days default"
+msgstr ""
+
+msgctxt "#32061"
+msgid "Advanced"
+msgstr ""
+
+msgctxt "#32062"
+msgid "User-Agent"
+msgstr ""
+
+msgctxt "#32063"
+msgid "Catch-up correction"
+msgstr ""
+
+msgctxt "#32064"
+msgid "Number offset"
+msgstr ""
+
+msgctxt "#32065"
+msgid "Live Form"
+msgstr ""
+
+msgctxt "#32066"
+msgid "Catch-up URL form"
+msgstr ""
+
+msgctxt "#32067"
+msgid "Auto"
+msgstr ""
+
+msgctxt "#32068"
+msgid "Test connection"
+msgstr ""
+
+msgctxt "#32069"
+msgid "Status"
+msgstr ""
+
+msgctxt "#32070"
+msgid "Expires"
+msgstr ""
+
+msgctxt "#32071"
+msgid "Connections"
+msgstr ""
+
+msgctxt "#32072"
+msgid "Allowed formats"
+msgstr ""
+
+msgctxt "#32073"
+msgid "Live categories"
+msgstr ""
+
+msgctxt "#32074"
+msgid "Channels"
+msgstr ""
+
+msgctxt "#32075"
+msgid "EPG declared"
+msgstr ""
+
+msgctxt "#32076"
+msgid "Yes"
+msgstr ""
+
+msgctxt "#32077"
+msgid "No"
+msgstr ""

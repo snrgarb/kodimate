@@ -21,13 +21,25 @@ MAX_PLAYLIST_BYTES = 32 * 1024 * 1024
 DEFAULT_USER_AGENT = 'Kodimate/0.0.1'
 
 
+ERROR_UNREACHABLE = "Unreachable"
+ERROR_LOGIN_REJECTED = "Login rejected"
+ERROR_NOT_XTREAM = "Not an Xtream server"
+ERROR_NOT_M3U = "Not an M3U playlist"
+ERROR_TIMED_OUT = "Timed out"
+ERROR_FILE_NOT_FOUND = "File not found"
+
+
+def http_error(code):
+    return "HTTP {0}".format(code)
+
+
 class FetchError(Exception):
     pass
 
 
 def _read_local(path):
     if not os.path.isfile(path):
-        raise FetchError("File not found")
+        raise FetchError(ERROR_FILE_NOT_FOUND)
     with open(path, 'rb') as f:
         raw = f.read(MAX_PLAYLIST_BYTES + 1)
     if len(raw) > MAX_PLAYLIST_BYTES:
@@ -47,13 +59,13 @@ def fetch_playlist(source, user_agent=None, timeout=20):
     try:
         response = urlopen(request, timeout=timeout)
     except HTTPError as exc:
-        raise FetchError("HTTP {0}".format(exc.code))
+        raise FetchError(http_error(exc.code))
     except URLError as exc:
         if isinstance(getattr(exc, 'reason', None), Exception) and 'timed out' in str(exc.reason).lower():
-            raise FetchError("Timed out")
-        raise FetchError("Unreachable")
+            raise FetchError(ERROR_TIMED_OUT)
+        raise FetchError(ERROR_UNREACHABLE)
     except Exception:
-        raise FetchError("Unreachable")
+        raise FetchError(ERROR_UNREACHABLE)
 
     try:
         raw = response.read(MAX_PLAYLIST_BYTES + 1)
