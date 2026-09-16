@@ -90,10 +90,15 @@ def test_cell_layout_fills_gap_after_last_programme():
     assert cells[1]['end'] == datetime(2026, 1, 1, 15, 0)
 
 
-def test_cell_layout_ignores_overlapping_programme_contained_in_another():
+def test_cell_layout_later_starting_programme_truncates_earlier_overlap():
     # Bad EPG data: B (12:20-12:40) is fully contained inside A
-    # (12:00-13:40). No filler should be inserted between A and C just
-    # because B's end is earlier than A's.
+    # (12:00-13:40). Kodi's own EPG rule is that a later-starting
+    # programme takes precedence over an earlier one it overlaps, so B
+    # truncates A's end to 12:20, and since nothing else covers
+    # 12:40-13:40 that gap becomes a filler before C.
+    # (This supersedes the old expectation that A, B, C all render as
+    # non-overlapping non-filler cells with no gap -- that produced hidden,
+    # overlapping cells that made the cursor highlight invisible.)
     viewport_start = datetime(2026, 1, 1, 12, 0)
     programmes = [
         _p((12, 0), (13, 40), 'A'),
@@ -101,8 +106,60 @@ def test_cell_layout_ignores_overlapping_programme_contained_in_another():
         _p((13, 40), (15, 0), 'C'),
     ]
     cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
-    assert [c['title'] for c in cells] == ['A', 'B', 'C']
-    assert all(not c['filler'] for c in cells)
+    assert [(c['title'], c['filler']) for c in cells] == [
+        ('A', False), ('B', False), ('No information', True), ('C', False),
+    ]
+    assert cells[0]['end'] == datetime(2026, 1, 1, 12, 20)
+
+
+def test_cell_layout_umbrella_programme_truncated_by_replays():
+    # A "Live: ... Race Day" umbrella (09:30-16:00) with 30-minute replay
+    # slots inside it. The replays take precedence; the umbrella never
+    # resumes in a gap between replays -- that gap is a filler instead.
+    # (3-hour viewport, per VISIBLE_HOURS, starting before the first
+    # replay so the umbrella is visible ahead of it.)
+    viewport_start = datetime(2026, 1, 1, 10, 30)
+    programmes = [
+        _p((9, 30), (16, 0), 'Live: Sky Thoroughbred Central Race Day'),
+        _p((11, 0), (11, 30), 'Racing Replay: 1'),
+        _p((11, 30), (12, 0), 'Racing Replay: 2'),
+        _p((12, 0), (12, 30), 'Racing Replay: 3'),
+        _p((13, 0), (13, 30), 'Racing Replay: 4'),
+    ]
+    cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
+    assert cells[0]['title'] == 'Live: Sky Thoroughbred Central Race Day'
+    assert cells[0]['end'] == datetime(2026, 1, 1, 11, 0)
+    assert [c['title'] for c in cells[1:4]] == [
+        'Racing Replay: 1', 'Racing Replay: 2', 'Racing Replay: 3',
+    ]
+    # Gap between Replay 3 (ends 12:30) and Replay 4 (starts 13:00) is a
+    # filler, not the umbrella resuming.
+    gap = cells[4]
+    assert gap['filler'] is True
+    assert gap['start'] == datetime(2026, 1, 1, 12, 30)
+    assert gap['end'] == datetime(2026, 1, 1, 13, 0)
+    assert cells[5]['title'] == 'Racing Replay: 4'
+    assert len(cells) == 6
+
+
+def test_cell_layout_simple_overlap_later_start_wins():
+    viewport_start = datetime(2026, 1, 1, 10, 0)
+    programmes = [_p((10, 0), (11, 0), 'A'), _p((10, 30), (11, 30), 'B')]
+    cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
+    assert [(c['title'], c['start'], c['end']) for c in cells[:2]] == [
+        ('A', datetime(2026, 1, 1, 10, 0), datetime(2026, 1, 1, 10, 30)),
+        ('B', datetime(2026, 1, 1, 10, 30), datetime(2026, 1, 1, 11, 30)),
+    ]
+
+
+def test_cell_layout_identical_start_keeps_later_listed_only():
+    viewport_start = datetime(2026, 1, 1, 10, 0)
+    programmes = [
+        _p((10, 0), (11, 0), 'Old listing'),
+        _p((10, 0), (11, 0), 'Corrected listing'),
+    ]
+    cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
+    assert [c['title'] for c in cells if not c['filler']] == ['Corrected listing']
 
 
 def test_utc_to_local_applies_offset_regardless_of_machine_zone():

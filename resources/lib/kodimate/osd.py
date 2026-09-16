@@ -40,17 +40,18 @@ def resolve_number(rows, number):
 
 def now_next(programmes, now):
     """(now_prog, next_prog) from a sorted list of programme dicts with
-    datetime 'start'/'end'/'title'; either may be None."""
+    datetime 'start'/'end'/'title'; either may be None. When several
+    programmes cover `now` (overlapping EPG data), the later-starting one
+    takes precedence, matching Kodi's own EPG behaviour."""
     now_prog = None
     for programme in programmes:
         if programme['start'] <= now < programme['end']:
             now_prog = programme
-            break
 
     next_prog = None
     if now_prog is not None:
         for programme in programmes:
-            if programme['start'] >= now_prog['end']:
+            if programme['start'] > now_prog['start'] and programme['start'] >= now:
                 next_prog = programme
                 break
     else:

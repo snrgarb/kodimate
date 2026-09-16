@@ -295,6 +295,23 @@ def test_now_titles_returns_title_for_channel_airing_now(tmp_path):
         conn.close()
 
 
+def test_now_titles_prefers_later_starting_overlap(tmp_path):
+    # Umbrella 09:30-16:00 overlapping a replay 11:00-11:30; the
+    # later-starting replay should win for a channel airing at 11:15.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        conn.execute("UPDATE channel SET epg_channel_id = 'x1' WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        _programme(conn, eid, "x1", "2026-01-01T09:30:00Z", "2026-01-01T16:00:00Z", "Live: Race Day")
+        _programme(conn, eid, "x1", "2026-01-01T11:00:00Z", "2026-01-01T11:30:00Z", "Racing Replay: 1")
+        result = channels.now_titles(conn, [cid], "2026-01-01T11:15:00Z")
+        assert result[cid] == "Racing Replay: 1"
+    finally:
+        conn.close()
+
+
 def test_now_titles_omits_channel_without_current_programme(tmp_path):
     conn = _conn(tmp_path)
     try:

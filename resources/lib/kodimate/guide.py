@@ -57,7 +57,11 @@ def cell_layout(programmes, viewport_start, grid_width, no_info_title):
     "No information" filler cell (start/end clipped to the viewport,
     'filler': True) so the row has contiguous cells to navigate over.
     Real cells carry the programme's actual (unclipped) start/end and
-    'filler': False."""
+    'filler': False. Programmes are processed in start order; where two
+    overlap, the later-starting one takes precedence (matching Kodi's own
+    EPG behaviour) and the earlier real cell is truncated -- or dropped
+    entirely if that would leave it empty or sub-pixel -- to this
+    programme's start."""
     end = viewport_end(viewport_start)
     px_per_min = grid_width / float(VISIBLE_HOURS * 60)
 
@@ -75,11 +79,21 @@ def cell_layout(programmes, viewport_start, grid_width, no_info_title):
 
     cells = []
     cursor = viewport_start
-    for programme in programmes:
+    prev_seg_start = None
+    for programme in sorted(programmes, key=lambda p: p['start']):
         if programme['end'] <= viewport_start or programme['start'] >= end:
             continue
         seg_start = max(programme['start'], viewport_start)
         seg_end = min(programme['end'], end)
+        if seg_start < cursor and cells and not cells[-1]['filler']:
+            prev = cells[-1]
+            raw_width = (seg_start - prev_seg_start).total_seconds() / 60.0 * px_per_min
+            if seg_start <= prev_seg_start or raw_width < 1:
+                cells.pop()
+            else:
+                prev['end'] = seg_start
+                prev['x'], prev['width'] = _rect(prev_seg_start, seg_start)
+            cursor = seg_start
         if seg_start > cursor:
             cells.append(_filler(cursor, seg_start))
         x, width = _rect(seg_start, seg_end)
@@ -92,7 +106,8 @@ def cell_layout(programmes, viewport_start, grid_width, no_info_title):
             'width': width,
             'filler': False,
         })
-        cursor = max(cursor, seg_end)
+        cursor = seg_end
+        prev_seg_start = seg_start
     if cursor < end:
         cells.append(_filler(cursor, end))
     return cells

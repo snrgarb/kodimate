@@ -68,6 +68,22 @@ def test_now_next_empty_programmes():
     assert next_prog is None
 
 
+def test_now_next_later_starting_umbrella_overlap_takes_precedence():
+    # Umbrella "Live: ... Race Day" 09:30-16:00 with a 30-minute replay
+    # 11:00-11:30 inside it, plus the next replay 11:30-12:00. At 11:15,
+    # the later-starting replay should be "now", and "next" should be the
+    # following replay -- not the umbrella (which also covers 11:15 and
+    # ends much later).
+    programmes = [
+        _prog(datetime(2026, 1, 1, 9, 30), datetime(2026, 1, 1, 16, 0), 'Live: Race Day'),
+        _prog(datetime(2026, 1, 1, 11, 0), datetime(2026, 1, 1, 11, 30), 'Racing Replay: 1'),
+        _prog(datetime(2026, 1, 1, 11, 30), datetime(2026, 1, 1, 12, 0), 'Racing Replay: 2'),
+    ]
+    now_prog, next_prog = osd.now_next(programmes, datetime(2026, 1, 1, 11, 15))
+    assert now_prog['title'] == 'Racing Replay: 1'
+    assert next_prog['title'] == 'Racing Replay: 2'
+
+
 def test_progress_fraction_clamped():
     prog = _prog(datetime(2026, 1, 1, 12, 0), datetime(2026, 1, 1, 13, 0), 'A')
     assert osd.progress_fraction(prog, datetime(2026, 1, 1, 12, 15)) == 0.25

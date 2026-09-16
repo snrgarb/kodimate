@@ -99,8 +99,11 @@ def list_programmes(conn, channel_ids, window_start, window_end):
 
 
 def now_titles(conn, channel_ids, now_iso):
-    """{channel_id: title} for channels with a programme airing at now_iso."""
+    """{channel_id: title} for channels with a programme airing at now_iso.
+    Where several rows cover now_iso (overlapping EPG data), the
+    later-starting one takes precedence, matching Kodi's own EPG
+    behaviour; rows are sorted by start, so that is the last row."""
     programmes = list_programmes(conn, channel_ids, now_iso, now_iso)
     return {
-        cid: rows[0]['title'] for cid, rows in programmes.items() if rows
+        cid: rows[-1]['title'] for cid, rows in programmes.items() if rows
     }
