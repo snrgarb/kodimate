@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 
@@ -27,11 +28,17 @@ class _WindowProps(object):
         self._window.setProperty(_PROP_PREFIX + key, value)
 
 
+def _notify_builtin(generation, provider_ids):
+    payload = json.dumps({
+        "generation": generation,
+        "providers": [int(i) for i in provider_ids],
+    })
+    escaped = payload.replace('\\', '\\\\').replace('"', '\\"')
+    return 'NotifyAll(script.kodimate,refreshed,"{0}")'.format(escaped)
+
+
 def _notify(generation, provider_ids):
-    payload = '{{"generation": {0}, "providers": [{1}]}}'.format(
-        generation, ','.join(str(i) for i in provider_ids)
-    )
-    xbmc.executebuiltin("NotifyAll(script.kodimate,refreshed,{0})".format(payload))
+    xbmc.executebuiltin(_notify_builtin(generation, provider_ids))
 
 
 def _read_settings(addon):

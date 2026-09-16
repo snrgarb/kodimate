@@ -11,7 +11,7 @@ How the service and script coordinate Refresh over `Window(10000)` properties, a
 
 ## Push wake-up
 
-The service also sends `NotifyAll('script.kodimate', 'refreshed', {"generation": n, "providers": [...]})`; the script's Monitor overrides `onNotification`. The generation property is the durable state; NotifyAll is only the wake-up.
+The service also sends `NotifyAll('script.kodimate', 'refreshed', {"generation": n, "providers": [...]})`; the script's Monitor overrides `onNotification`. The generation property is the durable state; NotifyAll is only the wake-up. Because Kodi's builtin parser splits arguments on commas, the data argument is sent as a double-quoted, backslash-escaped JSON string (e.g. `"{\"generation\": 1, \"providers\": [3]}"`).
 
 ## Live re-render rule
 
