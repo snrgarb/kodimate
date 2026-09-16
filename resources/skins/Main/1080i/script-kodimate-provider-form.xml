@@ -84,9 +84,10 @@
             <width>360</width>
             <height>60</height>
             <label>$ADDON[script.kodimate 32015]</label>
-            <texturefocus>white.png</texturefocus>
-            <texturenofocus>white.png</texturenofocus>
-            <colordiffuse>ff3a6ea5</colordiffuse>
+            <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
+            <texturenofocus colordiffuse="ff202020">white.png</texturenofocus>
+            <textcolor>ffcccccc</textcolor>
+            <focusedcolor>ffffffff</focusedcolor>
             <onleft>200</onleft>
             <onright>301</onright>
             <onup>200</onup>
@@ -99,9 +100,10 @@
             <width>360</width>
             <height>60</height>
             <label>$ADDON[script.kodimate 32016]</label>
-            <texturefocus>white.png</texturefocus>
-            <texturenofocus>white.png</texturenofocus>
-            <colordiffuse>ff3a6ea5</colordiffuse>
+            <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
+            <texturenofocus colordiffuse="ff202020">white.png</texturenofocus>
+            <textcolor>ffcccccc</textcolor>
+            <focusedcolor>ffffffff</focusedcolor>
             <onleft>300</onleft>
             <onright>200</onright>
             <onup>200</onup>
