@@ -163,3 +163,32 @@ def test_config_version_changed_rolls_back(tmp_path):
             expected_config_version=4,
         )
     assert conn.execute("SELECT COUNT(*) FROM channel WHERE provider_id = 1").fetchone()[0] == 0
+
+
+def test_large_stream_count_does_not_exceed_sqlite_variable_limit(tmp_path):
+    conn = _make_db(tmp_path)
+    categories = [{'category_id': '1', 'category_name': 'All', 'parent_id': 0}]
+    streams = [
+        {
+            'num': i, 'name': 'Channel %d' % i, 'stream_id': i, 'category_id': '1',
+            'stream_icon': '', 'epg_channel_id': None, 'tv_archive': 0, 'tv_archive_duration': 0,
+        }
+        for i in range(40000)
+    ]
+    ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, categories, streams, '2026-01-01T00:00:00Z'
+    )
+    assert conn.execute(
+        "SELECT COUNT(*) FROM channel WHERE provider_id = 1"
+    ).fetchone()[0] == 40000
+
+    half_streams = streams[:20000]
+    ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, categories, half_streams, '2026-01-02T00:00:00Z'
+    )
+    assert conn.execute(
+        "SELECT COUNT(*) FROM channel WHERE provider_id = 1 AND stale_since IS NOT NULL"
+    ).fetchone()[0] == 20000
+    assert conn.execute(
+        "SELECT COUNT(*) FROM channel WHERE provider_id = 1 AND stale_since IS NULL"
+    ).fetchone()[0] == 20000

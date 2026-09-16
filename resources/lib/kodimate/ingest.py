@@ -142,24 +142,16 @@ def _ensure_groups(conn, provider_id, group_names_in_order):
     return group_ids
 
 
-def _mark_stale_purge_and_clean_groups(conn, provider_id, present_keys, now_iso, now_dt):
+def _mark_stale_purge_and_clean_groups(conn, provider_id, now_iso, now_dt):
     """Shared refresh tail: mark absent channels Stale, purge old-Stale rows,
     and drop groups left with no channels. Used by both M3U and Xtream
     ingest (docs/design/schema.md "Stale"; CONTEXT.md "Group")."""
-    if present_keys:
-        placeholders = ','.join('?' * len(present_keys))
-        conn.execute(
-            "UPDATE channel SET stale_since = ? "
-            "WHERE provider_id = ? AND stale_since IS NULL "
-            "AND channel_key NOT IN ({0})".format(placeholders),
-            [now_iso, provider_id] + present_keys,
-        )
-    else:
-        conn.execute(
-            "UPDATE channel SET stale_since = ? "
-            "WHERE provider_id = ? AND stale_since IS NULL",
-            (now_iso, provider_id),
-        )
+    conn.execute(
+        "UPDATE channel SET stale_since = ? "
+        "WHERE provider_id = ? AND stale_since IS NULL "
+        "AND (last_seen_at IS NULL OR last_seen_at < ?)",
+        (now_iso, provider_id, now_iso),
+    )
 
     purge_cutoff = _to_iso(now_dt - timedelta(days=_STALE_PURGE_DAYS))
     conn.execute(
@@ -199,7 +191,6 @@ def refresh_m3u_provider(conn, provider_id, playlist_text, now, expected_config_
 
         group_ids = _ensure_groups(conn, provider_id, group_names_in_order)
 
-        present_keys = []
         for position, (entry, key) in enumerate(zip(playlist.entries, keys), start=1):
             group_name = entry.get('group_title') or UNCATEGORISED
             headers = entry.get('headers') or {}
@@ -239,9 +230,8 @@ def refresh_m3u_provider(conn, provider_id, playlist_text, now, expected_config_
                     headers_json, now_iso,
                 ),
             )
-            present_keys.append(key)
 
-        _mark_stale_purge_and_clean_groups(conn, provider_id, present_keys, now_iso, now_dt)
+        _mark_stale_purge_and_clean_groups(conn, provider_id, now_iso, now_dt)
 
         if epg_url:
             conn.execute(
@@ -316,7 +306,6 @@ def refresh_xtream_provider(conn, provider_id, account, categories, streams, now
             group_names_in_order.append(UNCATEGORISED)
         group_ids = _ensure_groups(conn, provider_id, group_names_in_order)
 
-        present_keys = []
         position = 0
         for stream in streams:
             cid = _matched_cid(stream)
@@ -357,9 +346,8 @@ def refresh_xtream_provider(conn, provider_id, account, categories, streams, now
                     stream.get('epg_channel_id') or None, catchup_days, now_iso,
                 ),
             )
-            present_keys.append(stream_id)
 
-        _mark_stale_purge_and_clean_groups(conn, provider_id, present_keys, now_iso, now_dt)
+        _mark_stale_purge_and_clean_groups(conn, provider_id, now_iso, now_dt)
 
         conn.execute(
             "UPDATE provider SET account_expires_at = ?, max_connections = ?, "
