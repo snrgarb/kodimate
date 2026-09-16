@@ -1,0 +1,10 @@
+#EXTM3U url-tvg="http://epg.example/guide.xml"
+#EXTINF:-1 tvg-id="one.us" tvg-logo="http://logo/1.png" tvg-chno="101" group-title="News;Extra" catchup="append" catchup-source="?utc={utc}" catchup-days="7" catchup-correction="1.5",Channel One
+#EXTVLCOPT:http-user-agent=MyUA
+http://example.com/one?token=abc
+#EXTINF:-1 tvg-id="dup" group-title="Sports",Channel Two
+http://example.com/two?token=abc
+#EXTINF:-1 tvg-id="dup" group-title="Sports",Channel Three
+http://example.com/three?token=abc
+#EXTINF:-1,Channel Four
+http://example.com/four?token=xyz

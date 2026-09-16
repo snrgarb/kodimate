@@ -1,0 +1,5 @@
+#EXTM3U catchup="shift" catchup-source="?utc={utc}" catchup-days="3" catchup-correction="2"
+#EXTINF:-1 tvg-id="inherits",Inherits Header Default
+http://example.com/inherits
+#EXTINF:-1 tvg-id="overrides" catchup="default" catchup-days="7",Overrides Header Default
+http://example.com/overrides

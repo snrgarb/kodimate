@@ -8,8 +8,9 @@ import xbmc
 import xbmcaddon
 import xbmcvfs
 
-from kodimate import db, log
+from kodimate import db, log, providers
 from kodimate.windows.main import MainWindow
+from kodimate.windows.providers import ProvidersWindow
 
 
 def run():
@@ -18,7 +19,11 @@ def run():
     profile = xbmcvfs.translatePath(addon.getAddonInfo('profile'))
     conn = db.open_db(os.path.join(profile, 'kodimate.db'))
     try:
-        MainWindow.open()
+        arg = sys.argv[1] if len(sys.argv) > 1 else None
+        if arg == 'providers' or providers.count_enabled(conn) == 0:
+            ProvidersWindow.open(conn=conn)
+        else:
+            MainWindow.open(conn=conn)
     finally:
         conn.close()
 

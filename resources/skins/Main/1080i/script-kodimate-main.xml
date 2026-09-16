@@ -16,5 +16,17 @@
             <font>font13</font>
             <label>$ADDON[script.kodimate 32000]</label>
         </control>
+        <control type="button" id="200">
+            <posx>80</posx>
+            <posy>140</posy>
+            <width>360</width>
+            <height>60</height>
+            <font>font13</font>
+            <label>$ADDON[script.kodimate 32007]</label>
+            <texturefocus>white.png</texturefocus>
+            <texturenofocus>white.png</texturenofocus>
+            <colordiffuse>ff3a6ea5</colordiffuse>
+            <onclick>RunScript(script.kodimate,providers)</onclick>
+        </control>
     </controls>
 </window>

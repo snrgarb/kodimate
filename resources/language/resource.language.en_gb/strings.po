@@ -16,3 +16,139 @@ msgstr ""
 msgctxt "#32002"
 msgid "Debug logging"
 msgstr ""
+
+msgctxt "#32003"
+msgid "Refresh"
+msgstr ""
+
+msgctxt "#32004"
+msgid "Refresh interval (hours)"
+msgstr ""
+
+msgctxt "#32005"
+msgid "Refresh on startup"
+msgstr ""
+
+msgctxt "#32006"
+msgid "Manage providers…"
+msgstr ""
+
+msgctxt "#32007"
+msgid "Providers"
+msgstr ""
+
+msgctxt "#32008"
+msgid "Add provider"
+msgstr ""
+
+msgctxt "#32009"
+msgid "Refresh all"
+msgstr ""
+
+msgctxt "#32010"
+msgid "Enter a playlist URL or file path"
+msgstr ""
+
+msgctxt "#32011"
+msgid "Playlist must be a URL or an existing file"
+msgstr ""
+
+msgctxt "#32012"
+msgid "Name"
+msgstr ""
+
+msgctxt "#32013"
+msgid "Playlist"
+msgstr ""
+
+msgctxt "#32014"
+msgid "Enabled"
+msgstr ""
+
+msgctxt "#32015"
+msgid "Save"
+msgstr ""
+
+msgctxt "#32016"
+msgid "Cancel"
+msgstr ""
+
+msgctxt "#32017"
+msgid "M3U provider"
+msgstr ""
+
+msgctxt "#32018"
+msgid "Enter URL"
+msgstr ""
+
+msgctxt "#32019"
+msgid "Browse for file"
+msgstr ""
+
+msgctxt "#32020"
+msgid "Refreshing…"
+msgstr ""
+
+msgctxt "#32021"
+msgid "Never refreshed"
+msgstr ""
+
+msgctxt "#32022"
+msgid "%d channels · %s"
+msgstr ""
+
+msgctxt "#32023"
+msgid "%d min ago"
+msgstr ""
+
+msgctxt "#32024"
+msgid "%d h ago"
+msgstr ""
+
+msgctxt "#32025"
+msgid "%d days ago"
+msgstr ""
+
+msgctxt "#32026"
+msgid "Just now"
+msgstr ""
+
+msgctxt "#32027"
+msgid "Kodimate service not running"
+msgstr ""
+
+msgctxt "#32028"
+msgid "Select provider type"
+msgstr ""
+
+msgctxt "#32029"
+msgid "M3U playlist"
+msgstr ""
+
+msgctxt "#32030"
+msgid "Xtream Codes"
+msgstr ""
+
+msgctxt "#32031"
+msgid "Not available yet"
+msgstr ""
+
+msgctxt "#32032"
+msgid "No providers yet. Add one to get started."
+msgstr ""
+
+msgctxt "#32033"
+msgid "Refresh now"
+msgstr ""
+
+msgctxt "#32034"
+msgid "Enable"
+msgstr ""
+
+msgctxt "#32035"
+msgid "Disable"
+msgstr ""
+
+msgctxt "#32036"
+msgid "Discard changes?"
+msgstr ""

@@ -1,0 +1,5 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="same" group-title="A",Chan A
+http://example.com/collide?x=1
+#EXTINF:-1 tvg-id="same" group-title="A",Chan B
+http://example.com/collide?x=2

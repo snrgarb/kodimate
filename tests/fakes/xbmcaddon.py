@@ -18,5 +18,11 @@ class Addon(object):
     def setSettingBool(self, key, value):
         _settings[key] = value
 
+    def getSettingInt(self, key):
+        return int(_settings.get(key, 0))
+
+    def setSettingInt(self, key, value):
+        _settings[key] = value
+
     def getLocalizedString(self, string_id):
         return "String {0}".format(string_id)

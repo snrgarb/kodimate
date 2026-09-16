@@ -112,7 +112,10 @@ _SCHEMA_STATEMENTS = [
 
 
 def _connect(path):
-    conn = sqlite3.connect(path, isolation_level=None)
+    # check_same_thread=False: the script's ProvidersWindow polls IPC
+    # properties from a background thread and re-queries via the script's
+    # single connection (ADR 0003); writes stay on the main thread.
+    conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=5000")
@@ -124,6 +127,25 @@ def _current_schema_version(conn):
         "SELECT value FROM meta WHERE key = 'schema_version'"
     ).fetchone()
     return int(row[0]) if row else 0
+
+
+def listable_channel_count(conn, provider_id):
+    """Count of provider_id's listable channels (see docs/design/schema.md
+    "Visibility"): not Stale and not Hidden via channel_override."""
+    row = conn.execute(
+        """
+        SELECT COUNT(*) FROM channel c
+        WHERE c.provider_id = ? AND c.stale_since IS NULL
+        AND NOT EXISTS (
+            SELECT 1 FROM channel_override o
+            WHERE o.provider_id = c.provider_id
+            AND o.channel_key = c.channel_key
+            AND o.hidden = 1
+        )
+        """,
+        (provider_id,),
+    ).fetchone()
+    return row[0]
 
 
 def migrate(conn):
