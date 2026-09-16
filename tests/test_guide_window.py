@@ -563,7 +563,7 @@ def test_right_from_programme_into_gap_then_into_next_programme(tmp_path):
 def test_left_at_retention_floor_off_screen_target_is_a_no_op(tmp_path):
     # A clamped scroll that lands exactly back on the current viewport_start
     # (Left at the retention floor) must not relayout: nothing moved, so
-    # programmes should not be reloaded and no animation should fire.
+    # programmes should not be reloaded and the grid should not rebuild.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -582,16 +582,17 @@ def test_left_at_retention_floor_off_screen_target_is_a_no_op(tmp_path):
         window._load_programmes = lambda: None  # keep the seeded data
         window._relayout()
 
-        calls = []
-        window._load_programmes = lambda: calls.append(1)
-        anim_parity_before = window._anim_parity
+        load_calls = []
+        window._load_programmes = lambda: load_calls.append(1)
+        relayout_calls = []
+        window._relayout = lambda: relayout_calls.append(1)
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
 
         assert window._viewport_start == floor
         assert window._cursor_time == floor
-        assert calls == []
-        assert window._anim_parity == anim_parity_before
+        assert load_calls == []
+        assert relayout_calls == []
     finally:
         conn.close()
 
@@ -649,9 +650,9 @@ def test_pool_overflow_logs_warning(tmp_path):
 
 def test_horizontal_viewport_jump_is_instant_and_clips_edge_cell(tmp_path):
     # User feedback: horizontal scrolling (Left/Right) must be instant, no
-    # slide or fade animation -- unlike vertical (row) moves, which still
-    # animate. A programme starting before the new viewport must also
-    # clip to the grid's left edge (x=0) rather than spill off-screen.
+    # slide or fade animation. A programme starting before the new
+    # viewport must also clip to the grid's left edge (x=0) rather than
+    # spill off-screen.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -665,7 +666,6 @@ def test_horizontal_viewport_jump_is_instant_and_clips_edge_cell(tmp_path):
                    "Current")
         window._load_programmes()
         window._relayout()
-        anim_before = window.getProperty('guide_anim')
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
 
@@ -676,7 +676,31 @@ def test_horizontal_viewport_jump_is_instant_and_clips_edge_cell(tmp_path):
         edge_image, edge_label, _edge_desc = window._pool[0][0]
         assert edge_image._animations == []
         assert edge_label._animations == []
-        assert window.getProperty('guide_anim') == anim_before
+    finally:
+        conn.close()
+
+
+def test_vertical_row_scroll_is_instant(tmp_path):
+    # User feedback: the vertical row-scroll slide/fade "felt like rubber
+    # banding" -- Up/Down that changes the list's top row must now be
+    # instant too, attaching no animation, matching horizontal scrolling.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        for i in range(guide.VISIBLE_ROWS + 1):
+            _channel(conn, pid, "c%d" % i, "Chan %d" % i, i)
+        window = _window(conn)
+        list_control = window.getControl(CHANNEL_LIST_ID)
+        list_control.selectItem(guide.VISIBLE_ROWS)
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
+
+        assert window._top_row == 1
+        for row_pool in window._pool:
+            for image, label, desc_label in row_pool:
+                assert image._animations == []
+                assert label._animations == []
+                assert desc_label._animations == []
     finally:
         conn.close()
 
@@ -700,12 +724,10 @@ def test_in_viewport_cursor_move_does_not_touch_animations(tmp_path):
         image_b, _label_b, _desc_b = window._pool[0][1]
         image_a._animations = ['sentinel']
         image_b._animations = ['sentinel']
-        anim_before = window.getProperty('guide_anim')
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
 
         assert image_a._animations == ['sentinel']
         assert image_b._animations == ['sentinel']
-        assert window.getProperty('guide_anim') == anim_before
     finally:
         conn.close()

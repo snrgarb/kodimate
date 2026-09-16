@@ -23,8 +23,6 @@ _POOL_COLS = 28  # real EPG data can pack ~24 short programmes into a 3h window
 _HEADER_SLOTS = 6  # 3 hours in 30-minute slots
 _SLOT_MINUTES = 30
 
-_ANIM_TIME_MS = 200
-
 _NOW_LINE_RELPATH = 'resources/skins/Main/media/white.png'
 
 _TEXT_COLOR = 'FFCCCCCC'
@@ -68,7 +66,6 @@ class GuideWindow(BaseWindow):
         self._cursor_time = self._viewport_start
         self._row_cells = []
         self._last_selected = 0
-        self._anim_parity = 0
 
         self._populate_channel_list()
         self._build_pool()
@@ -211,15 +208,11 @@ class GuideWindow(BaseWindow):
     def _focused_row_index(self):
         return self.getControl(CHANNEL_LIST_ID).getSelectedPosition() - self._top_row
 
-    def _relayout(self, anim_dy=None):
-        """Hide -> update -> flip -> show: rebuild every visible row's
-        cells from the pool so no frame exposes stale text. When called
-        with a vertical direction (anim_dy not None -- the list's top row
-        changed) the moved cells slide in from that offset, or fade in
-        place when a slide would cross the header or footer; otherwise any
-        leftover animation from a previous move is cleared and nothing new
-        is attached. Horizontal viewport scrolls are always instant (no
-        anim_dx -- there is none)."""
+    def _relayout(self):
+        """Hide -> update -> show: rebuild every visible row's cells from
+        the pool so no frame exposes stale text. Always instant -- no
+        animation is attached (the native channel list at id 500 handles
+        its own scroll)."""
         for row_pool in self._pool:
             for image, label, desc_label in row_pool:
                 image.setVisible(False)
@@ -234,9 +227,6 @@ class GuideWindow(BaseWindow):
         self._update_header()
         self._row_cells = []
         to_show = []
-        animated_specs = []
-        dy_val = anim_dy or 0
-        grid_bottom_y = _HEADER_HEIGHT + (guide.VISIBLE_ROWS - 1) * _ROW_HEIGHT
 
         for row in range(guide.VISIBLE_ROWS):
             channel_index = self._top_row + row
@@ -262,21 +252,8 @@ class GuideWindow(BaseWindow):
                     self._set_cell((image, label, desc_label), cell, y, is_cursor, now)
                     to_show.append((image, label, desc_label))
                     cells.append(dict(cell, pool_index=col))
-
-                    start_y = y + dy_val
-                    if start_y < _HEADER_HEIGHT or start_y > grid_bottom_y:
-                        kind = 'fade'
-                    else:
-                        kind = 'slide'
-                    animated_specs.append((image, kind, dy_val))
-                    animated_specs.append((label, kind, dy_val))
-                    animated_specs.append((desc_label, kind, dy_val))
             self._row_cells.append(cells)
 
-        if anim_dy is not None:
-            self._animate(animated_specs)
-        else:
-            self._clear_animations(animated_specs)
         for image, label, desc_label in to_show:
             image.setVisible(True)
             label.setVisible(True)
@@ -315,34 +292,6 @@ class GuideWindow(BaseWindow):
         desc_label.setWidth(label_width)
         desc_label.setHeight(_ROW_HEIGHT - _TITLE_HEIGHT)
         desc_label.setLabel(_colored(cell['description'], desc_color) if cell['description'] else '')
-
-    def _animate(self, specs):
-        # A window property flipped only when a full relayout happens with
-        # a vertical direction (the list's top row changed) -- never on an
-        # in-viewport cursor move or a (now instant) horizontal viewport
-        # scroll -- so skin animations conditioned on it reliably re-fire
-        # (a static condition="true" only ever fires once).
-        if not specs:
-            self._clear_animations(specs)
-            return
-        self._anim_parity = 1 - self._anim_parity
-        want = self._anim_parity
-        for control, kind, dy in specs:
-            if kind == 'fade':
-                effect = 'effect=fade start=0 end=100 time=%d delay=%d' % (_ANIM_TIME_MS, _ANIM_TIME_MS)
-            else:
-                effect = 'effect=slide start=0,%d end=0,0 time=%d' % (dy, _ANIM_TIME_MS)
-            control.setAnimations([(
-                'conditional',
-                '%s reversible=false condition=String.IsEqual(Window.Property(guide_anim),%d)'
-                % (effect, want),
-            )])
-        self.setProperty('guide_anim', str(want))
-
-    @staticmethod
-    def _clear_animations(specs):
-        for control, _kind, _dy in specs:
-            control.setAnimations([])
 
     # -- cursor --------------------------------------------------------
 
@@ -443,8 +392,7 @@ class GuideWindow(BaseWindow):
         prev_top = self._top_row
         new_top = guide.compute_top_row(self._top_row, selected)
         if new_top != prev_top:
-            dy = _ROW_HEIGHT if new_top > prev_top else -_ROW_HEIGHT
-            self._relayout(anim_dy=dy)
+            self._relayout()
             self._last_selected = selected
             return
 
