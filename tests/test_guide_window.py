@@ -32,11 +32,11 @@ def _epg_source(conn, provider_id):
     ).lastrowid
 
 
-def _programme(conn, epg_source_id, xmltv_channel_id, start, end, title):
+def _programme(conn, epg_source_id, xmltv_channel_id, start, end, title, description=None):
     conn.execute(
-        "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (epg_source_id, xmltv_channel_id, start, end, title),
+        "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title, description) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (epg_source_id, xmltv_channel_id, start, end, title, description),
     )
 
 
@@ -328,10 +328,53 @@ def test_past_cell_is_dimmed_but_cursor_cell_is_not(tmp_path):
         window._cursor_time = now_snapshot
         window._relayout()
 
-        past_image, past_label = window._pool[0][0]
-        current_image, current_label = window._pool[0][1]
+        past_image, past_label, past_desc = window._pool[0][0]
+        current_image, current_label, current_desc = window._pool[0][1]
         assert past_label.getLabel() == '[COLOR FF808080]Past Show[/COLOR]'
         assert current_label.getLabel() == '[COLOR FFFFFFFF]Current Show[/COLOR]'
+        assert past_desc.getLabel() == ''
+        assert current_desc.getLabel() == ''
+    finally:
+        conn.close()
+
+
+def test_cell_shows_description_below_title_with_colour_by_state(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        t0 = window._viewport_start
+        now_snapshot = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(now_snapshot), "Past Show",
+                   description="About the past show")
+        _programme(conn, eid, "x1", guide.format_iso(now_snapshot),
+                   guide.format_iso(t0 + timedelta(hours=2)), "Current Show",
+                   description="About the current show")
+        window._load_programmes()
+        window._cursor_time = now_snapshot
+        window._relayout()
+
+        _past_image, _past_label, past_desc = window._pool[0][0]
+        _current_image, _current_label, current_desc = window._pool[0][1]
+        assert past_desc.getLabel() == '[COLOR FF606060]About the past show[/COLOR]'
+        assert current_desc.getLabel() == '[COLOR FFE0E0E0]About the current show[/COLOR]'
+    finally:
+        conn.close()
+
+
+def test_filler_cell_description_is_empty(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        window = _window(conn)
+        window._load_programmes()
+        window._relayout()
+
+        _no_info_image, _no_info_label, no_info_desc = window._pool[0][0]
+        assert no_info_desc.getLabel() == ''
     finally:
         conn.close()
 
@@ -347,7 +390,7 @@ def test_no_information_cell_is_never_dimmed(tmp_path):
         window._load_programmes()
         window._relayout()
 
-        no_info_image, no_info_label = window._pool[0][0]
+        no_info_image, no_info_label, _no_info_desc = window._pool[0][0]
         assert 'FF808080' not in no_info_label.getLabel()
     finally:
         conn.close()
@@ -375,7 +418,7 @@ def test_relayout_highlights_nearest_cell_when_axis_in_gap(tmp_path):
 
         cells = window._row_cells[0]
         b_cell = next(c for c in cells if c['title'] == 'B')
-        _b_image, b_label = window._pool[0][b_cell['pool_index']]
+        _b_image, b_label, _b_desc = window._pool[0][b_cell['pool_index']]
         assert b_label.getLabel() == '[COLOR FFFFFFFF]B[/COLOR]'
     finally:
         conn.close()
@@ -402,7 +445,7 @@ def test_swap_cursor_cell_restores_past_color_not_plain_text_color(tmp_path):
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
 
         past_cell = next(c for c in window._row_cells[0] if c['title'] == 'Past Show')
-        _past_image, past_label = window._pool[0][past_cell['pool_index']]
+        _past_image, past_label, _past_desc = window._pool[0][past_cell['pool_index']]
         assert past_label.getLabel() == '[COLOR FF808080]Past Show[/COLOR]'
     finally:
         conn.close()
@@ -430,7 +473,7 @@ def test_swap_cursor_row_restores_past_color_not_plain_text_color(tmp_path):
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
 
         past_cell = next(c for c in window._row_cells[0] if c['title'] == 'Past Show')
-        _past_image, past_label = window._pool[0][past_cell['pool_index']]
+        _past_image, past_label, _past_desc = window._pool[0][past_cell['pool_index']]
         assert past_label.getLabel() == '[COLOR FF808080]Past Show[/COLOR]'
     finally:
         conn.close()
@@ -555,7 +598,11 @@ def test_pool_overflow_logs_warning(tmp_path):
         conn.close()
 
 
-def test_edge_cell_fades_and_inner_cell_slides_on_viewport_jump(tmp_path):
+def test_horizontal_viewport_jump_is_instant_and_clips_edge_cell(tmp_path):
+    # User feedback: horizontal scrolling (Left/Right) must be instant, no
+    # slide or fade animation -- unlike vertical (row) moves, which still
+    # animate. A programme starting before the new viewport must also
+    # clip to the grid's left edge (x=0) rather than spill off-screen.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -563,24 +610,24 @@ def test_edge_cell_fades_and_inner_cell_slides_on_viewport_jump(tmp_path):
         eid = _epg_source(conn, pid)
         window = _window(conn)
         t0 = window._viewport_start
-        _programme(conn, eid, "x1", guide.format_iso(t0 - timedelta(minutes=30)),
+        _programme(conn, eid, "x1", guide.format_iso(t0 - timedelta(minutes=90)),
                    guide.format_iso(t0), "Before")
         _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(t0 + timedelta(hours=1)),
                    "Current")
         window._load_programmes()
         window._relayout()
+        anim_before = window.getProperty('guide_anim')
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
 
         assert window._viewport_start == t0 - timedelta(minutes=30)
-        edge_image, _edge_label = window._pool[0][0]
-        inner_image, _inner_label = window._pool[0][1]
-        assert edge_image._animations and 'effect=fade' in edge_image._animations[0][1]
-        assert 'delay=200' in edge_image._animations[0][1]
-        assert inner_image._animations and 'effect=slide' in inner_image._animations[0][1]
-        assert 'delay=' not in inner_image._animations[0][1]
-        # The gate: a real viewport jump flips the guide_anim property.
-        assert window.getProperty('guide_anim') == '1'
+        edge_cell = window._row_cells[0][0]
+        assert edge_cell['title'] == 'Before'
+        assert edge_cell['x'] == 0
+        edge_image, edge_label, _edge_desc = window._pool[0][0]
+        assert edge_image._animations == []
+        assert edge_label._animations == []
+        assert window.getProperty('guide_anim') == anim_before
     finally:
         conn.close()
 
@@ -600,8 +647,8 @@ def test_in_viewport_cursor_move_does_not_touch_animations(tmp_path):
         window._load_programmes()
         window._relayout()
 
-        image_a, _ = window._pool[0][0]
-        image_b, _ = window._pool[0][1]
+        image_a, _label_a, _desc_a = window._pool[0][0]
+        image_b, _label_b, _desc_b = window._pool[0][1]
         image_a._animations = ['sentinel']
         image_b._animations = ['sentinel']
         anim_before = window.getProperty('guide_anim')

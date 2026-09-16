@@ -3,8 +3,11 @@ from datetime import datetime, timedelta, timezone
 from kodimate import guide
 
 
-def _p(start, end, title):
-    return {'start': datetime(2026, 1, 1, *start), 'end': datetime(2026, 1, 1, *end), 'title': title}
+def _p(start, end, title, description=''):
+    return {
+        'start': datetime(2026, 1, 1, *start), 'end': datetime(2026, 1, 1, *end),
+        'title': title, 'description': description,
+    }
 
 
 def test_cell_layout_proportional_widths():
@@ -36,6 +39,14 @@ def test_cell_layout_no_information_when_no_programmes():
     assert cells[0]['title'] == 'No information'
     assert cells[0]['x'] == 0
     assert cells[0]['width'] == 1800
+    assert cells[0]['description'] == ''
+
+
+def test_cell_layout_passes_through_description():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((12, 0), (13, 0), 'Hour show', description='About the hour show')]
+    cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
+    assert cells[0]['description'] == 'About the hour show'
 
 
 def test_utc_to_local_applies_offset_regardless_of_machine_zone():

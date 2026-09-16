@@ -68,6 +68,7 @@ def cell_layout(programmes, viewport_start, grid_width, no_info_title):
             'start': programme['start'],
             'end': programme['end'],
             'title': programme['title'],
+            'description': programme.get('description', ''),
             'x': int(round(x)),
             'width': int(round(width)),
         })
@@ -76,6 +77,7 @@ def cell_layout(programmes, viewport_start, grid_width, no_info_title):
             'start': viewport_start,
             'end': end,
             'title': no_info_title,
+            'description': '',
             'x': 0,
             'width': int(round(grid_width)),
         })

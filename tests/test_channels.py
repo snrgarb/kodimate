@@ -225,11 +225,11 @@ def _epg_source(conn, provider_id, url="http://epg"):
     return cursor.lastrowid
 
 
-def _programme(conn, epg_source_id, xmltv_channel_id, start, end, title):
+def _programme(conn, epg_source_id, xmltv_channel_id, start, end, title, description=None):
     conn.execute(
-        "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (epg_source_id, xmltv_channel_id, start, end, title),
+        "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title, description) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (epg_source_id, xmltv_channel_id, start, end, title, description),
     )
 
 
@@ -240,12 +240,30 @@ def test_list_programmes_returns_rows_overlapping_window(tmp_path):
         cid = _channel(conn, pid, "a")
         conn.execute("UPDATE channel SET epg_channel_id = 'x1' WHERE id = ?", (cid,))
         eid = _epg_source(conn, pid)
-        _programme(conn, eid, "x1", "2026-01-01T12:00:00Z", "2026-01-01T13:00:00Z", "Show A")
+        _programme(conn, eid, "x1", "2026-01-01T12:00:00Z", "2026-01-01T13:00:00Z", "Show A",
+                   description="About show A")
         _programme(conn, eid, "x1", "2026-01-01T09:00:00Z", "2026-01-01T10:00:00Z", "Before window")
         result = channels.list_programmes(
             conn, [cid], "2026-01-01T11:00:00Z", "2026-01-01T14:00:00Z"
         )
         assert [p['title'] for p in result[cid]] == ["Show A"]
+        assert result[cid][0]['description'] == "About show A"
+    finally:
+        conn.close()
+
+
+def test_list_programmes_description_empty_string_when_null(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        conn.execute("UPDATE channel SET epg_channel_id = 'x1' WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        _programme(conn, eid, "x1", "2026-01-01T12:00:00Z", "2026-01-01T13:00:00Z", "Show A")
+        result = channels.list_programmes(
+            conn, [cid], "2026-01-01T11:00:00Z", "2026-01-01T14:00:00Z"
+        )
+        assert result[cid][0]['description'] == ""
     finally:
         conn.close()
 
