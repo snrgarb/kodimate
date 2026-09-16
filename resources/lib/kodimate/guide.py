@@ -51,58 +51,51 @@ def viewport_end(viewport_start):
 def cell_layout(programmes, viewport_start, grid_width, no_info_title):
     """Cells for one channel row's programmes, clipped to the 3-hour
     viewport starting at viewport_start and positioned proportionally to
-    duration across grid_width pixels. A row with no programme overlapping
-    the viewport yields a single "No information" cell spanning the full
-    width."""
+    duration across grid_width pixels. Every gap in the viewport -- before
+    the first overlapping programme, between programmes, after the last
+    one, or the whole viewport when the row has none -- is filled with a
+    "No information" filler cell (start/end clipped to the viewport,
+    'filler': True) so the row has contiguous cells to navigate over.
+    Real cells carry the programme's actual (unclipped) start/end and
+    'filler': False."""
     end = viewport_end(viewport_start)
     px_per_min = grid_width / float(VISIBLE_HOURS * 60)
+
+    def _rect(seg_start, seg_end):
+        x = (seg_start - viewport_start).total_seconds() / 60.0 * px_per_min
+        width = max(1, (seg_end - seg_start).total_seconds() / 60.0 * px_per_min)
+        return int(round(x)), int(round(width))
+
+    def _filler(seg_start, seg_end):
+        x, width = _rect(seg_start, seg_end)
+        return {
+            'start': seg_start, 'end': seg_end, 'title': no_info_title,
+            'description': '', 'x': x, 'width': width, 'filler': True,
+        }
+
     cells = []
+    cursor = viewport_start
     for programme in programmes:
         if programme['end'] <= viewport_start or programme['start'] >= end:
             continue
         seg_start = max(programme['start'], viewport_start)
         seg_end = min(programme['end'], end)
-        x = (seg_start - viewport_start).total_seconds() / 60.0 * px_per_min
-        width = max(1, (seg_end - seg_start).total_seconds() / 60.0 * px_per_min)
+        if seg_start > cursor:
+            cells.append(_filler(cursor, seg_start))
+        x, width = _rect(seg_start, seg_end)
         cells.append({
             'start': programme['start'],
             'end': programme['end'],
             'title': programme['title'],
             'description': programme.get('description', ''),
-            'x': int(round(x)),
-            'width': int(round(width)),
+            'x': x,
+            'width': width,
+            'filler': False,
         })
-    if not cells:
-        cells.append({
-            'start': viewport_start,
-            'end': end,
-            'title': no_info_title,
-            'description': '',
-            'x': 0,
-            'width': int(round(grid_width)),
-        })
+        cursor = max(cursor, seg_end)
+    if cursor < end:
+        cells.append(_filler(cursor, end))
     return cells
-
-
-def programme_at(programmes, t):
-    for programme in programmes:
-        if programme['start'] <= t < programme['end']:
-            return programme
-    return None
-
-
-def move_cursor_horizontal(programmes, cursor_time, direction):
-    """Start time of the adjacent programme in `direction` (-1 or +1) from
-    the one containing cursor_time, or None if there is no programme in
-    that direction (including when cursor_time isn't inside any)."""
-    current = programme_at(programmes, cursor_time)
-    if current is None:
-        return None
-    index = programmes.index(current)
-    target_index = index + direction
-    if target_index < 0 or target_index >= len(programmes):
-        return None
-    return programmes[target_index]['start']
 
 
 def resolve_cursor(cells, axis_time):
@@ -146,22 +139,16 @@ def clamp_viewport(viewport_start, now, tz=None):
     return viewport_start
 
 
-def scroll_for_target(viewport_start, target_start, target_end, direction, floor, ceiling):
-    """New viewport_start to scroll by one 30-minute slot toward an
-    off-screen target programme (then clamped to floor/ceiling), or None
-    if the target already overlaps the current viewport."""
-    end = viewport_end(viewport_start)
-    if target_end > viewport_start and target_start < end:
-        return None
+def scroll_viewport(viewport_start, direction, floor, ceiling):
+    """New viewport_start after scrolling one 30-minute slot in `direction`
+    (-1 or +1), clamped to floor/ceiling. Equal to viewport_start when
+    already at the clamped bound in that direction."""
     slot = timedelta(minutes=30)
-    if direction > 0:
-        new_start = viewport_start + slot
-    else:
-        new_start = viewport_start - slot
+    new_start = viewport_start + slot if direction > 0 else viewport_start - slot
     if new_start < floor:
-        new_start = floor
+        return floor
     if new_start > ceiling:
-        new_start = ceiling
+        return ceiling
     return new_start
 
 

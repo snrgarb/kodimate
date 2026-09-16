@@ -286,14 +286,14 @@ class GuideWindow(BaseWindow):
     def _label_color_for(self, cell, now, is_cursor):
         if is_cursor:
             return _CURSOR_TEXT_COLOR
-        if cell['end'] <= now and cell['title'] != self._no_info_title:
+        if cell['end'] <= now and not cell['filler']:
             return _PAST_TEXT_COLOR
         return _TEXT_COLOR
 
     def _desc_color_for(self, cell, now, is_cursor):
         if is_cursor:
             return _DESC_CURSOR_TEXT_COLOR
-        if cell['end'] <= now and cell['title'] != self._no_info_title:
+        if cell['end'] <= now and not cell['filler']:
             return _DESC_PAST_TEXT_COLOR
         return _DESC_TEXT_COLOR
 
@@ -362,38 +362,36 @@ class GuideWindow(BaseWindow):
 
     def _move_cursor_horizontal(self, direction):
         focused_row = self._focused_row_index()
-        channel_index = self._top_row + focused_row
-        programmes = self._channel_programmes(channel_index)
-        target_start = guide.move_cursor_horizontal(programmes, self._cursor_time, direction)
-        if target_start is None:
+        row_cells = self._row_cells[focused_row] if 0 <= focused_row < len(self._row_cells) else []
+        current_cell = self._find_cell(focused_row, self._cursor_time)
+        if current_cell is None:
+            self._relayout()
             return
-        target = guide.programme_at(programmes, target_start)
-        floor, ceiling = self._clamp_bounds(datetime.utcnow())
-        new_viewport_start = guide.scroll_for_target(
-            self._viewport_start, target['start'], target['end'], direction, floor, ceiling
-        )
-        if new_viewport_start is None:
+        neighbour_index = row_cells.index(current_cell) + direction
+        if 0 <= neighbour_index < len(row_cells):
+            neighbour = row_cells[neighbour_index]
             old_time = self._cursor_time
-            new_time = max(target['start'], self._viewport_start)
+            new_time = max(neighbour['start'], self._viewport_start)
             self._cursor_time = new_time
             if not self._swap_cursor_cell(focused_row, old_time, new_time):
                 self._relayout()
             return
+
+        # The cursor cell touches the viewport's edge in this direction:
+        # scroll by one 30-minute slot instead (a clamped no-op at the
+        # floor/ceiling returns without touching data or relaying out).
+        floor, ceiling = self._clamp_bounds(datetime.utcnow())
+        new_viewport_start = guide.scroll_viewport(self._viewport_start, direction, floor, ceiling)
         if new_viewport_start == self._viewport_start:
             return
+        old_viewport_end = guide.viewport_end(self._viewport_start)
         self._viewport_start = new_viewport_start
         self._load_programmes()
-        axis = max(target['start'], new_viewport_start)
-        end = guide.viewport_end(new_viewport_start)
-        if axis >= end:
-            # Even a page-capped scroll didn't bring the target fully into
-            # view: land on the actual on-screen cell nearest the new
-            # viewport's end (guaranteed to start before it) rather than an
-            # arbitrary offset.
-            row_programmes = self._channel_programmes(channel_index)
-            cells = guide.cell_layout(row_programmes, new_viewport_start, _GRID_WIDTH, self._no_info_title)
-            axis = cells[-1]['start']
-        self._cursor_time = axis
+        channel_index = self._top_row + focused_row
+        row_programmes = self._channel_programmes(channel_index)
+        new_cells = guide.cell_layout(row_programmes, new_viewport_start, _GRID_WIDTH, self._no_info_title)
+        probe = old_viewport_end if direction > 0 else new_viewport_start
+        self._cursor_time = max(guide.resolve_cursor(new_cells, probe)['start'], new_viewport_start)
         self._relayout()
 
     def _skip_viewport(self, hours):

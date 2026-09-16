@@ -27,9 +27,13 @@ def test_cell_layout_clips_programme_extending_past_viewport():
     viewport_start = datetime(2026, 1, 1, 12, 0)
     programmes = [_p((11, 0), (14, 0), 'Long show')]
     cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
-    assert len(cells) == 1
     assert cells[0]['x'] == 0
     assert cells[0]['width'] == 1200
+    assert cells[0]['filler'] is False
+    # The programme ends an hour before the viewport does -> trailing filler.
+    assert cells[1]['filler'] is True
+    assert cells[1]['start'] == datetime(2026, 1, 1, 14, 0)
+    assert cells[1]['end'] == datetime(2026, 1, 1, 15, 0)
 
 
 def test_cell_layout_no_information_when_no_programmes():
@@ -40,6 +44,7 @@ def test_cell_layout_no_information_when_no_programmes():
     assert cells[0]['x'] == 0
     assert cells[0]['width'] == 1800
     assert cells[0]['description'] == ''
+    assert cells[0]['filler'] is True
 
 
 def test_cell_layout_passes_through_description():
@@ -47,6 +52,57 @@ def test_cell_layout_passes_through_description():
     programmes = [_p((12, 0), (13, 0), 'Hour show', description='About the hour show')]
     cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
     assert cells[0]['description'] == 'About the hour show'
+
+
+def test_cell_layout_fills_gap_before_first_programme():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((13, 0), (14, 0), 'Show A')]
+    cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
+    assert [(c['title'], c['filler']) for c in cells] == [
+        ('No information', True), ('Show A', False), ('No information', True),
+    ]
+    assert cells[0]['start'] == viewport_start
+    assert cells[0]['end'] == datetime(2026, 1, 1, 13, 0)
+    assert cells[0]['x'] == 0
+
+
+def test_cell_layout_fills_gap_between_programmes():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((12, 0), (13, 0), 'Show A'), _p((14, 0), (15, 0), 'Show B')]
+    cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
+    assert [(c['title'], c['filler']) for c in cells] == [
+        ('Show A', False), ('No information', True), ('Show B', False),
+    ]
+    gap = cells[1]
+    assert gap['start'] == datetime(2026, 1, 1, 13, 0)
+    assert gap['end'] == datetime(2026, 1, 1, 14, 0)
+    # Contiguous x coverage: the gap starts exactly where Show A ends.
+    assert gap['x'] == cells[0]['x'] + cells[0]['width']
+    assert gap['x'] + gap['width'] == cells[2]['x']
+
+
+def test_cell_layout_fills_gap_after_last_programme():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((12, 0), (13, 0), 'Show A')]
+    cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
+    assert [(c['title'], c['filler']) for c in cells] == [('Show A', False), ('No information', True)]
+    assert cells[1]['start'] == datetime(2026, 1, 1, 13, 0)
+    assert cells[1]['end'] == datetime(2026, 1, 1, 15, 0)
+
+
+def test_cell_layout_ignores_overlapping_programme_contained_in_another():
+    # Bad EPG data: B (12:20-12:40) is fully contained inside A
+    # (12:00-13:40). No filler should be inserted between A and C just
+    # because B's end is earlier than A's.
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [
+        _p((12, 0), (13, 40), 'A'),
+        _p((12, 20), (12, 40), 'B'),
+        _p((13, 40), (15, 0), 'C'),
+    ]
+    cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
+    assert [c['title'] for c in cells] == ['A', 'B', 'C']
+    assert all(not c['filler'] for c in cells)
 
 
 def test_utc_to_local_applies_offset_regardless_of_machine_zone():
@@ -61,18 +117,6 @@ def test_round_down_30_local_rounds_to_local_half_hour_boundary():
     # is 15:00 local, which is 05:30Z.
     rounded = guide.round_down_30_local(datetime(2026, 1, 1, 5, 50), tz=tz)
     assert rounded == datetime(2026, 1, 1, 5, 30)
-
-
-def test_move_cursor_horizontal_moves_to_next_and_previous():
-    programmes = [_p((12, 0), (13, 0), 'A'), _p((13, 0), (14, 0), 'B'), _p((14, 0), (15, 0), 'C')]
-    assert guide.move_cursor_horizontal(programmes, datetime(2026, 1, 1, 12, 30), 1) == datetime(2026, 1, 1, 13, 0)
-    assert guide.move_cursor_horizontal(programmes, datetime(2026, 1, 1, 13, 30), -1) == datetime(2026, 1, 1, 12, 0)
-
-
-def test_move_cursor_horizontal_returns_none_at_edge():
-    programmes = [_p((12, 0), (13, 0), 'A'), _p((13, 0), (14, 0), 'B')]
-    assert guide.move_cursor_horizontal(programmes, datetime(2026, 1, 1, 12, 30), -1) is None
-    assert guide.move_cursor_horizontal(programmes, datetime(2026, 1, 1, 13, 30), 1) is None
 
 
 def test_move_cursor_vertical_selects_cell_containing_axis_time():
@@ -132,67 +176,30 @@ def test_viewport_changed_gate():
     assert guide.viewport_changed(0, 0, start, start.replace(hour=13)) is True
 
 
-def test_scroll_for_target_none_when_target_already_visible():
+def test_scroll_viewport_moves_one_slot_each_direction():
     viewport_start = datetime(2026, 1, 1, 12, 0)
     floor = datetime(2020, 1, 1)
     ceiling = datetime(2030, 1, 1)
-    result = guide.scroll_for_target(
-        viewport_start, datetime(2026, 1, 1, 13, 0), datetime(2026, 1, 1, 14, 0), 1, floor, ceiling
-    )
-    assert result is None
+    assert guide.scroll_viewport(viewport_start, 1, floor, ceiling) == viewport_start + timedelta(minutes=30)
+    assert guide.scroll_viewport(viewport_start, -1, floor, ceiling) == viewport_start - timedelta(minutes=30)
 
 
-def test_scroll_for_target_left_scrolls_one_slot_regression_bug2():
-    # Left onto an off-screen 4-hour programme must scroll back by exactly
-    # one 30-minute slot, not snap straight to the programme's start.
+def test_scroll_viewport_repeated_presses_scroll_by_one_slot_each():
     viewport_start = datetime(2026, 1, 1, 12, 0)
-    target_start = datetime(2026, 1, 1, 6, 0)
-    target_end = datetime(2026, 1, 1, 10, 0)
     floor = datetime(2020, 1, 1)
     ceiling = datetime(2030, 1, 1)
-    new_start = guide.scroll_for_target(viewport_start, target_start, target_end, -1, floor, ceiling)
-    assert new_start == viewport_start - timedelta(minutes=30)
-    # The travel axis lands on the programme's now-visible tail, not its
-    # original start.
-    axis = max(target_start, new_start)
-    assert axis == new_start
-    assert axis != target_start
-
-
-def test_scroll_for_target_right_scrolls_one_slot():
-    viewport_start = datetime(2026, 1, 1, 12, 0)
-    target_start = datetime(2026, 1, 1, 20, 0)
-    target_end = datetime(2026, 1, 1, 21, 0)
-    floor = datetime(2020, 1, 1)
-    ceiling = datetime(2030, 1, 1)
-    new_start = guide.scroll_for_target(viewport_start, target_start, target_end, 1, floor, ceiling)
-    assert new_start == viewport_start + timedelta(minutes=30)
-
-
-def test_scroll_for_target_left_repeated_presses_scroll_by_one_slot_each():
-    viewport_start = datetime(2026, 1, 1, 12, 0)
-    target_start = datetime(2026, 1, 1, 6, 0)
-    target_end = datetime(2026, 1, 1, 10, 0)
-    floor = datetime(2020, 1, 1)
-    ceiling = datetime(2030, 1, 1)
-    first = guide.scroll_for_target(viewport_start, target_start, target_end, -1, floor, ceiling)
-    second = guide.scroll_for_target(first, target_start, target_end, -1, floor, ceiling)
+    first = guide.scroll_viewport(viewport_start, -1, floor, ceiling)
+    second = guide.scroll_viewport(first, -1, floor, ceiling)
     assert first == viewport_start - timedelta(minutes=30)
     assert second == first - timedelta(minutes=30)
 
 
-def test_scroll_for_target_clamped_to_floor_and_ceiling():
+def test_scroll_viewport_clamped_to_floor_and_ceiling():
     viewport_start = datetime(2026, 1, 1, 12, 0)
     floor = datetime(2026, 1, 1, 11, 45)
     ceiling = datetime(2026, 1, 1, 12, 15)
-    left = guide.scroll_for_target(
-        viewport_start, datetime(2026, 1, 1, 1, 0), datetime(2026, 1, 1, 2, 0), -1, floor, ceiling
-    )
-    assert left == floor
-    right = guide.scroll_for_target(
-        viewport_start, datetime(2026, 1, 2, 1, 0), datetime(2026, 1, 2, 2, 0), 1, floor, ceiling
-    )
-    assert right == ceiling
+    assert guide.scroll_viewport(viewport_start, -1, floor, ceiling) == floor
+    assert guide.scroll_viewport(viewport_start, 1, floor, ceiling) == ceiling
 
 
 def test_clamp_viewport_floor_and_ceiling():

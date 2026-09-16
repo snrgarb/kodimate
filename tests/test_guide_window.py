@@ -102,9 +102,10 @@ def test_cell_proportional_to_duration(tmp_path):
         window._load_programmes()
         window._relayout()
         cells = window._row_cells[0]
-        assert len(cells) == 1
         assert cells[0]['title'] == 'Show A'
         assert cells[0]['width'] == _third_of_grid(1620)
+        # The remaining two-thirds of the viewport is a filler cell.
+        assert cells[1]['filler'] is True
     finally:
         conn.close()
 
@@ -138,7 +139,10 @@ def test_left_right_move_cursor_between_programmes(tmp_path):
         conn.close()
 
 
-def test_left_beyond_first_programme_is_a_no_op(tmp_path):
+def test_left_from_leftmost_cell_scrolls_viewport_one_slot(tmp_path):
+    # Bug fix: Left/Right must always move (scrolling the viewport by one
+    # slot at the cell edge) rather than doing nothing just because there
+    # happens to be no earlier programme in the data.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -152,7 +156,9 @@ def test_left_beyond_first_programme_is_a_no_op(tmp_path):
         window._relayout()
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
-        assert window._cursor_time == viewport_start
+
+        assert window._viewport_start == viewport_start - timedelta(minutes=30)
+        assert window._cursor_time == window._viewport_start
     finally:
         conn.close()
 
@@ -396,10 +402,10 @@ def test_no_information_cell_is_never_dimmed(tmp_path):
         conn.close()
 
 
-def test_relayout_highlights_nearest_cell_when_axis_in_gap(tmp_path):
-    # Review fix 1: a real gap between two programmes on the focused row
-    # (not the "No information" whole-row case) must still resolve to the
-    # nearest cell, not leave the row with no highlighted cell.
+def test_relayout_highlights_filler_cell_when_axis_falls_in_a_former_gap(tmp_path):
+    # Gaps between programmes are now filled with "No information" filler
+    # cells, so a cursor_time between A and B lands exactly on the filler
+    # cell it falls in, not (via a nearest-cell fallback) on B.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -411,15 +417,17 @@ def test_relayout_highlights_nearest_cell_when_axis_in_gap(tmp_path):
         _programme(conn, eid, "x1", guide.format_iso(t0 + timedelta(hours=1)),
                    guide.format_iso(t0 + timedelta(hours=2)), "B")
         window._load_programmes()
-        # 50 minutes in: 20 minutes past A's end, 10 minutes before B's
-        # start -- B is nearer.
+        # 50 minutes in: inside the filler gap between A's end (30m) and
+        # B's start (1h).
         window._cursor_time = t0 + timedelta(minutes=50)
         window._relayout()
 
         cells = window._row_cells[0]
-        b_cell = next(c for c in cells if c['title'] == 'B')
-        _b_image, b_label, _b_desc = window._pool[0][b_cell['pool_index']]
-        assert b_label.getLabel() == '[COLOR FFFFFFFF]B[/COLOR]'
+        gap_cell = next(c for c in cells if c['filler'])
+        assert gap_cell['start'] == t0 + timedelta(minutes=30)
+        assert gap_cell['end'] == t0 + timedelta(hours=1)
+        _gap_image, gap_label, _gap_desc = window._pool[0][gap_cell['pool_index']]
+        assert gap_label.getLabel() == '[COLOR FFFFFFFF]%s[/COLOR]' % window._no_info_title
     finally:
         conn.close()
 
@@ -479,34 +487,75 @@ def test_swap_cursor_row_restores_past_color_not_plain_text_color(tmp_path):
         conn.close()
 
 
-def test_right_onto_far_off_screen_target_after_one_slot_scroll_lands_on_last_visible_cell(tmp_path):
-    # Review fix 3: when even a one-slot scroll doesn't bring the target
-    # programme into view, the travel axis must land on a real on-screen
-    # cell (here, the still-airing previous programme's raw start), not an
-    # arbitrary offset before the new viewport's end. The real EPG-loading
-    # window buffer (VISIBLE_HOURS either side) never lets a genuinely
-    # off-screen-even-after-one-slot target load in practice, so this
-    # seeds the programme data directly to exercise the clamp.
+def test_right_on_empty_row_scrolls_viewport_and_lands_on_right_edge_filler(tmp_path):
+    # Bug fix: Right on a row with no programmes ("No information") must
+    # still scroll the viewport, landing on the filler cell that now
+    # covers the newly-revealed right edge, not do nothing. The whole row
+    # is one filler cell, so its 'start' is the new viewport_start.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
         _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
         window = _window(conn)
         t0 = window._viewport_start
-        channel_id = window._channel_rows[0]['id']
-        window._programmes_by_channel = {
-            channel_id: [
-                {'start': t0, 'end': t0 + timedelta(hours=7), 'title': 'Long Show'},
-                {'start': t0 + timedelta(hours=7), 'end': t0 + timedelta(hours=8), 'title': 'Next Show'},
-            ]
-        }
-        window._load_programmes = lambda: None  # keep the seeded wide-range data
+        window._load_programmes()
         window._relayout()
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
 
         assert window._viewport_start == t0 + timedelta(minutes=30)
-        assert window._cursor_time == t0
+        assert window._cursor_time == window._viewport_start
+        cell = window._find_cell(window._focused_row_index(), window._cursor_time)
+        assert cell['filler'] is True
+        assert cell['start'] == window._viewport_start
+        assert cell['end'] == guide.viewport_end(window._viewport_start)
+    finally:
+        conn.close()
+
+
+def test_left_on_empty_row_scrolls_viewport_back_one_slot(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        window = _window(conn)
+        t0 = window._viewport_start
+        window._load_programmes()
+        window._relayout()
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+
+        assert window._viewport_start == t0 - timedelta(minutes=30)
+        assert window._cursor_time == window._viewport_start
+    finally:
+        conn.close()
+
+
+def test_right_from_programme_into_gap_then_into_next_programme(tmp_path):
+    # Right from a real programme first lands on the filler gap after it,
+    # then a second Right lands on the following programme.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        t0 = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(t0 + timedelta(minutes=30)), "A")
+        _programme(conn, eid, "x1", guide.format_iso(t0 + timedelta(hours=1)),
+                   guide.format_iso(t0 + timedelta(hours=2)), "B")
+        window._load_programmes()
+        window._relayout()
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+        assert window._cursor_time == t0 + timedelta(minutes=30)
+        cell = window._find_cell(window._focused_row_index(), window._cursor_time)
+        assert cell['filler'] is True
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+        assert window._cursor_time == t0 + timedelta(hours=1)
+        cell = window._find_cell(window._focused_row_index(), window._cursor_time)
+        assert cell['title'] == 'B'
     finally:
         conn.close()
 
