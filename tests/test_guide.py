@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from kodimate import guide
 
@@ -36,6 +36,20 @@ def test_cell_layout_no_information_when_no_programmes():
     assert cells[0]['title'] == 'No information'
     assert cells[0]['x'] == 0
     assert cells[0]['width'] == 1800
+
+
+def test_utc_to_local_applies_offset_regardless_of_machine_zone():
+    tz = timezone(timedelta(hours=9, minutes=30))
+    local = guide.utc_to_local(datetime(2026, 1, 1, 5, 50), tz=tz)
+    assert local == datetime(2026, 1, 1, 15, 20)
+
+
+def test_round_down_30_local_rounds_to_local_half_hour_boundary():
+    tz = timezone(timedelta(hours=9, minutes=30))
+    # 05:50Z is 15:20 local; the local half-hour boundary at or before it
+    # is 15:00 local, which is 05:30Z.
+    rounded = guide.round_down_30_local(datetime(2026, 1, 1, 5, 50), tz=tz)
+    assert rounded == datetime(2026, 1, 1, 5, 30)
 
 
 def test_move_cursor_horizontal_moves_to_next_and_previous():

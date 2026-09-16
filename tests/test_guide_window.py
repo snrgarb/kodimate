@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from kodimate import db, guide
 from kodimate.windows.guide import GuideWindow, CHANNEL_LIST_ID
@@ -43,6 +43,23 @@ def _window(conn):
     window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i', conn=conn)
     window.onInit()
     return window
+
+
+def test_header_shows_local_time_not_utc(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+
+        class _LocalGuideWindow(GuideWindow):
+            _tz = timezone(timedelta(hours=9, minutes=30))
+
+        window = _LocalGuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i', conn=conn)
+        window.onInit()
+        expected = guide.utc_to_local(window._viewport_start, tz=window._tz)
+        assert window.getProperty('guide_header0') == expected.strftime('%H:%M')
+    finally:
+        conn.close()
 
 
 def test_guide_shows_channels_in_native_list(tmp_path):

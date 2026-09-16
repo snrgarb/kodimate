@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Pure layout/cursor logic for the Guide window (issue #26): no xbmc
 imports, so it is exercised directly by tests without the fakes."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 VISIBLE_ROWS = 10
 VISIBLE_HOURS = 3
@@ -21,6 +21,21 @@ def round_down_30(dt):
     """Nearest 30-minute boundary at or before dt."""
     minute = 0 if dt.minute < 30 else 30
     return dt.replace(minute=minute, second=0, microsecond=0)
+
+
+def utc_to_local(dt, tz=None):
+    """Convert a naive UTC datetime to a naive local datetime. `tz` is a
+    tzinfo to convert to; defaults to the system local zone."""
+    return dt.replace(tzinfo=timezone.utc).astimezone(tz).replace(tzinfo=None)
+
+
+def round_down_30_local(dt_utc, tz=None):
+    """Round a naive UTC datetime down to the local 30-minute boundary at
+    or before it, returned as naive UTC. `tz` is a tzinfo to convert to;
+    defaults to the system local zone."""
+    local = dt_utc.replace(tzinfo=timezone.utc).astimezone(tz)
+    rounded_local = round_down_30(local)
+    return rounded_local.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def viewport_end(viewport_start):

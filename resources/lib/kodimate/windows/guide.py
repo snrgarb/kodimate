@@ -34,6 +34,7 @@ _CURSOR_TEXT_COLOR = 'FFFFFFFF'
 
 class GuideWindow(BaseWindow):
     xmlFile = 'script-kodimate-guide.xml'
+    _tz = None  # override in tests/subclasses to fix the local zone
 
     def onInit(self):
         addon = xbmcaddon.Addon()
@@ -43,7 +44,7 @@ class GuideWindow(BaseWindow):
 
         self._channel_rows = channels.list_channels(self.conn)
         self._top_row = 0
-        self._viewport_start = guide.round_down_30(datetime.utcnow())
+        self._viewport_start = guide.round_down_30_local(datetime.utcnow(), self._tz)
         self._cursor_time = self._viewport_start
         self._row_cells = []
         self._last_selected = 0
@@ -137,7 +138,8 @@ class GuideWindow(BaseWindow):
     def _update_header(self):
         for i in range(_HEADER_SLOTS):
             t = self._viewport_start + timedelta(minutes=i * _SLOT_MINUTES)
-            self.setProperty('guide_header%d' % i, t.strftime('%H:%M'))
+            local_t = guide.utc_to_local(t, self._tz)
+            self.setProperty('guide_header%d' % i, local_t.strftime('%H:%M'))
 
     # -- data --------------------------------------------------------------
 
@@ -298,7 +300,7 @@ class GuideWindow(BaseWindow):
         if target_start is None:
             return
         if guide.needs_viewport_jump(target_start, self._viewport_start):
-            self._viewport_start = guide.round_down_30(target_start)
+            self._viewport_start = guide.round_down_30_local(target_start, self._tz)
             self._cursor_time = target_start
             self._load_programmes()
             self._relayout(anim_dx=_ANIM_SLIDE_PX if direction > 0 else -_ANIM_SLIDE_PX)
