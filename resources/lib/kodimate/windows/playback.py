@@ -31,6 +31,9 @@ _REASON_STRINGS = {
 
 _ACTIVATE_FULLSCREEN_SLEEP_MS = 300
 
+_BUSY_DIALOG_ACTIVATE = 'ActivateWindow(busydialognocancel)'
+_BUSY_DIALOG_CLOSE = 'Dialog.Close(busydialognocancel)'
+
 
 class PlaybackWindow(xbmcgui.WindowXMLDialog):
     xmlFile = 'script-kodimate-playback.xml'
@@ -45,11 +48,21 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
     clock = None
     persist_learned_form = None
     session = None
+    _busy_dialog_shown = False
 
     def __init__(self, *args, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
         super(PlaybackWindow, self).__init__(*args)
+        # Set before doModal() draws the first frame: WindowXMLDialog
+        # honours setProperty() called here, so the spinner and channel
+        # labels are already correct on frame one instead of appearing a
+        # beat later once onInit() runs.
+        self.setProperty('state', 'connecting')
+        self.setProperty('status_text', xbmcaddon.Addon().getLocalizedString(_STR_CONNECTING))
+        if self.snapshot is not None:
+            self.setProperty('channel_name', self.snapshot['name'])
+            self.setProperty('channel_number', str(self.snapshot['number']))
 
     @classmethod
     def open(cls, **kwargs):
@@ -69,15 +82,16 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self.clock = time.monotonic
         if self.persist_learned_form is None:
             self.persist_learned_form = self._persist_learned_form
-        self.setProperty('channel_name', self.snapshot['name'])
-        self.setProperty('channel_number', str(self.snapshot['number']))
         self._start_new_session()
 
     def _persist_learned_form(self, provider_id, form):
         providers.set_learned_stream_format(self.conn, provider_id, form)
 
     def _start_new_session(self):
+        self.setProperty('state', 'connecting')
+        self.setProperty('status_text', xbmcaddon.Addon().getLocalizedString(_STR_CONNECTING))
         self.setProperty('reason', '')
+        self._show_busy_dialog()
         self.session = playback.PlaybackSession(
             self.snapshot, self.player, self.probe, self.scheduler, self.clock,
             self.persist_learned_form, self._on_state,
@@ -86,6 +100,24 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self.session.start()
         xbmc.sleep(_ACTIVATE_FULLSCREEN_SLEEP_MS)
         xbmc.executebuiltin('ActivateWindow(fullscreenvideo)')
+        # Re-issue (not gated by _busy_dialog_shown) so the busy dialog sits
+        # on top of the just-activated fullscreen video -- but only while
+        # still connecting/reconnecting: the session may have already
+        # reached 'playing'/'failed' and closed the dialog during the sleep
+        # above, and reopening it here would leave it orphaned.
+        if self.session.state in ('connecting', 'reconnecting'):
+            xbmc.executebuiltin(_BUSY_DIALOG_ACTIVATE)
+            self._busy_dialog_shown = True
+
+    def _show_busy_dialog(self):
+        if not self._busy_dialog_shown:
+            xbmc.executebuiltin(_BUSY_DIALOG_ACTIVATE)
+            self._busy_dialog_shown = True
+
+    def _close_busy_dialog(self):
+        # Always issued on the way out, even if never shown.
+        xbmc.executebuiltin(_BUSY_DIALOG_CLOSE)
+        self._busy_dialog_shown = False
 
     def _on_state(self, state, reason):
         addon = xbmcaddon.Addon()
@@ -93,16 +125,20 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self.setProperty('reason', reason or '')
         if state == 'connecting':
             self.setProperty('status_text', addon.getLocalizedString(_STR_CONNECTING))
+            self._show_busy_dialog()
         elif state == 'reconnecting':
             self.setProperty('status_text', addon.getLocalizedString(_STR_RECONNECTING))
+            self._show_busy_dialog()
         elif state == 'playing':
             self.setProperty('status_text', '')
+            self._close_busy_dialog()
         elif state == 'failed':
             string_id = _REASON_STRINGS.get(reason, _STR_UNAVAILABLE)
             text = addon.getLocalizedString(string_id)
             if reason == 'connection_limit' and self.snapshot.get('max_connections'):
                 text = addon.getLocalizedString(_STR_CONNECTION_LIMIT_N) % self.snapshot['max_connections']
             self.setProperty('status_text', text)
+            self._close_busy_dialog()
 
     def onAction(self, action):
         action_id = action.getId()
@@ -114,4 +150,5 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
     def _abort_and_close(self):
         self.session.abort()
         self.player.detach(self.session)
+        self._close_busy_dialog()
         self.close()

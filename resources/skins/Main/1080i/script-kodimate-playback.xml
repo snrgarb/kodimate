@@ -15,15 +15,6 @@
             <colordiffuse>ff000000</colordiffuse>
             <visible>!String.IsEqual(Window.Property(state),playing)</visible>
         </control>
-        <control type="image">
-            <posx>910</posx>
-            <posy>460</posy>
-            <width>100</width>
-            <height>100</height>
-            <texture>white.png</texture>
-            <visible>String.IsEqual(Window.Property(state),connecting) | String.IsEqual(Window.Property(state),reconnecting)</visible>
-            <animation effect="rotate" start="0" end="360" center="auto" time="1200" condition="true">Conditional</animation>
-        </control>
         <control type="label">
             <posx>80</posx>
             <posy>900</posy>
