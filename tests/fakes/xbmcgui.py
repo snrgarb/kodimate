@@ -68,6 +68,8 @@ class Control(object):
         self._items = []
         self._selected = 0
         self._label = ''
+        self._width = 0
+        self._visible = True
 
     def reset(self):
         self._items = []
@@ -78,6 +80,15 @@ class Control(object):
 
     def getLabel(self):
         return self._label
+
+    def setWidth(self, width):
+        self._width = width
+
+    def getWidth(self):
+        return self._width
+
+    def setVisible(self, visible):
+        self._visible = visible
 
     def addItem(self, item):
         self._items.append(item)

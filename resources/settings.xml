@@ -35,5 +35,28 @@
                 </setting>
             </group>
         </category>
+        <category id="playback" label="32090">
+            <group id="1" label="">
+                <setting id="osd_hide_seconds" type="integer" label="32091">
+                    <level>0</level>
+                    <default>3</default>
+                    <constraints>
+                        <minimum>1</minimum>
+                        <maximum>10</maximum>
+                    </constraints>
+                    <control type="slider" format="integer"/>
+                </setting>
+                <setting id="number_commit_delay" type="number" label="32092">
+                    <level>0</level>
+                    <default>1.5</default>
+                    <constraints>
+                        <minimum>0.5</minimum>
+                        <maximum>5</maximum>
+                        <step>0.5</step>
+                    </constraints>
+                    <control type="slider" format="number"/>
+                </setting>
+            </group>
+        </category>
     </section>
 </settings>

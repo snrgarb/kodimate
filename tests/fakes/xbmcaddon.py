@@ -24,5 +24,11 @@ class Addon(object):
     def setSettingInt(self, key, value):
         _settings[key] = value
 
+    def getSettingNumber(self, key):
+        return float(_settings.get(key, 0))
+
+    def setSettingNumber(self, key, value):
+        _settings[key] = value
+
     def getLocalizedString(self, string_id):
         return "String {0}".format(string_id)

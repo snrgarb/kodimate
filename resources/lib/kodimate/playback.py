@@ -34,7 +34,7 @@ def load_snapshot(conn, provider_id, channel_key):
         "c.position + p.number_offset) AS number, "
         "p.id, p.kind, p.xtream_host, p.xtream_username, p.xtream_password, "
         "p.user_agent, p.stream_format, p.learned_stream_format, "
-        "p.allowed_output_formats, p.max_connections "
+        "p.allowed_output_formats, p.max_connections, c.id, c.logo_url "
         "FROM channel c "
         "JOIN provider p ON p.id = c.provider_id "
         "LEFT JOIN channel_override o "
@@ -62,6 +62,8 @@ def load_snapshot(conn, provider_id, channel_key):
         'learned_stream_format': row[12],
         'allowed_output_formats': allowed_output_formats,
         'max_connections': row[14],
+        'id': row[15],
+        'logo_url': row[16],
     }
 
 
