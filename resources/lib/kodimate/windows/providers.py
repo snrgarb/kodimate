@@ -245,6 +245,7 @@ class ProvidersWindow(BaseWindow):
             self._move_order[index], self._move_order[new_index] = \
                 self._move_order[new_index], self._move_order[index]
             self._render(order=self._move_order)
+            self.setFocusId(LIST_ID)
             self.getControl(LIST_ID).selectItem(new_index)
 
     def _drop_move(self):
@@ -256,6 +257,7 @@ class ProvidersWindow(BaseWindow):
             self._move_order = None
             self._move_original_order = None
             self._render()
+            self.setFocusId(LIST_ID)
             self.getControl(LIST_ID).selectItem(order.index(moved_id))
 
     def _cancel_move(self):
@@ -266,6 +268,7 @@ class ProvidersWindow(BaseWindow):
             self._move_order = None
             self._move_original_order = None
             self._render(order=order)
+            self.setFocusId(LIST_ID)
             self.getControl(LIST_ID).selectItem(order.index(moved_id))
 
     def _delete_provider(self, provider_id, row):

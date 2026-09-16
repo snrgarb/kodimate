@@ -111,12 +111,14 @@ def test_move_up_then_drop_persists_sort_order(tmp_path):
 
         window._start_move(p2)
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+        assert window.getFocusId() == LIST_ID
         window.onClick(LIST_ID)
 
         rows = providers.list_providers(conn)
         assert [r['id'] for r in rows] == [p2, p1]
         assert window._move_provider_id is None
         assert window.getControl(LIST_ID).getSelectedPosition() == 0
+        assert window.getFocusId() == LIST_ID
     finally:
         conn.close()
 
@@ -137,5 +139,6 @@ def test_move_back_restores_original_order(tmp_path):
         assert [r['id'] for r in rows] == [p1, p2]
         assert window._move_provider_id is None
         assert window.getControl(LIST_ID).getSelectedPosition() == 1
+        assert window.getFocusId() == LIST_ID
     finally:
         conn.close()
