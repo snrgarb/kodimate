@@ -1,0 +1,18 @@
+# Kodimate language file
+# Addon Name: Kodimate
+# Addon id: script.kodimate
+# Lang: en_GB
+msgid ""
+msgstr ""
+
+msgctxt "#32000"
+msgid "Kodimate"
+msgstr ""
+
+msgctxt "#32001"
+msgid "General"
+msgstr ""
+
+msgctxt "#32002"
+msgid "Debug logging"
+msgstr ""

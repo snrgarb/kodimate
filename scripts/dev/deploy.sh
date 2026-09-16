@@ -27,6 +27,9 @@ rsync -a \
     --exclude 'CLAUDE.md' \
     --exclude 'CONTEXT.md' \
     --exclude 'README.md' \
+    --exclude '.venv' \
+    --exclude 'pytest.ini' \
+    --exclude 'requirements-dev.txt' \
     "$REPO_ROOT/" "$STAGE_ADDON/"
 
 rm -f "$ZIP_PATH"
