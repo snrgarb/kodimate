@@ -3,8 +3,10 @@ import xbmcgui
 
 from .base import BaseWindow
 from .channel_list import ChannelListWindow
+from .guide import GuideWindow
 
 CHANNELS_BUTTON_ID = 201
+GUIDE_BUTTON_ID = 202
 
 
 class MainWindow(BaseWindow):
@@ -17,3 +19,5 @@ class MainWindow(BaseWindow):
     def onClick(self, control_id):
         if control_id == CHANNELS_BUTTON_ID:
             ChannelListWindow.open(conn=self.conn)
+        elif control_id == GUIDE_BUTTON_ID:
+            GuideWindow.open(conn=self.conn)

@@ -343,3 +343,11 @@ msgstr ""
 msgctxt "#32081"
 msgid "This will remove %s's channels, favourites and channel edits."
 msgstr ""
+
+msgctxt "#32082"
+msgid "Guide"
+msgstr ""
+
+msgctxt "#32083"
+msgid "No information"
+msgstr ""

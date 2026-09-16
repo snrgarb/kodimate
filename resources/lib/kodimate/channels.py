@@ -29,6 +29,8 @@ def list_groups(conn):
 
 
 def list_channels(conn, group_id=None, favourites=False, show_hidden=False):
+    """Listable channels, each including 'epg_channel_id' (used by the
+    Guide window to look up programmes via list_programmes())."""
     where = []
     params = []
     if not show_hidden:
@@ -46,7 +48,7 @@ def list_channels(conn, group_id=None, favourites=False, show_hidden=False):
     sql = (
         "SELECT c.id, c.provider_id, c.channel_key, c.name, c.logo_url, "
         "COALESCE(o.number, c.provider_number + p.number_offset, c.position + p.number_offset) "
-        "AS number, COALESCE(o.hidden, 0) AS hidden"
+        "AS number, COALESCE(o.hidden, 0) AS hidden, c.epg_channel_id"
         + _BASE_JOIN
         + ("" if not where else " AND " + " AND ".join(where))
         + " ORDER BY " + order_by
@@ -61,6 +63,34 @@ def list_channels(conn, group_id=None, favourites=False, show_hidden=False):
             'logo_url': row[4],
             'number': row[5],
             'hidden': bool(row[6]),
+            'epg_channel_id': row[7],
         }
         for row in rows
     ]
+
+
+def list_programmes(conn, channel_ids, window_start, window_end):
+    """Programme rows overlapping [window_start, window_end) (ISO UTC
+    strings) per channel id, for channels with a matched EPG channel.
+    Returns {channel_id: [{'start', 'end', 'title'}, ...]}, sorted by start;
+    channel ids with no matching EPG channel or no overlapping rows map to
+    an empty list."""
+    result = {cid: [] for cid in channel_ids}
+    if not channel_ids:
+        return result
+
+    placeholders = ','.join('?' for _ in channel_ids)
+    rows = conn.execute(
+        "SELECT c.id, pr.start, pr.end, pr.title "
+        "FROM channel c "
+        "JOIN epg_source e ON e.provider_id = c.provider_id "
+        "JOIN programme pr ON pr.epg_source_id = e.id "
+        "AND pr.xmltv_channel_id = c.epg_channel_id "
+        "WHERE c.id IN (" + placeholders + ") AND c.epg_channel_id IS NOT NULL "
+        "AND pr.start < ? AND pr.end > ? "
+        "ORDER BY c.id, pr.start",
+        list(channel_ids) + [window_end, window_start],
+    ).fetchall()
+    for row in rows:
+        result[row[0]].append({'start': row[1], 'end': row[2], 'title': row[3]})
+    return result

@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<window>
+    <defaultcontrol always="true">500</defaultcontrol>
+    <coordinates>
+        <system>1</system>
+        <posx>0</posx>
+        <posy>0</posy>
+    </coordinates>
+    <backgroundcolor>ff101010</backgroundcolor>
+    <controls>
+        <control type="label" id="510">
+            <posx>300</posx>
+            <posy>0</posy>
+            <width>270</width>
+            <height>60</height>
+            <label>$INFO[Window.Property(guide_header0)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <textcolor>ffaaaaaa</textcolor>
+        </control>
+        <control type="label" id="511">
+            <posx>570</posx>
+            <posy>0</posy>
+            <width>270</width>
+            <height>60</height>
+            <label>$INFO[Window.Property(guide_header1)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <textcolor>ffaaaaaa</textcolor>
+        </control>
+        <control type="label" id="512">
+            <posx>840</posx>
+            <posy>0</posy>
+            <width>270</width>
+            <height>60</height>
+            <label>$INFO[Window.Property(guide_header2)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <textcolor>ffaaaaaa</textcolor>
+        </control>
+        <control type="label" id="513">
+            <posx>1110</posx>
+            <posy>0</posy>
+            <width>270</width>
+            <height>60</height>
+            <label>$INFO[Window.Property(guide_header3)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <textcolor>ffaaaaaa</textcolor>
+        </control>
+        <control type="label" id="514">
+            <posx>1380</posx>
+            <posy>0</posy>
+            <width>270</width>
+            <height>60</height>
+            <label>$INFO[Window.Property(guide_header4)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <textcolor>ffaaaaaa</textcolor>
+        </control>
+        <control type="label" id="515">
+            <posx>1650</posx>
+            <posy>0</posy>
+            <width>270</width>
+            <height>60</height>
+            <label>$INFO[Window.Property(guide_header5)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <textcolor>ffaaaaaa</textcolor>
+        </control>
+
+        <control type="list" id="500">
+            <posx>0</posx>
+            <posy>60</posy>
+            <width>300</width>
+            <height>980</height>
+            <onleft>500</onleft>
+            <onright>500</onright>
+            <onup>500</onup>
+            <ondown>500</ondown>
+            <onback>9000</onback>
+            <itemlayout width="300" height="98">
+                <control type="label">
+                    <posx>12</posx>
+                    <posy>0</posy>
+                    <width>288</width>
+                    <height>98</height>
+                    <label>$INFO[ListItem.Property(number)] $INFO[ListItem.Label]</label>
+                    <textcolor>ffcccccc</textcolor>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                </control>
+            </itemlayout>
+            <focusedlayout width="300" height="98">
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>300</width>
+                    <height>98</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff3a6ea5</colordiffuse>
+                </control>
+                <control type="label">
+                    <posx>12</posx>
+                    <posy>0</posy>
+                    <width>288</width>
+                    <height>98</height>
+                    <label>$INFO[ListItem.Property(number)] $INFO[ListItem.Label]</label>
+                    <textcolor>ffffffff</textcolor>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                </control>
+            </focusedlayout>
+        </control>
+    </controls>
+</window>

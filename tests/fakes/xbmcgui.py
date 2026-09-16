@@ -1,3 +1,5 @@
+ACTION_MOVE_LEFT = 1
+ACTION_MOVE_RIGHT = 2
 ACTION_MOVE_UP = 3
 ACTION_MOVE_DOWN = 4
 ACTION_SELECT_ITEM = 7
@@ -85,6 +87,80 @@ class Control(object):
         return self._items[self._selected]
 
 
+class BaseControl(object):
+    def __init__(self, x=0, y=0, width=0, height=0):
+        self._x = x
+        self._y = y
+        self._width = width
+        self._height = height
+        self._visible = True
+        self._animations = []
+
+    def setPosition(self, x, y):
+        self._x = x
+        self._y = y
+
+    def getX(self):
+        return self._x
+
+    def getY(self):
+        return self._y
+
+    def setWidth(self, width):
+        self._width = width
+
+    def getWidth(self):
+        return self._width
+
+    def setHeight(self, height):
+        self._height = height
+
+    def getHeight(self):
+        return self._height
+
+    def setVisible(self, visible):
+        self._visible = visible
+
+    def isVisible(self):
+        return self._visible
+
+    def setAnimations(self, animations):
+        self._animations = animations
+
+    def setColorDiffuse(self, color_diffuse):
+        self._color_diffuse = color_diffuse
+
+
+class ControlImage(BaseControl):
+    def __init__(self, x, y, width, height, filename='', aspectRatio=0, colorDiffuse=None):
+        super(ControlImage, self).__init__(x, y, width, height)
+        self._filename = filename
+        self._color_diffuse = colorDiffuse
+
+    def setImage(self, filename, useCache=True):
+        self._filename = filename
+
+    def getImage(self):
+        return self._filename
+
+
+class ControlLabel(BaseControl):
+    def __init__(self, x, y, width, height, label='', font=None, textColor=None,
+                 disabledColor=None, alignment=0, hasPath=False, angle=0):
+        super(ControlLabel, self).__init__(x, y, width, height)
+        self._label = label
+        self._text_color = textColor
+
+    def setLabel(self, label='', font=None, textColor=None, disabledColor=None,
+                 shadowColor=None, focusedColor=None, label2=''):
+        self._label = label
+        if textColor is not None:
+            self._text_color = textColor
+
+    def getLabel(self):
+        return self._label
+
+
 class Window(object):
     def __init__(self, window_id=0):
         self._id = window_id
@@ -101,10 +177,14 @@ class Window(object):
 
 
 class WindowXML(object):
+    WIDTH = 1920
+    HEIGHT = 1080
+
     def __init__(self, *args, **kwargs):
         self._controls = {}
         self._focus_id = 0
         self._window_properties = {}
+        self._added_controls = []
 
     def setProperty(self, key, value):
         self._window_properties[key] = value
@@ -112,11 +192,31 @@ class WindowXML(object):
     def getProperty(self, key):
         return self._window_properties.get(key, '')
 
+    def getWidth(self):
+        return self.WIDTH
+
+    def getHeight(self):
+        return self.HEIGHT
+
     def doModal(self):
         pass
 
     def close(self):
         pass
+
+    def addControl(self, control):
+        self._added_controls.append(control)
+
+    def addControls(self, controls):
+        self._added_controls.extend(controls)
+
+    def removeControl(self, control):
+        if control in self._added_controls:
+            self._added_controls.remove(control)
+
+    def removeControls(self, controls):
+        for control in controls:
+            self.removeControl(control)
 
     def getControl(self, control_id):
         return self._controls.setdefault(control_id, Control())

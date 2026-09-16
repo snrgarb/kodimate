@@ -216,3 +216,48 @@ def test_group_id_filter(tmp_path):
         assert [r['name'] for r in rows] == ["A"]
     finally:
         conn.close()
+
+
+def _epg_source(conn, provider_id, url="http://epg"):
+    cursor = conn.execute(
+        "INSERT INTO epg_source (provider_id, url) VALUES (?, ?)", (provider_id, url)
+    )
+    return cursor.lastrowid
+
+
+def _programme(conn, epg_source_id, xmltv_channel_id, start, end, title):
+    conn.execute(
+        "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (epg_source_id, xmltv_channel_id, start, end, title),
+    )
+
+
+def test_list_programmes_returns_rows_overlapping_window(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        conn.execute("UPDATE channel SET epg_channel_id = 'x1' WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        _programme(conn, eid, "x1", "2026-01-01T12:00:00Z", "2026-01-01T13:00:00Z", "Show A")
+        _programme(conn, eid, "x1", "2026-01-01T09:00:00Z", "2026-01-01T10:00:00Z", "Before window")
+        result = channels.list_programmes(
+            conn, [cid], "2026-01-01T11:00:00Z", "2026-01-01T14:00:00Z"
+        )
+        assert [p['title'] for p in result[cid]] == ["Show A"]
+    finally:
+        conn.close()
+
+
+def test_list_programmes_empty_for_channel_without_epg_match(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        result = channels.list_programmes(
+            conn, [cid], "2026-01-01T11:00:00Z", "2026-01-01T14:00:00Z"
+        )
+        assert result[cid] == []
+    finally:
+        conn.close()
