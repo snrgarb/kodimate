@@ -178,6 +178,36 @@ def set_enabled(conn, provider_id, enabled):
     return _execute_with_retry(conn, _do)
 
 
+def soft_delete_provider(conn, provider_id):
+    """Mark a provider deleted: hides it from list_providers/get_provider/count_enabled."""
+    def _do(conn):
+        deleted_at = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        conn.execute(
+            "UPDATE provider SET enabled = 0, deleted_at = ? WHERE id = ?",
+            (deleted_at, provider_id),
+        )
+
+    return _execute_with_retry(conn, _do)
+
+
+def set_sort_order(conn, ordered_ids):
+    """Persist sort_order = index for each id in ordered_ids, in one transaction."""
+    def _do(conn):
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for index, provider_id in enumerate(ordered_ids):
+                conn.execute(
+                    "UPDATE provider SET sort_order = ? WHERE id = ?",
+                    (index, provider_id),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+    return _execute_with_retry(conn, _do)
+
+
 def normalise_xtream_host(host):
     """Return `scheme://netloc` for host: path/query/fragment and trailing slash stripped."""
     parsed = urlparse(host)

@@ -50,6 +50,16 @@
                     <height>68</height>
                     <textcolor>ffcccccc</textcolor>
                     <label>$INFO[ListItem.Label]</label>
+                    <visible>!String.IsEqual(ListItem.Property(enabled),0)</visible>
+                </control>
+                <control type="label">
+                    <posx>20</posx>
+                    <posy>0</posy>
+                    <width>900</width>
+                    <height>68</height>
+                    <textcolor>ff606060</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>String.IsEqual(ListItem.Property(enabled),0)</visible>
                 </control>
                 <control type="label">
                     <posx>940</posx>
@@ -112,6 +122,16 @@
                     <height>68</height>
                     <textcolor>ffffffff</textcolor>
                     <label>$INFO[ListItem.Label]</label>
+                    <visible>!String.IsEqual(ListItem.Property(enabled),0)</visible>
+                </control>
+                <control type="label">
+                    <posx>20</posx>
+                    <posy>0</posy>
+                    <width>900</width>
+                    <height>68</height>
+                    <textcolor>ff909090</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>String.IsEqual(ListItem.Property(enabled),0)</visible>
                 </control>
                 <control type="label">
                     <posx>940</posx>

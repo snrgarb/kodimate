@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from kodimate import db, providers
+from kodimate import channels, db, providers
 
 
 def _conn(tmp_path):
@@ -517,3 +517,60 @@ def test_validate_accepts_boundary_catchup_correction():
     assert providers.validate_xtream(
         "Name", "http://xc.example", "user", "pass", catchup_correction_hours=12
     ) == []
+
+
+# -- lifecycle: soft delete, sort order ------------------------------------
+
+def test_soft_delete_provider_hides_from_list_and_get_and_count(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = providers.create_m3u_provider(conn, "One", "http://example.com/one.m3u")
+        providers.soft_delete_provider(conn, pid)
+        assert providers.list_providers(conn) == []
+        assert providers.get_provider(conn, pid) is None
+        assert providers.count_enabled(conn) == 0
+        row = conn.execute(
+            "SELECT enabled, deleted_at FROM provider WHERE id = ?", (pid,)
+        ).fetchone()
+        assert row[0] == 0
+        assert row[1] is not None
+    finally:
+        conn.close()
+
+
+def test_set_sort_order_persists_and_channels_follow(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        p1 = providers.create_m3u_provider(conn, "One", "http://example.com/one.m3u")
+        p2 = providers.create_m3u_provider(conn, "Two", "http://example.com/two.m3u")
+        g1 = conn.execute(
+            "INSERT INTO channel_group (provider_id, name) VALUES (?, 'G1')", (p1,)
+        ).lastrowid
+        g2 = conn.execute(
+            "INSERT INTO channel_group (provider_id, name) VALUES (?, 'G2')", (p2,)
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO channel (provider_id, channel_key, name, normalised_name, "
+            "stream_url, position, group_id) VALUES (?, 'a', 'Alpha', 'alpha', "
+            "'http://x/a', 0, ?)",
+            (p1, g1),
+        )
+        conn.execute(
+            "INSERT INTO channel (provider_id, channel_key, name, normalised_name, "
+            "stream_url, position, group_id) VALUES (?, 'b', 'Beta', 'beta', "
+            "'http://x/b', 0, ?)",
+            (p2, g2),
+        )
+
+        providers.set_sort_order(conn, [p2, p1])
+
+        rows = providers.list_providers(conn)
+        assert [r['id'] for r in rows] == [p2, p1]
+
+        channel_rows = channels.list_channels(conn)
+        assert [c['provider_id'] for c in channel_rows] == [p2, p1]
+
+        group_rows = channels.list_groups(conn)
+        assert [g['provider_id'] for g in group_rows] == [p2, p1]
+    finally:
+        conn.close()

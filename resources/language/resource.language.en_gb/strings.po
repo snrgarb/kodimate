@@ -327,3 +327,19 @@ msgstr ""
 msgctxt "#32077"
 msgid "No"
 msgstr ""
+
+msgctxt "#32078"
+msgid "Move"
+msgstr ""
+
+msgctxt "#32079"
+msgid "Delete"
+msgstr ""
+
+msgctxt "#32080"
+msgid "Delete provider?"
+msgstr ""
+
+msgctxt "#32081"
+msgid "This will remove %s's channels, favourites and channel edits."
+msgstr ""

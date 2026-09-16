@@ -349,6 +349,61 @@ def test_xtream_malformed_account_yields_last_error_not_crash(tmp_path):
     assert row[0]
 
 
+def test_refresh_one_purges_soft_deleted_provider(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 1, deleted_at='2024-01-01T00:00:00Z')
+    epg_source_id = conn.execute(
+        "INSERT INTO epg_source (provider_id) VALUES (1)"
+    ).lastrowid
+    conn.execute(
+        "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title) "
+        "VALUES (?, 'c', '2024-01-01T00:00:00Z', '2024-01-01T01:00:00Z', 'T')",
+        (epg_source_id,),
+    )
+    conn.execute("INSERT INTO channel_group (provider_id, name) VALUES (1, 'G')")
+    conn.execute(
+        "INSERT INTO channel (provider_id, channel_key, name, normalised_name, stream_url) "
+        "VALUES (1, 'k', 'n', 'n', 'http://x')"
+    )
+    conn.execute("INSERT INTO channel_override (provider_id, channel_key) VALUES (1, 'k')")
+    props = FakeProps()
+    notify = FakeNotify()
+    props.set('refresh_request', '1')
+
+    svc = refresh.RefreshService(conn, props, notify, settings=_no_startup_settings())
+    svc.tick()
+
+    assert conn.execute("SELECT COUNT(*) FROM provider WHERE id = 1").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM channel WHERE provider_id = 1").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM channel_group WHERE provider_id = 1").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM channel_override WHERE provider_id = 1").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM epg_source WHERE provider_id = 1").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM programme").fetchone()[0] == 0
+    assert props.get('db_generation') == '1'
+    assert notify.calls == [(1, [1])]
+
+
+def test_config_version_changed_for_gone_provider_not_requeued(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 1)
+    props = FakeProps()
+    props.set('refresh_request', '1;ui')
+
+    def fetcher(source, user_agent):
+        # Simulate the provider being deleted mid-fetch.
+        conn.execute("DELETE FROM provider WHERE id = 1")
+        return _BASIC
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=fetcher,
+        now=lambda: datetime(2024, 1, 1),
+        settings=_no_startup_settings(),
+    )
+    svc.tick()
+
+    assert svc._queue == []
+
+
 def test_deleted_provider_cascaded_at_on_start(tmp_path):
     conn = _make_conn(tmp_path)
     _add_provider(conn, 1, deleted_at='2024-01-01T00:00:00Z')

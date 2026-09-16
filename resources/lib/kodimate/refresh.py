@@ -46,6 +46,18 @@ class RefreshService(object):
 
     # -- startup ---------------------------------------------------------
 
+    def _purge_provider(self, provider_id):
+        self.conn.execute(
+            "DELETE FROM programme WHERE epg_source_id IN "
+            "(SELECT id FROM epg_source WHERE provider_id = ?)",
+            (provider_id,),
+        )
+        for table in ('epg_source', 'channel_group', 'channel', 'channel_override'):
+            self.conn.execute(
+                "DELETE FROM {0} WHERE provider_id = ?".format(table), (provider_id,)
+            )
+        self.conn.execute("DELETE FROM provider WHERE id = ?", (provider_id,))
+
     def on_start(self):
         self.conn.execute("DELETE FROM programme_staging")
 
@@ -55,16 +67,7 @@ class RefreshService(object):
             ).fetchall()
         ]
         for provider_id in deleted_ids:
-            self.conn.execute(
-                "DELETE FROM programme WHERE epg_source_id IN "
-                "(SELECT id FROM epg_source WHERE provider_id = ?)",
-                (provider_id,),
-            )
-            for table in ('epg_source', 'channel_group', 'channel', 'channel_override'):
-                self.conn.execute(
-                    "DELETE FROM {0} WHERE provider_id = ?".format(table), (provider_id,)
-                )
-            self.conn.execute("DELETE FROM provider WHERE id = ?", (provider_id,))
+            self._purge_provider(provider_id)
         if deleted_ids:
             self.generation += 1
 
@@ -189,7 +192,16 @@ class RefreshService(object):
 
     def _refresh_one(self, provider_id, requested_by_ui):
         row = self._fetch_provider_row(provider_id)
-        if row is None or not row['enabled'] or row['deleted_at']:
+        if row is None:
+            return
+        if row['deleted_at']:
+            self._purge_provider(provider_id)
+            self.generation += 1
+            self.props.set('db_generation', str(self.generation))
+            self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            self.notify(self.generation, [provider_id])
+            return
+        if not row['enabled']:
             return
 
         config_version = row['config_version']

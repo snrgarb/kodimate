@@ -36,6 +36,10 @@ _STR_REFRESH_NOW = 32033
 _STR_ENABLE = 32034
 _STR_DISABLE = 32035
 _STR_EXPIRES = 32051
+_STR_MOVE = 32078
+_STR_DELETE = 32079
+_STR_DELETE_HEADING = 32080
+_STR_DELETE_MESSAGE = 32081
 
 
 def _format_relative_time(addon, rel):
@@ -58,6 +62,10 @@ class ProvidersWindow(BaseWindow):
         self._addon = xbmcaddon.Addon()
         self._pending = ipc.PendingRequests(timeout_seconds=_SERVICE_TIMEOUT_SECONDS)
         self._stop = threading.Event()
+        self._move_provider_id = None
+        self._move_order = None
+        self._move_original_order = None
+        self._render_lock = threading.Lock()
         self._render()
         if not providers.list_providers(self.conn):
             self.setFocusId(ADD_BUTTON_ID)
@@ -67,6 +75,16 @@ class ProvidersWindow(BaseWindow):
 
     def onAction(self, action):
         action_id = action.getId()
+        if self._move_provider_id is not None:
+            if action_id in (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU):
+                self._cancel_move()
+                return
+            if action_id == xbmcgui.ACTION_MOVE_UP:
+                self._shift_move(-1)
+                return
+            if action_id == xbmcgui.ACTION_MOVE_DOWN:
+                self._shift_move(1)
+                return
         if action_id in (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU):
             self.close()
             return
@@ -79,7 +97,10 @@ class ProvidersWindow(BaseWindow):
         elif control_id == REFRESH_ALL_BUTTON_ID:
             self._refresh_all()
         elif control_id == LIST_ID:
-            self._edit_selected()
+            if self._move_provider_id is not None:
+                self._drop_move()
+            else:
+                self._edit_selected()
 
     def close(self):
         self._stop.set()
@@ -87,8 +108,11 @@ class ProvidersWindow(BaseWindow):
             self._poll_thread.join(_POLL_JOIN_TIMEOUT_SECONDS)
         super(ProvidersWindow, self).close()
 
-    def _render(self):
+    def _render(self, order=None):
         rows = providers.list_providers(self.conn)
+        if order is not None:
+            by_id = {row['id']: row for row in rows}
+            rows = [by_id[i] for i in order if i in by_id]
         control = self.getControl(LIST_ID)
         control.reset()
         refreshing = set(ipc.refreshing_ids())
@@ -185,6 +209,10 @@ class ProvidersWindow(BaseWindow):
         else:
             options.append(self._addon.getLocalizedString(_STR_ENABLE))
             actions.append('enable')
+        options.append(self._addon.getLocalizedString(_STR_MOVE))
+        actions.append('move')
+        options.append(self._addon.getLocalizedString(_STR_DELETE))
+        actions.append('delete')
         choice = xbmcgui.Dialog().contextmenu(options)
         if choice is None or choice < 0:
             return
@@ -196,10 +224,65 @@ class ProvidersWindow(BaseWindow):
             self._render()
             if needs_refresh:
                 self._request_refresh([provider_id])
+        elif action == 'move':
+            self._start_move(provider_id)
+        elif action == 'delete':
+            self._delete_provider(provider_id, row)
+
+    def _start_move(self, provider_id):
+        with self._render_lock:
+            order = [row['id'] for row in providers.list_providers(self.conn)]
+            self._move_order = order
+            self._move_original_order = list(order)
+            self._move_provider_id = provider_id
+
+    def _shift_move(self, delta):
+        with self._render_lock:
+            index = self._move_order.index(self._move_provider_id)
+            new_index = index + delta
+            if new_index < 0 or new_index >= len(self._move_order):
+                return
+            self._move_order[index], self._move_order[new_index] = \
+                self._move_order[new_index], self._move_order[index]
+            self._render(order=self._move_order)
+            self.getControl(LIST_ID).selectItem(new_index)
+
+    def _drop_move(self):
+        with self._render_lock:
+            moved_id = self._move_provider_id
+            providers.set_sort_order(self.conn, self._move_order)
+            order = self._move_order
+            self._move_provider_id = None
+            self._move_order = None
+            self._move_original_order = None
+            self._render()
+            self.getControl(LIST_ID).selectItem(order.index(moved_id))
+
+    def _cancel_move(self):
+        with self._render_lock:
+            moved_id = self._move_provider_id
+            order = self._move_original_order
+            self._move_provider_id = None
+            self._move_order = None
+            self._move_original_order = None
+            self._render(order=order)
+            self.getControl(LIST_ID).selectItem(order.index(moved_id))
+
+    def _delete_provider(self, provider_id, row):
+        heading = self._addon.getLocalizedString(_STR_DELETE_HEADING)
+        message = self._addon.getLocalizedString(_STR_DELETE_MESSAGE) % row['name']
+        if not xbmcgui.Dialog().yesno(heading, message):
+            return
+        providers.soft_delete_provider(self.conn, provider_id)
+        self._render()
+        if not providers.list_providers(self.conn):
+            self.setFocusId(ADD_BUTTON_ID)
+        self._request_refresh([provider_id])
 
     def _poll_loop(self):
         last_refreshing = None
         last_generation = None
+        render_pending = False
         while not self._stop.is_set():
             time.sleep(_POLL_INTERVAL_SECONDS)
             if self._stop.is_set():
@@ -208,11 +291,16 @@ class ProvidersWindow(BaseWindow):
                 refreshing = ipc.refreshing_ids()
                 generation = ipc.db_generation()
                 self._pending.observe(refreshing, generation)
-                changed = refreshing != last_refreshing or generation != last_generation
-                if changed:
-                    last_refreshing = refreshing
-                    last_generation = generation
-                    self._render()
+                with self._render_lock:
+                    if self._move_provider_id is not None:
+                        render_pending = True
+                    else:
+                        changed = refreshing != last_refreshing or generation != last_generation
+                        if changed or render_pending:
+                            last_refreshing = refreshing
+                            last_generation = generation
+                            self._render()
+                            render_pending = False
                 self._check_timeouts()
                 self._check_results()
             except Exception:
