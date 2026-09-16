@@ -30,6 +30,7 @@ _NOW_LINE_RELPATH = 'resources/skins/Main/media/white.png'
 
 _TEXT_COLOR = 'FFCCCCCC'
 _CURSOR_TEXT_COLOR = 'FFFFFFFF'
+_PAST_TEXT_COLOR = 'FF808080'
 
 
 class GuideWindow(BaseWindow):
@@ -73,6 +74,18 @@ class GuideWindow(BaseWindow):
             return
         if action_id in (xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN):
             self._handle_vertical_move()
+            return
+        if action_id in (xbmcgui.ACTION_PAGE_UP, xbmcgui.ACTION_PAGE_DOWN):
+            self._handle_vertical_move()
+            return
+        if action_id == xbmcgui.ACTION_NEXT_ITEM:
+            self._skip_viewport(guide.SKIP_HOURS)
+            return
+        if action_id == xbmcgui.ACTION_PREV_ITEM:
+            self._skip_viewport(-guide.SKIP_HOURS)
+            return
+        if action_id == xbmcgui.ACTION_REMOTE_0:
+            self._jump_to_now()
             return
 
     def onClick(self, control_id):
@@ -191,6 +204,7 @@ class GuideWindow(BaseWindow):
         selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
         self._top_row = guide.compute_top_row(self._top_row, selected)
         focused_row = selected - self._top_row
+        now = datetime.utcnow()
 
         self._update_header()
         self._row_cells = []
@@ -210,6 +224,8 @@ class GuideWindow(BaseWindow):
                 )
                 y = _HEADER_HEIGHT + row * _ROW_HEIGHT
                 row_pool = self._pool[row]
+                cursor_cell = guide.resolve_cursor(layout_cells, self._cursor_time) \
+                    if row == focused_row else None
                 for col, cell in enumerate(layout_cells):
                     if col >= _POOL_COLS:
                         log.log(
@@ -217,9 +233,9 @@ class GuideWindow(BaseWindow):
                             % (row, _POOL_COLS), xbmc.LOGWARNING,
                         )
                         break
-                    is_cursor = row == focused_row and cell['start'] <= self._cursor_time < cell['end']
+                    is_cursor = cell is cursor_cell
                     image, label = row_pool[col]
-                    self._set_cell((image, label), cell, y, is_cursor)
+                    self._set_cell((image, label), cell, y, is_cursor, now)
                     to_show.append((image, label))
                     cells.append(dict(cell, pool_index=col))
 
@@ -244,9 +260,16 @@ class GuideWindow(BaseWindow):
             label.setVisible(True)
         self._update_now_line()
 
-    def _set_cell(self, pool_entry, cell, y, is_cursor):
+    def _label_color_for(self, cell, now, is_cursor):
+        if is_cursor:
+            return _CURSOR_TEXT_COLOR
+        if cell['end'] <= now and cell['title'] != self._no_info_title:
+            return _PAST_TEXT_COLOR
+        return _TEXT_COLOR
+
+    def _set_cell(self, pool_entry, cell, y, is_cursor, now):
         image, label = pool_entry
-        text_color = _CURSOR_TEXT_COLOR if is_cursor else _TEXT_COLOR
+        text_color = self._label_color_for(cell, now, is_cursor)
         image.setPosition(cell['x'] + _LEFT_COL_WIDTH, y)
         image.setWidth(max(1, cell['width'] - 2))
         image.setHeight(_ROW_HEIGHT - 2)
@@ -293,31 +316,73 @@ class GuideWindow(BaseWindow):
                 return cell
         return None
 
+    def _clamp_bounds(self, now):
+        floor = guide.round_down_30_local(now - timedelta(days=guide.RETENTION_DAYS), self._tz)
+        ceiling = guide.round_down_30_local(now + timedelta(days=guide.HORIZON_DAYS), self._tz) \
+            - timedelta(hours=guide.VISIBLE_HOURS)
+        return floor, ceiling
+
     def _move_cursor_horizontal(self, direction):
         focused_row = self._focused_row_index()
-        programmes = self._channel_programmes(self._top_row + focused_row)
+        channel_index = self._top_row + focused_row
+        programmes = self._channel_programmes(channel_index)
         target_start = guide.move_cursor_horizontal(programmes, self._cursor_time, direction)
         if target_start is None:
             return
-        if guide.needs_viewport_jump(target_start, self._viewport_start):
-            self._viewport_start = guide.round_down_30_local(target_start, self._tz)
-            self._cursor_time = target_start
-            self._load_programmes()
-            self._relayout(anim_dx=_ANIM_SLIDE_PX if direction > 0 else -_ANIM_SLIDE_PX)
+        target = guide.programme_at(programmes, target_start)
+        floor, ceiling = self._clamp_bounds(datetime.utcnow())
+        new_viewport_start = guide.scroll_for_target(
+            self._viewport_start, target['start'], target['end'], direction, self._tz, floor, ceiling
+        )
+        if new_viewport_start is None:
+            old_time = self._cursor_time
+            new_time = max(target['start'], self._viewport_start)
+            self._cursor_time = new_time
+            if not self._swap_cursor_cell(focused_row, old_time, new_time):
+                self._relayout()
             return
-        old_time = self._cursor_time
-        self._cursor_time = target_start
-        if not self._swap_cursor_cell(focused_row, old_time, target_start):
-            self._relayout()
+        self._viewport_start = new_viewport_start
+        self._load_programmes()
+        axis = max(target['start'], new_viewport_start)
+        end = guide.viewport_end(new_viewport_start)
+        if axis >= end:
+            # Even a page-capped scroll didn't bring the target fully into
+            # view: land on the actual on-screen cell nearest the new
+            # viewport's end (guaranteed to start before it) rather than an
+            # arbitrary offset.
+            row_programmes = self._channel_programmes(channel_index)
+            cells = guide.cell_layout(row_programmes, new_viewport_start, _GRID_WIDTH, self._no_info_title)
+            axis = cells[-1]['start']
+        self._cursor_time = axis
+        self._relayout(anim_dx=_ANIM_SLIDE_PX if direction > 0 else -_ANIM_SLIDE_PX)
+
+    def _skip_viewport(self, hours):
+        offset = self._cursor_time - self._viewport_start
+        now = datetime.utcnow()
+        new_start = guide.clamp_viewport(self._viewport_start + timedelta(hours=hours), now, self._tz)
+        self._viewport_start = new_start
+        self._cursor_time = new_start + offset
+        self._load_programmes()
+        self._relayout(anim_dx=_ANIM_SLIDE_PX if hours > 0 else -_ANIM_SLIDE_PX)
+
+    def _jump_to_now(self):
+        now = datetime.utcnow()
+        new_start = guide.round_down_30_local(now, self._tz)
+        anim_dx = _ANIM_SLIDE_PX if new_start >= self._viewport_start else -_ANIM_SLIDE_PX
+        self._viewport_start = new_start
+        self._cursor_time = now
+        self._load_programmes()
+        self._relayout(anim_dx=anim_dx)
 
     def _swap_cursor_cell(self, row, old_time, new_time):
         old_cell = self._find_cell(row, old_time)
         new_cell = self._find_cell(row, new_time)
         if old_cell is None or new_cell is None:
             return False
+        now = datetime.utcnow()
         old_pool = self._pool[row][old_cell['pool_index']]
         old_pool[0].setColorDiffuse('FF202020')
-        old_pool[1].setLabel(old_cell['title'], textColor=_TEXT_COLOR)
+        old_pool[1].setLabel(old_cell['title'], textColor=self._label_color_for(old_cell, now, False))
         new_pool = self._pool[row][new_cell['pool_index']]
         new_pool[0].setColorDiffuse('FF3A6EA5')
         new_pool[1].setLabel(new_cell['title'], textColor=_CURSOR_TEXT_COLOR)
@@ -343,26 +408,23 @@ class GuideWindow(BaseWindow):
 
         old_row = prev_selected - prev_top
         new_row = selected - prev_top
-        target_programmes = self._channel_programmes(self._top_row + new_row)
-        target_start = guide.move_cursor_vertical(target_programmes, self._cursor_time)
-        if target_start is None:
-            self._last_selected = selected
-            self._relayout()
-            return
-        self._cursor_time = target_start
         if not self._swap_cursor_row(old_row, new_row):
             self._relayout()
         self._last_selected = selected
 
     def _swap_cursor_row(self, old_row, new_row):
-        old_cell = self._find_cell(old_row, self._cursor_time)
-        new_cell = self._find_cell(new_row, self._cursor_time)
+        # Rule B: the travel axis (self._cursor_time) is never changed by
+        # Up/Down; only the target row's cell is resolved against it.
+        new_cells = self._row_cells[new_row] if 0 <= new_row < len(self._row_cells) else []
+        new_cell = guide.move_cursor_vertical(new_cells, self._cursor_time)
         if new_cell is None:
             return False
+        now = datetime.utcnow()
+        old_cell = self._find_cell(old_row, self._cursor_time)
         if old_cell is not None:
             old_pool = self._pool[old_row][old_cell['pool_index']]
             old_pool[0].setColorDiffuse('FF202020')
-            old_pool[1].setLabel(old_cell['title'], textColor=_TEXT_COLOR)
+            old_pool[1].setLabel(old_cell['title'], textColor=self._label_color_for(old_cell, now, False))
         new_pool = self._pool[new_row][new_cell['pool_index']]
         new_pool[0].setColorDiffuse('FF3A6EA5')
         new_pool[1].setLabel(new_cell['title'], textColor=_CURSOR_TEXT_COLOR)

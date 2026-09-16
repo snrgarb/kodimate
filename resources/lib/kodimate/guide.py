@@ -6,6 +6,12 @@ from datetime import datetime, timedelta, timezone
 VISIBLE_ROWS = 10
 VISIBLE_HOURS = 3
 
+RETENTION_DAYS = 7  # Programme retention is fixed at 7 days elsewhere too.
+# HORIZON_DAYS is a fixed guess at how far ahead EPG data is ever available,
+# not derived from real per-provider data availability.
+HORIZON_DAYS = 7
+SKIP_HOURS = 12
+
 _ISO_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
 
 
@@ -97,15 +103,66 @@ def move_cursor_horizontal(programmes, cursor_time, direction):
     return programmes[target_index]['start']
 
 
-def move_cursor_vertical(target_programmes, cursor_time):
-    """Start time of the programme containing cursor_time on the target
-    row, or None if the target row has no programme at that time."""
-    current = programme_at(target_programmes, cursor_time)
-    return current['start'] if current else None
+def resolve_cursor(cells, axis_time):
+    """The cell (from a cell_layout-produced list) containing axis_time; if
+    none matches exactly (e.g. a gap between programmes), fall back to
+    whichever cell is nearest. cells must be non-empty."""
+    for cell in cells:
+        if cell['start'] <= axis_time < cell['end']:
+            return cell
+
+    def _distance(cell):
+        if axis_time < cell['start']:
+            return cell['start'] - axis_time
+        return axis_time - cell['end']
+
+    return min(cells, key=_distance)
+
+
+def move_cursor_vertical(target_cells, axis_time):
+    """Cell (from a cell_layout list) on the target row containing the
+    travel-axis time, or None if the target row has no cells at all. Never
+    moves the travel axis itself -- callers keep it unchanged."""
+    if not target_cells:
+        return None
+    return resolve_cursor(target_cells, axis_time)
 
 
 def needs_viewport_jump(target_start, viewport_start):
     return target_start < viewport_start or target_start >= viewport_end(viewport_start)
+
+
+def clamp_viewport(viewport_start, now, tz=None):
+    """Clamp viewport_start to the EPG data range: no earlier than the
+    retention floor, no later than a fixed horizon ceiling (rule D)."""
+    floor = round_down_30_local(now - timedelta(days=RETENTION_DAYS), tz)
+    ceiling = round_down_30_local(now + timedelta(days=HORIZON_DAYS), tz) - timedelta(hours=VISIBLE_HOURS)
+    if viewport_start < floor:
+        return floor
+    if viewport_start > ceiling:
+        return ceiling
+    return viewport_start
+
+
+def scroll_for_target(viewport_start, target_start, target_end, direction, tz, floor, ceiling):
+    """New viewport_start to bring an off-screen target programme's near
+    edge into view (30-minute aligned, capped at one page per call, then
+    clamped to floor/ceiling), or None if the target already overlaps the
+    current viewport."""
+    end = viewport_end(viewport_start)
+    if target_end > viewport_start and target_start < end:
+        return None
+    page = timedelta(hours=VISIBLE_HOURS)
+    rounded = round_down_30_local(target_start, tz)
+    if direction > 0:
+        new_start = min(rounded, viewport_start + page)
+    else:
+        new_start = max(rounded, viewport_start - page)
+    if new_start < floor:
+        new_start = floor
+    if new_start > ceiling:
+        new_start = ceiling
+    return new_start
 
 
 def compute_top_row(top_row, selected, visible_rows=VISIBLE_ROWS):

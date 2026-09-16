@@ -187,6 +187,286 @@ def test_up_down_keeps_time_position_across_channels(tmp_path):
         conn.close()
 
 
+def test_down_over_long_past_starting_programme_does_not_move_viewport(tmp_path):
+    # Regression for bug 1: Alpha's current programme started hours before
+    # the viewport; Down to Beta must not carry that old start time or
+    # scroll the viewport.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        _channel(conn, pid, "b", "Beta", 1, epg_channel_id="x2")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start - timedelta(hours=5)),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Old Movie")
+        _programme(conn, eid, "x2", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "B Show")
+        window._load_programmes()
+        window._relayout()
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
+
+        assert window._viewport_start == viewport_start
+        assert window._cursor_time == viewport_start
+        row_index = 1 - window._top_row
+        cells = window._row_cells[row_index]
+        cursor_cell = next(c for c in cells if c['start'] <= window._cursor_time < c['end'])
+        assert cursor_cell['title'] == 'B Show'
+    finally:
+        conn.close()
+
+
+def test_left_onto_several_hour_programme_scrolls_capped_at_one_page(tmp_path):
+    # Regression for bug 2: Left onto an off-screen multi-hour programme
+    # must scroll by at most one page, not snap to the programme's start.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        t0 = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(t0 - timedelta(hours=4)),
+                   guide.format_iso(t0), "Long Movie")
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(t0 + timedelta(hours=1)),
+                   "Current")
+        window._load_programmes()
+        window._relayout()
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+
+        assert window._viewport_start == t0 - timedelta(hours=guide.VISIBLE_HOURS)
+        assert window._cursor_time == window._viewport_start
+    finally:
+        conn.close()
+
+
+def test_next_item_and_prev_item_skip_twelve_hours(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        t0 = window._viewport_start
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_NEXT_ITEM))
+        assert window._viewport_start == t0 + timedelta(hours=guide.SKIP_HOURS)
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_PREV_ITEM))
+        assert window._viewport_start == t0
+    finally:
+        conn.close()
+
+
+def test_skip_clamps_at_ceiling(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        now = datetime.utcnow()
+        _, ceiling = window._clamp_bounds(now)
+
+        for _ in range(40):  # far more than enough to hit the ceiling
+            window.onAction(xbmcgui.Action(xbmcgui.ACTION_NEXT_ITEM))
+
+        assert window._viewport_start <= ceiling
+    finally:
+        conn.close()
+
+
+def test_remote_0_jumps_to_now(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_NEXT_ITEM))
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_REMOTE_0))
+
+        assert window._viewport_start == guide.round_down_30_local(window._cursor_time, window._tz)
+    finally:
+        conn.close()
+
+
+def test_page_up_page_down_route_into_vertical_move(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        _channel(conn, pid, "b", "Beta", 1)
+        window = _window(conn)
+
+        list_control = window.getControl(CHANNEL_LIST_ID)
+        list_control.selectItem(1)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAGE_DOWN))
+
+        assert window._last_selected == 1
+    finally:
+        conn.close()
+
+
+def test_past_cell_is_dimmed_but_cursor_cell_is_not(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        t0 = window._viewport_start
+        now_snapshot = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(now_snapshot), "Past Show")
+        _programme(conn, eid, "x1", guide.format_iso(now_snapshot),
+                   guide.format_iso(t0 + timedelta(hours=2)), "Current Show")
+        window._load_programmes()
+        # Put the travel axis on "Current Show" so "Past Show" is dimmed
+        # without being the cursor cell.
+        window._cursor_time = now_snapshot
+        window._relayout()
+
+        past_image, past_label = window._pool[0][0]
+        current_image, current_label = window._pool[0][1]
+        assert past_label._text_color == 'FF808080'
+        assert current_label._text_color == 'FFFFFFFF'
+    finally:
+        conn.close()
+
+
+def test_no_information_cell_is_never_dimmed(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        window = _window(conn)
+        # No programmes at all -> the whole (past-and-future) viewport
+        # renders as a single "No information" cell that must not dim.
+        window._load_programmes()
+        window._relayout()
+
+        no_info_image, no_info_label = window._pool[0][0]
+        assert no_info_label._text_color != 'FF808080'
+    finally:
+        conn.close()
+
+
+def test_relayout_highlights_nearest_cell_when_axis_in_gap(tmp_path):
+    # Review fix 1: a real gap between two programmes on the focused row
+    # (not the "No information" whole-row case) must still resolve to the
+    # nearest cell, not leave the row with no highlighted cell.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        t0 = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(t0 + timedelta(minutes=30)), "A")
+        _programme(conn, eid, "x1", guide.format_iso(t0 + timedelta(hours=1)),
+                   guide.format_iso(t0 + timedelta(hours=2)), "B")
+        window._load_programmes()
+        # 50 minutes in: 20 minutes past A's end, 10 minutes before B's
+        # start -- B is nearer.
+        window._cursor_time = t0 + timedelta(minutes=50)
+        window._relayout()
+
+        cells = window._row_cells[0]
+        b_cell = next(c for c in cells if c['title'] == 'B')
+        _b_image, b_label = window._pool[0][b_cell['pool_index']]
+        assert b_label._text_color == 'FFFFFFFF'
+    finally:
+        conn.close()
+
+
+def test_swap_cursor_cell_restores_past_color_not_plain_text_color(tmp_path):
+    # Review fix 2: the cheap Left/Right swap path must restore the old
+    # cursor cell to the dimmed past color when it has since ended, not
+    # the plain future/present text color.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        t0 = window._viewport_start
+        now_snapshot = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(now_snapshot), "Past Show")
+        _programme(conn, eid, "x1", guide.format_iso(now_snapshot),
+                   guide.format_iso(t0 + timedelta(hours=2)), "Current Show")
+        window._load_programmes()
+        window._relayout()
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+
+        past_cell = next(c for c in window._row_cells[0] if c['title'] == 'Past Show')
+        _past_image, past_label = window._pool[0][past_cell['pool_index']]
+        assert past_label._text_color == 'FF808080'
+    finally:
+        conn.close()
+
+
+def test_swap_cursor_row_restores_past_color_not_plain_text_color(tmp_path):
+    # Review fix 2, other swap path: Down away from a now-past cell must
+    # restore it to the dimmed past color, not the plain text color.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        _channel(conn, pid, "b", "Beta", 1, epg_channel_id="x2")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        t0 = window._viewport_start
+        now_snapshot = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(now_snapshot), "Past Show")
+        _programme(conn, eid, "x2", guide.format_iso(t0), guide.format_iso(t0 + timedelta(hours=1)), "B Show")
+        window._load_programmes()
+        window._relayout()
+
+        list_control = window.getControl(CHANNEL_LIST_ID)
+        list_control.selectItem(1)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
+
+        past_cell = next(c for c in window._row_cells[0] if c['title'] == 'Past Show')
+        _past_image, past_label = window._pool[0][past_cell['pool_index']]
+        assert past_label._text_color == 'FF808080'
+    finally:
+        conn.close()
+
+
+def test_right_onto_far_off_screen_target_after_capped_scroll_lands_on_last_visible_cell(tmp_path):
+    # Review fix 3: when even a capped one-page scroll doesn't bring the
+    # target programme into view, the travel axis must land on a real
+    # on-screen cell (here, the still-airing previous programme's raw
+    # start), not an arbitrary offset before the new viewport's end. The
+    # real EPG-loading window buffer (VISIBLE_HOURS either side) never lets
+    # a genuinely off-screen-even-after-one-page target load in practice,
+    # so this seeds the programme data directly to exercise the clamp.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        window = _window(conn)
+        t0 = window._viewport_start
+        channel_id = window._channel_rows[0]['id']
+        window._programmes_by_channel = {
+            channel_id: [
+                {'start': t0, 'end': t0 + timedelta(hours=7), 'title': 'Long Show'},
+                {'start': t0 + timedelta(hours=7), 'end': t0 + timedelta(hours=8), 'title': 'Next Show'},
+            ]
+        }
+        window._load_programmes = lambda: None  # keep the seeded wide-range data
+        window._relayout()
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+
+        assert window._viewport_start == t0 + timedelta(hours=guide.VISIBLE_HOURS)
+        assert window._cursor_time == t0
+    finally:
+        conn.close()
+
+
 def test_back_closes_window(tmp_path):
     conn = _conn(tmp_path)
     try:

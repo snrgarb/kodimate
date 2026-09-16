@@ -64,13 +64,36 @@ def test_move_cursor_horizontal_returns_none_at_edge():
     assert guide.move_cursor_horizontal(programmes, datetime(2026, 1, 1, 13, 30), 1) is None
 
 
-def test_move_cursor_vertical_selects_programme_containing_time():
-    target = [_p((12, 0), (13, 0), 'A'), _p((13, 0), (14, 0), 'B')]
-    assert guide.move_cursor_vertical(target, datetime(2026, 1, 1, 13, 15)) == datetime(2026, 1, 1, 13, 0)
+def test_move_cursor_vertical_selects_cell_containing_axis_time():
+    target_cells = [_p((12, 0), (13, 0), 'A'), _p((13, 0), (14, 0), 'B')]
+    cell = guide.move_cursor_vertical(target_cells, datetime(2026, 1, 1, 13, 15))
+    assert cell['title'] == 'B'
+    assert cell['start'] == datetime(2026, 1, 1, 13, 0)
 
 
-def test_move_cursor_vertical_returns_none_when_no_programme_at_time():
+def test_move_cursor_vertical_returns_none_when_target_row_has_no_cells():
     assert guide.move_cursor_vertical([], datetime(2026, 1, 1, 13, 15)) is None
+
+
+def test_move_cursor_vertical_does_not_scroll_long_running_programme_before_viewport():
+    # Regression for bug 1: a programme that started long before the
+    # viewport (e.g. hours ago) must still resolve correctly on the target
+    # row, and the travel axis (viewport_start here) is unaffected.
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((8, 0), (15, 0), 'Movie')]
+    cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
+    cell = guide.move_cursor_vertical(cells, viewport_start)
+    assert cell['title'] == 'Movie'
+    axis_before = viewport_start
+    guide.move_cursor_vertical(cells, axis_before)
+    assert axis_before == viewport_start  # travel axis never mutated by Up/Down
+
+
+def test_resolve_cursor_falls_back_to_nearest_cell_for_a_gap():
+    cells = [_p((12, 0), (13, 0), 'A'), _p((14, 0), (15, 0), 'B')]
+    # 13:40 falls in the gap between A and B; B is nearer.
+    cell = guide.resolve_cursor(cells, datetime(2026, 1, 1, 13, 40))
+    assert cell['title'] == 'B'
 
 
 def test_needs_viewport_jump_true_when_target_outside_window():
@@ -96,3 +119,63 @@ def test_viewport_changed_gate():
     assert guide.viewport_changed(0, 0, start, start) is False
     assert guide.viewport_changed(0, 1, start, start) is True
     assert guide.viewport_changed(0, 0, start, start.replace(hour=13)) is True
+
+
+def test_scroll_for_target_none_when_target_already_visible():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    floor = datetime(2020, 1, 1)
+    ceiling = datetime(2030, 1, 1)
+    result = guide.scroll_for_target(
+        viewport_start, datetime(2026, 1, 1, 13, 0), datetime(2026, 1, 1, 14, 0), 1, None, floor, ceiling
+    )
+    assert result is None
+
+
+def test_scroll_for_target_left_caps_at_one_page_regression_bug2():
+    # Left onto an off-screen 4-hour programme must scroll back by exactly
+    # one page (VISIBLE_HOURS), not snap straight to the programme's start.
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    target_start = datetime(2026, 1, 1, 6, 0)
+    target_end = datetime(2026, 1, 1, 10, 0)
+    floor = datetime(2020, 1, 1)
+    ceiling = datetime(2030, 1, 1)
+    new_start = guide.scroll_for_target(viewport_start, target_start, target_end, -1, None, floor, ceiling)
+    assert new_start == viewport_start - timedelta(hours=guide.VISIBLE_HOURS)
+    # The travel axis lands on the programme's now-visible tail, not its
+    # original start.
+    axis = max(target_start, new_start)
+    assert axis == new_start
+    assert axis != target_start
+
+
+def test_scroll_for_target_right_caps_at_one_page():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    target_start = datetime(2026, 1, 1, 20, 0)
+    target_end = datetime(2026, 1, 1, 21, 0)
+    floor = datetime(2020, 1, 1)
+    ceiling = datetime(2030, 1, 1)
+    new_start = guide.scroll_for_target(viewport_start, target_start, target_end, 1, None, floor, ceiling)
+    assert new_start == viewport_start + timedelta(hours=guide.VISIBLE_HOURS)
+
+
+def test_scroll_for_target_clamped_to_floor_and_ceiling():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    floor = datetime(2026, 1, 1, 11, 0)
+    ceiling = datetime(2026, 1, 1, 13, 0)
+    left = guide.scroll_for_target(
+        viewport_start, datetime(2026, 1, 1, 1, 0), datetime(2026, 1, 1, 2, 0), -1, None, floor, ceiling
+    )
+    assert left == floor
+    right = guide.scroll_for_target(
+        viewport_start, datetime(2026, 1, 2, 1, 0), datetime(2026, 1, 2, 2, 0), 1, None, floor, ceiling
+    )
+    assert right == ceiling
+
+
+def test_clamp_viewport_floor_and_ceiling():
+    now = datetime(2026, 1, 10, 12, 0)
+    floor = guide.round_down_30_local(now - timedelta(days=guide.RETENTION_DAYS), None)
+    ceiling = guide.round_down_30_local(now + timedelta(days=guide.HORIZON_DAYS), None) - timedelta(hours=guide.VISIBLE_HOURS)
+    assert guide.clamp_viewport(floor - timedelta(hours=5), now, None) == floor
+    assert guide.clamp_viewport(ceiling + timedelta(hours=5), now, None) == ceiling
+    assert guide.clamp_viewport(now, now, None) == now
