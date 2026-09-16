@@ -112,6 +112,16 @@ def test_epg_source_registered_from_xmltv_php(tmp_path):
     assert row == ('http://xc.example/xmltv.php?username=user&password=pass',)
 
 
+def test_epg_source_url_percent_encodes_password_with_ampersand(tmp_path):
+    conn = _make_db(tmp_path)
+    conn.execute("UPDATE provider SET xtream_password = ? WHERE id = 1", ('pa&ss',))
+    ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, _CATEGORIES, _STREAMS, '2026-01-01T00:00:00Z'
+    )
+    row = conn.execute("SELECT url FROM epg_source WHERE provider_id = 1").fetchone()
+    assert row == ('http://xc.example/xmltv.php?username=user&password=pa%26ss',)
+
+
 def test_second_refresh_marks_missing_stream_stale(tmp_path):
     conn = _make_db(tmp_path)
     ingest.refresh_xtream_provider(

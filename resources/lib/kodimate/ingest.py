@@ -11,9 +11,10 @@ from collections import Counter, OrderedDict
 from datetime import datetime, timedelta
 
 try:
-    from urllib.parse import urlsplit
+    from urllib.parse import urlsplit, quote
 except ImportError:  # pragma: no cover - Python 2 fallback, unused on target
     from urlparse import urlsplit
+    from urllib import quote
 
 from . import db, m3u, urls
 
@@ -371,7 +372,9 @@ def refresh_xtream_provider(conn, provider_id, account, categories, streams, now
             ),
         )
 
-        epg_url = '{0}/xmltv.php?username={1}&password={2}'.format(host, username, password)
+        epg_url = '{0}/xmltv.php?username={1}&password={2}'.format(
+            host, quote(str(username), safe=''), quote(str(password), safe='')
+        )
         conn.execute(
             "INSERT INTO epg_source (provider_id, url) VALUES (?, ?) "
             "ON CONFLICT(provider_id) DO UPDATE SET url = excluded.url",

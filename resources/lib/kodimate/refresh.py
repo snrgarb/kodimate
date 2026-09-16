@@ -42,6 +42,7 @@ class RefreshService(object):
         self._in_flight = None
         self._startup_done = False
         self._last_sweep = None
+        self._sweep_is_startup = False
 
     # -- startup ---------------------------------------------------------
 
@@ -76,6 +77,17 @@ class RefreshService(object):
         return [
             row[0] for row in self.conn.execute(
                 "SELECT id FROM provider WHERE enabled = 1 AND deleted_at IS NULL"
+            ).fetchall()
+        ]
+
+    def _stale_provider_ids(self):
+        interval_hours = self.settings.get('refresh_interval_hours', 12)
+        cutoff = _iso(self.now() - timedelta(hours=interval_hours))
+        return [
+            row[0] for row in self.conn.execute(
+                "SELECT id FROM provider WHERE enabled = 1 AND deleted_at IS NULL "
+                "AND (last_refresh_at IS NULL OR last_refresh_at < ?)",
+                (cutoff,),
             ).fetchall()
         ]
 
@@ -122,8 +134,10 @@ class RefreshService(object):
         if not self._startup_done:
             self._startup_done = True
             self._last_sweep = self.now()
+            self._sweep_is_startup = True
             return bool(self.settings.get('refresh_on_startup', True))
 
+        self._sweep_is_startup = False
         interval_hours = self.settings.get('refresh_interval_hours', 12)
         if self._last_sweep is not None and \
                 self.now() - self._last_sweep >= timedelta(hours=interval_hours):
@@ -135,7 +149,11 @@ class RefreshService(object):
         self._consume_request()
 
         if self._due_for_sweep():
-            for provider_id in self._enabled_provider_ids():
+            if self._sweep_is_startup:
+                provider_ids = self._stale_provider_ids()
+            else:
+                provider_ids = self._enabled_provider_ids()
+            for provider_id in provider_ids:
                 self._enqueue(provider_id, requested_by_ui=False)
 
         if self._queue and self._in_flight is None:

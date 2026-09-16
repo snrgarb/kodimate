@@ -221,6 +221,65 @@ def test_interval_elapsed_enqueues_all_again(tmp_path):
     assert props.get('db_generation') == '1'
 
 
+def test_startup_sweep_skips_recently_refreshed_provider(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 1)
+    now = datetime(2024, 1, 1, 12, 0, 0)
+    conn.execute(
+        "UPDATE provider SET last_refresh_at = ? WHERE id = ?",
+        (refresh._iso(now - timedelta(hours=1)), 1),
+    )
+    props = FakeProps()
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=lambda s, u: _BASIC,
+        now=lambda: now,
+        settings={'refresh_on_startup': True, 'refresh_interval_hours': 12},
+    )
+    svc.on_start()
+    svc.tick()
+
+    assert svc._queue == []
+    assert props.get('db_generation') == '0'
+
+
+def test_startup_sweep_enqueues_stale_provider(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 1)
+    now = datetime(2024, 1, 1, 12, 0, 0)
+    conn.execute(
+        "UPDATE provider SET last_refresh_at = ? WHERE id = ?",
+        (refresh._iso(now - timedelta(hours=13)), 1),
+    )
+    props = FakeProps()
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=lambda s, u: _BASIC,
+        now=lambda: now,
+        settings={'refresh_on_startup': True, 'refresh_interval_hours': 12},
+    )
+    svc.on_start()
+    svc.tick()
+
+    assert props.get('db_generation') == '1'
+
+
+def test_startup_sweep_enqueues_provider_with_no_prior_refresh(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 1)
+    props = FakeProps()
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=lambda s, u: _BASIC,
+        now=lambda: datetime(2024, 1, 1),
+        settings={'refresh_on_startup': True, 'refresh_interval_hours': 12},
+    )
+    svc.on_start()
+    svc.tick()
+
+    assert props.get('db_generation') == '1'
+
+
 _XTREAM_ACCOUNT_JSON = (
     '{"user_info": {"auth": 1, "status": "Active", "exp_date": null, '
     '"max_connections": "1", "allowed_output_formats": ["ts"]}}'
