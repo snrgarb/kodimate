@@ -115,6 +115,7 @@
                     <posy>4</posy>
                     <width>100</width>
                     <height>60</height>
+                    <aspectratio>keep</aspectratio>
                     <texture fallback="channel-placeholder.png">$INFO[ListItem.Icon]</texture>
                 </control>
                 <control type="label">
@@ -187,6 +188,7 @@
                     <posy>4</posy>
                     <width>100</width>
                     <height>60</height>
+                    <aspectratio>keep</aspectratio>
                     <texture fallback="channel-placeholder.png">$INFO[ListItem.Icon]</texture>
                 </control>
                 <control type="label">
