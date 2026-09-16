@@ -1,6 +1,7 @@
 from kodimate import db
 from kodimate.windows.channel_list import ChannelListWindow, GROUPS_LIST_ID, CHANNELS_LIST_ID, \
     TOGGLE_HIDDEN_ID
+import xbmcgui
 
 
 def _conn(tmp_path):
@@ -78,6 +79,56 @@ def test_show_hidden_toggle_reveals_hidden_row(tmp_path):
         assert labels == ["Alpha", "Beta"]
         beta = channels_control._items[1]
         assert beta.getProperty('hidden') == '1'
+    finally:
+        conn.close()
+
+
+def test_rapid_group_changes_debounce_to_single_render(tmp_path, monkeypatch):
+    conn = _conn(tmp_path)
+    try:
+        _seed(conn)
+        window = _window(conn)
+
+        scheduled = []
+
+        class FakeTimer(object):
+            def __init__(self, interval, function):
+                self.function = function
+                self.cancelled = False
+                scheduled.append(self)
+
+            def start(self):
+                pass
+
+            def cancel(self):
+                self.cancelled = True
+
+        monkeypatch.setattr('kodimate.windows.channel_list.threading.Timer', FakeTimer)
+
+        render_calls = []
+        original_render = window._render_channels
+
+        def counting_render():
+            render_calls.append(1)
+            original_render()
+
+        window._render_channels = counting_render
+
+        window.setFocusId(GROUPS_LIST_ID)
+        groups_control = window.getControl(GROUPS_LIST_ID)
+
+        groups_control.selectItem(1)
+        window.onAction(xbmcgui.Action(3))
+        groups_control.selectItem(2)
+        window.onAction(xbmcgui.Action(3))
+
+        assert len(scheduled) == 2
+        assert scheduled[0].cancelled is True
+        assert render_calls == []
+
+        scheduled[-1].function()
+
+        assert render_calls == [1]
     finally:
         conn.close()
 
