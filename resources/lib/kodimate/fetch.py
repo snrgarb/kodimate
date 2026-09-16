@@ -16,6 +16,10 @@ except ImportError:  # pragma: no cover - Python 2 fallback, unused on target
 # untrusted HTTP response or local file.
 MAX_PLAYLIST_BYTES = 32 * 1024 * 1024
 
+# Some Xtream Codes panels return HTTP 403 to urllib's default User-Agent;
+# always send a real one.
+DEFAULT_USER_AGENT = 'Kodimate/0.0.1'
+
 
 class FetchError(Exception):
     pass
@@ -38,7 +42,7 @@ def fetch_playlist(source, user_agent=None, timeout=20):
     if not source.startswith('http://') and not source.startswith('https://'):
         return _read_local(source)
 
-    headers = {'User-Agent': user_agent} if user_agent else {}
+    headers = {'User-Agent': user_agent if user_agent else DEFAULT_USER_AGENT}
     request = Request(source, headers=headers)
     try:
         response = urlopen(request, timeout=timeout)
