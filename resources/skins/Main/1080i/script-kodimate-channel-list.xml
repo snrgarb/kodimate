@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<window>
+    <defaultcontrol always="true">200</defaultcontrol>
+    <coordinates>
+        <system>1</system>
+        <posx>0</posx>
+        <posy>0</posy>
+    </coordinates>
+    <backgroundcolor>ff101010</backgroundcolor>
+    <controls>
+        <control type="radiobutton" id="300">
+            <posx>80</posx>
+            <posy>40</posy>
+            <width>500</width>
+            <height>60</height>
+            <font>font13</font>
+            <label>$ADDON[script.kodimate 32040]</label>
+            <texturefocus>white.png</texturefocus>
+            <texturenofocus>white.png</texturenofocus>
+            <colordiffuse>ff3a6ea5</colordiffuse>
+            <selected>String.IsEqual(Window.Property(show_hidden),1)</selected>
+            <onup>200</onup>
+            <ondown>200</ondown>
+            <onright>201</onright>
+            <onback>9000</onback>
+        </control>
+        <control type="list" id="200">
+            <posx>80</posx>
+            <posy>120</posy>
+            <width>500</width>
+            <height>880</height>
+            <onup>300</onup>
+            <ondown>200</ondown>
+            <onleft>200</onleft>
+            <onright>201</onright>
+            <onback>9000</onback>
+            <itemlayout height="70" width="500">
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>500</width>
+                    <height>68</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff202020</colordiffuse>
+                </control>
+                <control type="label">
+                    <posx>20</posx>
+                    <posy>0</posy>
+                    <width>460</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ffcccccc</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                </control>
+            </itemlayout>
+            <focusedlayout height="70" width="500">
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>500</width>
+                    <height>68</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff3a6ea5</colordiffuse>
+                </control>
+                <control type="label">
+                    <posx>20</posx>
+                    <posy>0</posy>
+                    <width>460</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ffffffff</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                </control>
+            </focusedlayout>
+        </control>
+        <control type="list" id="201">
+            <posx>620</posx>
+            <posy>40</posy>
+            <width>1220</width>
+            <height>960</height>
+            <onup>201</onup>
+            <ondown>201</ondown>
+            <onleft>200</onleft>
+            <onright>201</onright>
+            <onback>9000</onback>
+            <itemlayout height="70" width="1220">
+                <control type="label">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>120</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ffcccccc</textcolor>
+                    <label>$INFO[ListItem.Label2]</label>
+                    <visible>!String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>120</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ff606060</textcolor>
+                    <label>$INFO[ListItem.Label2]</label>
+                    <visible>String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="image">
+                    <posx>140</posx>
+                    <posy>4</posy>
+                    <width>100</width>
+                    <height>60</height>
+                    <texture fallback="channel-placeholder.png">$INFO[ListItem.Icon]</texture>
+                </control>
+                <control type="label">
+                    <posx>260</posx>
+                    <posy>0</posy>
+                    <width>760</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ffcccccc</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>!String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>260</posx>
+                    <posy>0</posy>
+                    <width>760</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ff606060</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>1040</posx>
+                    <posy>0</posy>
+                    <width>180</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ff606060</textcolor>
+                    <label>$ADDON[script.kodimate 32041]</label>
+                    <visible>String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+            </itemlayout>
+            <focusedlayout height="70" width="1220">
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>1220</width>
+                    <height>68</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff3a6ea5</colordiffuse>
+                </control>
+                <control type="label">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>120</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ffffffff</textcolor>
+                    <label>$INFO[ListItem.Label2]</label>
+                    <visible>!String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>120</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ff606060</textcolor>
+                    <label>$INFO[ListItem.Label2]</label>
+                    <visible>String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="image">
+                    <posx>140</posx>
+                    <posy>4</posy>
+                    <width>100</width>
+                    <height>60</height>
+                    <texture fallback="channel-placeholder.png">$INFO[ListItem.Icon]</texture>
+                </control>
+                <control type="label">
+                    <posx>260</posx>
+                    <posy>0</posy>
+                    <width>760</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ffffffff</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>!String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>260</posx>
+                    <posy>0</posy>
+                    <width>760</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ff606060</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>1040</posx>
+                    <posy>0</posy>
+                    <width>180</width>
+                    <height>68</height>
+                    <font>font13</font>
+                    <textcolor>ff606060</textcolor>
+                    <label>$ADDON[script.kodimate 32041]</label>
+                    <visible>String.IsEqual(ListItem.Property(hidden),1)</visible>
+                </control>
+            </focusedlayout>
+        </control>
+    </controls>
+</window>

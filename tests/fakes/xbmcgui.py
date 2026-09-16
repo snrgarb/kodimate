@@ -19,6 +19,7 @@ class ListItem(object):
         self._label = label
         self._label2 = label2
         self._properties = {}
+        self._art = {}
 
     def setLabel(self, label):
         self._label = label
@@ -37,6 +38,12 @@ class ListItem(object):
 
     def getProperty(self, key):
         return self._properties.get(key, '')
+
+    def setArt(self, art):
+        self._art.update(art)
+
+    def getArt(self, key):
+        return self._art.get(key, '')
 
 
 class Control(object):
@@ -88,8 +95,15 @@ class WindowXML(object):
     def __init__(self, *args, **kwargs):
         self._controls = {}
         self._focus_id = 0
+        self._window_properties = {}
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+    def setProperty(self, key, value):
+        self._window_properties[key] = value
+
+    def getProperty(self, key):
+        return self._window_properties.get(key, '')
 
     def doModal(self):
         pass
