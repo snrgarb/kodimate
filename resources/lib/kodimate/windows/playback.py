@@ -320,6 +320,8 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self._set_progress(fraction)
 
     def _set_progress(self, fraction):
+        if self._stopped():
+            return
         try:
             self.getControl(PROGRESS_FILL_ID).setWidth(int(PROGRESS_WIDTH * fraction))
             self.getControl(PROGRESS_KNOB_ID).setPosition(
@@ -400,13 +402,18 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         while not self._stop_event.wait(1.0):
             self._tick()
 
+    def _stopped(self):
+        return self._stop_event is not None and self._stop_event.is_set()
+
     def _tick(self):
-        if self._stop_event is not None and self._stop_event.is_set():
+        if self._stopped():
             return
         try:
             if not self._playing:
                 return
             self._update_stream_info()
+            if self._stopped():
+                return
             if self.catchup:
                 self._apply_catchup_bar()
                 return
@@ -414,11 +421,15 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             now_prog, _ = osd.now_next(self._programmes, now)
             if now_prog is not None and now_prog['end'] <= now:
                 self._load_programmes()
+            if self._stopped():
+                return
             self._apply_now_next(now)
         except Exception as exc:
             log.debug('Playback OSD tick failed: {0}'.format(exc))
 
     def _update_stream_info(self):
+        if self._stopped():
+            return
         info = osd.format_stream_info(
             xbmc.getInfoLabel('Player.Process(videowidth)'),
             xbmc.getInfoLabel('Player.Process(videoheight)'),
@@ -648,8 +659,8 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self._watcher.stop()
         if self._stop_event is not None:
             self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(1.0)
+        if self._thread is not None and threading.current_thread() is not self._thread:
+            self._thread.join(5.0)
         self._cancel_hide_timer()
         self._cancel_digit_timer()
         super(PlaybackWindow, self).close()

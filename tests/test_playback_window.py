@@ -5,7 +5,9 @@ from datetime import datetime
 import pytest
 
 from kodimate import autoplay, channels, db, playback
-from kodimate.windows.playback import PlaybackWindow, GROUPS_LIST_ID, CHANNELS_LIST_ID
+from kodimate.windows.playback import (
+    PlaybackWindow, GROUPS_LIST_ID, CHANNELS_LIST_ID, PROGRESS_FILL_ID,
+)
 import xbmc
 import xbmcgui
 
@@ -725,9 +727,32 @@ def test_tick_does_nothing_after_close(tmp_path):
     window.close()
 
     window.setProperty('now_title', 'sentinel')
-    window._tick()
+    window.setProperty('stream_res', '')
+    width_before = window.getControl(PROGRESS_FILL_ID).getWidth()
+    xbmc._info_labels['Player.Process(videowidth)'] = '3,840'
+    xbmc._info_labels['Player.Process(videoheight)'] = '2,160'
+    xbmc._info_labels['VideoPlayer.VideoCodec'] = 'hevc'
+    xbmc._info_labels['Player.Process(videofps)'] = '50.000'
+    xbmc._info_labels['VideoPlayer.AudioCodec'] = 'eac3'
+    xbmc._info_labels['VideoPlayer.AudioChannels'] = '6'
+    try:
+        window._tick()
+    finally:
+        xbmc._info_labels.clear()
 
     assert window.getProperty('now_title') == 'sentinel'
+    assert window.getProperty('stream_res') == ''
+    assert window.getControl(PROGRESS_FILL_ID).getWidth() == width_before
+
+
+def test_close_works_when_thread_is_none(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window._thread = None
+
+    window.close()
 
 
 def test_probe_in_flight_discarded_when_aborted_by_zap(tmp_path):
