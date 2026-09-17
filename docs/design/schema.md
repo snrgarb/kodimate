@@ -46,7 +46,7 @@ Same columns as `programme`. Created per EPG refresh, dropped by the swap and at
 
 ## Effective Catch-up Window
 
-`channel.catchup_days`, else `provider.catchup_days_default`. `NULL` at both levels means no Catch-up.
+`channel.catchup_days`, else `provider.catchup_days_default`. `NULL` at both levels means no Catch-up. Ingest stores an Xtream channel's `tv_archive=0` as `catchup_days = 0` (an explicit "no Catch-up" channel value, which beats the provider default), not `NULL`.
 
 ## Live Form
 

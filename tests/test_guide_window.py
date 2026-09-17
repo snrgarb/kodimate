@@ -731,3 +731,174 @@ def test_in_viewport_cursor_move_does_not_touch_animations(tmp_path):
         assert image_b._animations == ['sentinel']
     finally:
         conn.close()
+
+
+# -- catch-up glyph/greying (issue #28) ------------------------------------
+
+def test_playable_past_cell_shows_glyph_and_is_not_greyed(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        conn.execute("UPDATE channel SET catchup_days = 3 WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        t0 = window._viewport_start
+        now_snapshot = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(now_snapshot), "Past Show")
+        _programme(conn, eid, "x1", guide.format_iso(now_snapshot),
+                   guide.format_iso(t0 + timedelta(hours=2)), "Current Show")
+        window._load_programmes()
+        window._cursor_time = now_snapshot  # cursor on "Current Show", not the past cell
+        window._relayout()
+
+        past_label = window._pool[0][0][1]
+        assert past_label.getLabel() == (
+            '[COLOR FFCCCCCC]' + win_guide.CATCHUP_GLYPH + 'Past Show[/COLOR]'
+        )
+    finally:
+        conn.close()
+
+
+def test_unplayable_past_cell_has_no_glyph_and_is_greyed(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        # No catchup_days on channel or provider -> no Catch-up Window.
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        t0 = window._viewport_start
+        now_snapshot = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(now_snapshot), "Past Show")
+        _programme(conn, eid, "x1", guide.format_iso(now_snapshot),
+                   guide.format_iso(t0 + timedelta(hours=2)), "Current Show")
+        window._load_programmes()
+        window._cursor_time = now_snapshot
+        window._relayout()
+
+        past_label = window._pool[0][0][1]
+        assert past_label.getLabel() == '[COLOR FF808080]Past Show[/COLOR]'
+    finally:
+        conn.close()
+
+
+class _FakeDialog(object):
+    opened_with = None
+    result = None
+
+    @classmethod
+    def open(cls, **kwargs):
+        cls.opened_with = kwargs
+        return cls()
+
+
+class _FakePlaybackWindow(object):
+    opened_with = None
+
+    @classmethod
+    def open(cls, **kwargs):
+        cls.opened_with = kwargs
+        return cls()
+
+
+def _guide_window_with_fakes(conn, dialog_result):
+    class _Dialog(_FakeDialog):
+        result = dialog_result
+
+    class _Playback(_FakePlaybackWindow):
+        pass
+
+    class _Window(GuideWindow):
+        dialog_cls = _Dialog
+        playback_cls = _Playback
+
+    window = _Window('script-kodimate-guide.xml', '/addon', 'Main', '1080i', conn=conn)
+    window.onInit()
+    return window, _Dialog, _Playback
+
+
+def test_ok_on_live_cell_opens_dialog_with_watch_live_action_and_dispatches(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, 'watch_live')
+        t0 = window._viewport_start
+        now_snapshot = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(now_snapshot - timedelta(minutes=10)),
+                   guide.format_iso(now_snapshot + timedelta(minutes=10)), "Live Show")
+        window._load_programmes()
+        window._cursor_time = now_snapshot
+        window._relayout()
+
+        window.onClick(CHANNEL_LIST_ID)
+
+        assert dialog_cls.opened_with['actions'] == ['watch_live']
+        assert playback_cls.opened_with is not None
+        assert 'catchup' not in playback_cls.opened_with
+    finally:
+        conn.close()
+
+
+def test_ok_on_live_cell_with_window_dispatches_start_over_as_catchup(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        conn.execute("UPDATE channel SET catchup_days = 3 WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, 'start_over')
+        now_snapshot = datetime.utcnow()
+        start = now_snapshot - timedelta(minutes=10)
+        end = now_snapshot + timedelta(minutes=10)
+        _programme(conn, eid, "x1", guide.format_iso(start), guide.format_iso(end), "Live Show")
+        window._load_programmes()
+        window._cursor_time = now_snapshot
+        window._relayout()
+
+        window.onClick(CHANNEL_LIST_ID)
+
+        assert dialog_cls.opened_with['actions'] == ['watch_live', 'start_over']
+        assert playback_cls.opened_with['catchup']['title'] == 'Live Show'
+        assert playback_cls.opened_with['catchup']['start'] == win_guide._epoch(start)
+    finally:
+        conn.close()
+
+
+def test_ok_on_playable_past_cell_dispatches_play_catchup(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        conn.execute("UPDATE channel SET catchup_days = 3 WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, 'play_catchup')
+        t0 = window._viewport_start
+        now_snapshot = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(now_snapshot), "Past Show")
+        window._load_programmes()
+        window._cursor_time = t0
+        window._relayout()
+
+        window.onClick(CHANNEL_LIST_ID)
+
+        assert dialog_cls.opened_with['actions'] == ['play_catchup']
+        assert playback_cls.opened_with['catchup']['title'] == 'Past Show'
+    finally:
+        conn.close()
+
+
+def test_ok_on_filler_cell_does_not_open_dialog(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+
+        window.onClick(CHANNEL_LIST_ID)
+
+        assert dialog_cls.opened_with is None
+    finally:
+        conn.close()

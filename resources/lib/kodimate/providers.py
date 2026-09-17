@@ -175,6 +175,18 @@ def set_learned_stream_format(conn, provider_id, form):
     return _execute_with_retry(conn, _do)
 
 
+def set_catchup_url_form(conn, provider_id, form):
+    """Persist the Xtream catch-up URL form ('path'/'query') learned from a
+    successful alternate-form retry, when the provider is set to Auto."""
+    def _do(conn):
+        conn.execute(
+            "UPDATE provider SET catchup_url_form = ? WHERE id = ?",
+            (form, provider_id),
+        )
+
+    return _execute_with_retry(conn, _do)
+
+
 def set_enabled(conn, provider_id, enabled):
     """Enable/disable a provider of either kind; returns needs_refresh."""
     def _do(conn):

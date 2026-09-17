@@ -387,3 +387,31 @@ msgstr ""
 msgctxt "#32092"
 msgid "Number entry delay (seconds)"
 msgstr ""
+
+msgctxt "#32093"
+msgid "Catch-up unavailable from %s"
+msgstr ""
+
+msgctxt "#32094"
+msgid "CATCH-UP"
+msgstr ""
+
+msgctxt "#32095"
+msgid "Watch live"
+msgstr ""
+
+msgctxt "#32096"
+msgid "Start Over"
+msgstr ""
+
+msgctxt "#32097"
+msgid "Play Catch-up"
+msgstr ""
+
+msgctxt "#32098"
+msgid "Programme info"
+msgstr ""
+
+msgctxt "#32099"
+msgid "Close"
+msgstr ""

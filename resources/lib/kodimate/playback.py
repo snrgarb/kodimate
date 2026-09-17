@@ -34,7 +34,10 @@ def load_snapshot(conn, provider_id, channel_key):
         "c.position + p.number_offset) AS number, "
         "p.id, p.kind, p.xtream_host, p.xtream_username, p.xtream_password, "
         "p.user_agent, p.stream_format, p.learned_stream_format, "
-        "p.allowed_output_formats, p.max_connections, c.id, c.logo_url "
+        "p.allowed_output_formats, p.max_connections, c.id, c.logo_url, "
+        "p.name, c.catchup_mode, c.catchup_source, c.catchup_correction_hours, "
+        "p.catchup_correction_hours, p.catchup_url_form, "
+        "COALESCE(c.catchup_days, p.catchup_days_default) "
         "FROM channel c "
         "JOIN provider p ON p.id = c.provider_id "
         "LEFT JOIN channel_override o "
@@ -64,6 +67,13 @@ def load_snapshot(conn, provider_id, channel_key):
         'max_connections': row[14],
         'id': row[15],
         'logo_url': row[16],
+        'provider_name': row[17],
+        'catchup_mode': row[18],
+        'catchup_source': row[19],
+        'catchup_correction_hours': row[20],
+        'provider_catchup_correction_hours': row[21],
+        'catchup_url_form': row[22],
+        'catchup_days': row[23],
     }
 
 
@@ -100,7 +110,8 @@ def _classify(probe_status, kind):
 
 class PlaybackSession(object):
     def __init__(self, snapshot, player, probe, scheduler, clock,
-                 persist_learned_form, on_state, logger=None):
+                 persist_learned_form, on_state, logger=None,
+                 catchup=None, persist_catchup_form=None):
         self.snapshot = snapshot
         self.player = player
         self.probe = probe
@@ -109,6 +120,13 @@ class PlaybackSession(object):
         self.persist_learned_form = persist_learned_form
         self.on_state = on_state
         self.logger = logger if logger is not None else log_module
+        self.catchup = catchup
+        self.persist_catchup_form = persist_catchup_form
+        self._catchup_offset_seconds = 0
+        self._catchup_clock_origin = self.clock() if catchup is not None else None
+        self._explicit_catchup_form = (
+            catchup is not None and snapshot.get('catchup_url_form') in ('path', 'query')
+        )
 
         self._lock = threading.Lock()
         self._alive = True
@@ -159,9 +177,12 @@ class PlaybackSession(object):
             self._av_started_at = self.clock()
             self.state = 'playing'
             self._log_attempt('playing')
-            if (self._phase == 'start' and self._attempt_number == 2
-                    and self.snapshot['kind'] == 'xtream' and not self._explicit_format):
-                self.persist_learned_form(self.snapshot['provider_id'], self._form)
+            if self._phase == 'start' and self._attempt_number == 2 and self.snapshot['kind'] == 'xtream':
+                if self.catchup is not None:
+                    if not self._explicit_catchup_form and self.persist_catchup_form is not None:
+                        self.persist_catchup_form(self.snapshot['provider_id'], self._form)
+                elif not self._explicit_format:
+                    self.persist_learned_form(self.snapshot['provider_id'], self._form)
             self.on_state('playing', None)
 
     def on_error(self):
@@ -274,6 +295,8 @@ class PlaybackSession(object):
             self._fail('unavailable')
 
     def _enter_reconnecting(self):
+        if self.catchup is not None and self._av_started_at is not None:
+            self._catchup_offset_seconds += self.clock() - self._av_started_at
         self.player.stop()
         self._debug_attempt_outcome('dropped')
         self._phase = 'reconnect'
@@ -294,6 +317,8 @@ class PlaybackSession(object):
     def _fail(self, reason):
         self._cancel_start_timer()
         self._cancel_reconnect_timer()
+        if self.catchup is not None:
+            reason = 'catchup_unavailable'
         self.state = 'failed'
         self.reason = reason
         self._alive = False
@@ -322,18 +347,61 @@ class PlaybackSession(object):
     def _initial_form(self):
         if self.snapshot['kind'] != 'xtream':
             return None
+        if self.catchup is not None:
+            configured = self.snapshot.get('catchup_url_form')
+            return configured if configured in ('path', 'query') else 'path'
         return urls.live_form(self.snapshot, self.snapshot.get('allowed_output_formats'))
 
     def _next_form_for_attempt2(self):
         if self.snapshot['kind'] == 'xtream':
+            if self.catchup is not None:
+                return 'query' if self._form == 'path' else 'path'
             other = 'm3u8' if self._form == 'ts' else 'ts'
             allowed = self.snapshot.get('allowed_output_formats')
             if other == 'm3u8' and allowed is not None and 'm3u8' not in allowed:
                 return _NO_FALLBACK
             return other
+        if self.catchup is not None:
+            return _NO_FALLBACK
         return self._form
 
+    def _catchup_times(self):
+        start = int(self.catchup['start'] + self._catchup_offset_seconds)
+        end = self.catchup['end']
+        now = int(self.catchup['now'] + (self.clock() - self._catchup_clock_origin))
+        return start, end, now
+
+    def _catchup_url_and_headers(self, form):
+        snapshot = self.snapshot
+        start, end, now = self._catchup_times()
+        if snapshot['kind'] == 'xtream':
+            start_local = urls.xtream_local_start(
+                start, 0, {'catchup_correction_hours': snapshot.get('provider_catchup_correction_hours')},
+            )
+            duration_seconds = max(0, min(end, now) - start)
+            minutes = max(1, duration_seconds // 60)
+            ext = urls.live_form(snapshot, snapshot.get('allowed_output_formats'))
+            url = urls.xtream_catchup_url(
+                snapshot['xtream_host'], snapshot['xtream_username'],
+                snapshot['xtream_password'], snapshot['channel_key'],
+                start_local, minutes, form=form, ext=ext,
+            )
+        else:
+            corrected_start = urls.corrected_start(
+                start, snapshot,
+                {'catchup_correction_hours': snapshot.get('provider_catchup_correction_hours')},
+            )
+            url = urls.m3u_catchup_url(
+                snapshot, corrected_start, min(end, now), now, self.catchup.get('catchup_id'),
+            )
+        headers = dict(snapshot.get('headers') or {})
+        if 'User-Agent' not in headers and snapshot.get('user_agent'):
+            headers['User-Agent'] = snapshot['user_agent']
+        return url, headers
+
     def _url_and_headers(self, form):
+        if self.catchup is not None:
+            return self._catchup_url_and_headers(form)
         snapshot = self.snapshot
         if snapshot['kind'] == 'xtream':
             url = urls.xtream_live_url(

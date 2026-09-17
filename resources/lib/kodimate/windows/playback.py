@@ -28,6 +28,7 @@ _STR_CONNECTION_LIMIT_N = 32089
 _STR_NO_INFO = 32083
 _STR_ALL_CHANNELS = 32038
 _STR_FAVOURITES = 32039
+_STR_CATCHUP_UNAVAILABLE = 32093
 
 _REASON_STRINGS = {
     'unavailable': _STR_UNAVAILABLE,
@@ -70,6 +71,9 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
     number_commit_delay = None
     now_fn = None
     session = None
+    catchup = None
+    persist_catchup_form = None
+    notify = None
 
     def __init__(self, *args, **kwargs):
         for key, value in kwargs.items():
@@ -117,6 +121,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self.clock = time.monotonic
         if self.persist_learned_form is None:
             self.persist_learned_form = self._persist_learned_form
+        if self.persist_catchup_form is None:
+            self.persist_catchup_form = self._persist_catchup_form
+        if self.notify is None:
+            self.notify = self._notify
         if self.osd_hide_seconds is None:
             self.osd_hide_seconds = self._addon_setting_int(
                 'osd_hide_seconds', _DEFAULT_OSD_HIDE_SECONDS
@@ -154,18 +162,27 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
     def _persist_learned_form(self, provider_id, form):
         providers.set_learned_stream_format(self.conn, provider_id, form)
 
+    def _persist_catchup_form(self, provider_id, form):
+        providers.set_catchup_url_form(self.conn, provider_id, form)
+
+    @staticmethod
+    def _notify(heading, message):
+        xbmcgui.Dialog().notification(heading, message)
+
     # -- session lifecycle -------------------------------------------------
 
     def _start_new_session(self):
         self.setProperty('state', 'connecting')
         self.setProperty('status_text', xbmcaddon.Addon().getLocalizedString(_STR_CONNECTING))
         self.setProperty('reason', '')
+        self.setProperty('catchup', '1' if self.catchup else '0')
         self._playing = False
         self._load_channel_info()
         self._show_bar(arm_hide=False)
         self.session = playback.PlaybackSession(
             self.snapshot, self.player, self.probe, self.scheduler, self.clock,
             self.persist_learned_form, self._on_state,
+            catchup=self.catchup, persist_catchup_form=self.persist_catchup_form,
         )
         self.player.attach(self.session)
         self.session.start()
@@ -179,6 +196,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             if snapshot is None:
                 return
             self.snapshot = snapshot
+            self.catchup = None
             self._start_new_session()
 
     def _abort_current_session(self):
@@ -197,8 +215,18 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
     def _on_state(self, state, reason):
         # Called from player callback threads: only setProperty/timer calls
         # here, except the Failed -> auto-open-list transition the spec
-        # requires (issue #27 acceptance criteria).
+        # requires (issue #27 acceptance criteria), and the catch-up
+        # failure toast + close (issue #28), which is only reachable when
+        # self.catchup is set (a catch-up PlaybackSession never reports any
+        # other failure reason).
         addon = xbmcaddon.Addon()
+        if state == 'failed' and reason == 'catchup_unavailable':
+            self.setProperty('state', state)
+            self.setProperty('reason', reason)
+            self.notify('Kodimate', addon.getLocalizedString(_STR_CATCHUP_UNAVAILABLE)
+                        % self.snapshot['provider_name'])
+            self.close()
+            return
         self.setProperty('state', state)
         self.setProperty('reason', reason or '')
         if state == 'connecting':
@@ -225,8 +253,18 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self.setProperty('channel_name', self.snapshot['name'])
         self.setProperty('channel_number', str(self.snapshot['number']))
         self.setProperty('channel_logo', self.snapshot.get('logo_url') or '')
+        if self.catchup:
+            self._apply_catchup_bar()
+            return
         self._load_programmes()
         self._apply_now_next(self.now_fn())
+
+    def _apply_catchup_bar(self):
+        self.setProperty('now_title', self.catchup.get('title') or '')
+        self.setProperty('now_times', osd.format_times(
+            self.catchup['start_dt'], self.catchup['end_dt'], self._tz,
+        ))
+        self.setProperty('next_title', '')
 
     def _load_programmes(self):
         self._programmes = []
@@ -298,7 +336,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         if self._stop_event is not None and self._stop_event.is_set():
             return
         try:
-            if not self._playing or self.getProperty('bar_visible') != '1':
+            if not self._playing or self.getProperty('bar_visible') != '1' or self.catchup:
                 return
             now = self.now_fn()
             now_prog, _ = osd.now_next(self._programmes, now)

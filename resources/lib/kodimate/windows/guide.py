@@ -1,16 +1,23 @@
 # -*- coding: utf-8 -*-
 """GuideWindow: read-only EPG grid, channels down the side, D-pad cursor
-over programme cells (issue #26). OK on a cell does nothing yet."""
+over programme cells (issue #26). OK on a cell opens the shared Programme
+info dialog and dispatches to Watch live / Start Over / Play Catch-up
+playback (issue #28)."""
+import calendar
 from datetime import datetime, timedelta
 
 import xbmc
 import xbmcaddon
 import xbmcgui
 
-from .. import channels, guide, log
+from .. import catchup, channels, guide, log, osd, playback
 from .base import BaseWindow
+from .playback import PlaybackWindow
+from .programme_info import ProgrammeInfoDialog
 
 CHANNEL_LIST_ID = 500
+
+CATCHUP_GLYPH = u'« '
 
 _STR_NO_INFO = 32083
 
@@ -53,6 +60,8 @@ def _colored(title, color):
 class GuideWindow(BaseWindow):
     xmlFile = 'script-kodimate-guide.xml'
     _tz = None  # override in tests/subclasses to fix the local zone
+    dialog_cls = ProgrammeInfoDialog
+    playback_cls = PlaybackWindow
 
     def onInit(self):
         addon = xbmcaddon.Addon()
@@ -105,9 +114,60 @@ class GuideWindow(BaseWindow):
             return
 
     def onClick(self, control_id):
-        # OK on a cell/channel row: no-op (Programme info dialog is a
-        # later ticket).
-        pass
+        if control_id != CHANNEL_LIST_ID:
+            return
+        focused_row = self._focused_row_index()
+        cell = self._find_cell(focused_row, self._cursor_time)
+        if cell is None or cell.get('filler'):
+            return
+        channel_index = self._top_row + focused_row
+        if not (0 <= channel_index < len(self._channel_rows)):
+            return
+        channel_row = self._channel_rows[channel_index]
+        window_days = self._window_days_for_channel(channel_index)
+        now = datetime.utcnow()
+        state = catchup.cell_state(cell['start'], cell['end'], window_days, now)
+        dialog = self.dialog_cls.open(
+            title=cell['title'],
+            times=osd.format_times(cell['start'], cell['end'], self._tz),
+            description=cell.get('description') or '',
+            actions=catchup.actions_for(state, start_over_ok=bool(window_days)),
+        )
+        result = dialog.result
+        if result in ('watch_live', 'start_over', 'play_catchup'):
+            snapshot = playback.load_snapshot(
+                self.conn, channel_row['provider_id'], channel_row['channel_key']
+            )
+            if snapshot is not None:
+                if result == 'watch_live':
+                    self.playback_cls.open(conn=self.conn, snapshot=snapshot)
+                else:
+                    self.playback_cls.open(
+                        conn=self.conn, snapshot=snapshot,
+                        catchup={
+                            'start': _epoch(cell['start']),
+                            'end': _epoch(cell['end']),
+                            'now': _epoch(now),
+                            'catchup_id': self._catchup_id_for_cell(channel_index, cell),
+                            'title': cell['title'],
+                            'start_dt': cell['start'],
+                            'end_dt': cell['end'],
+                        },
+                    )
+        self._relayout()
+
+    def _window_days_for_channel(self, channel_index):
+        if 0 <= channel_index < len(self._channel_rows):
+            return catchup.effective_window_days(
+                self._channel_rows[channel_index].get('catchup_days'), None
+            )
+        return None
+
+    def _catchup_id_for_cell(self, channel_index, cell):
+        for programme in self._channel_programmes(channel_index):
+            if programme['start'] == cell['start'] and programme['end'] == cell['end']:
+                return programme.get('catchup_id')
+        return None
 
     # -- setup -----------------------------------------------------------
 
@@ -193,6 +253,7 @@ class GuideWindow(BaseWindow):
                     'end': guide.parse_iso(row['end']),
                     'title': row['title'] or '',
                     'description': row['description'],
+                    'catchup_id': row.get('catchup_id'),
                 }
                 for row in rows
             ]
@@ -236,6 +297,7 @@ class GuideWindow(BaseWindow):
                 layout_cells = guide.cell_layout(
                     programmes, self._viewport_start, _GRID_WIDTH, self._no_info_title
                 )
+                window_days = self._window_days_for_channel(channel_index)
                 y = _HEADER_HEIGHT + row * _ROW_HEIGHT
                 row_pool = self._pool[row]
                 cursor_cell = guide.resolve_cursor(layout_cells, self._cursor_time) \
@@ -248,8 +310,9 @@ class GuideWindow(BaseWindow):
                         )
                         break
                     is_cursor = cell is cursor_cell
+                    state = self._state_for_cell(cell, window_days, now)
                     image, label, desc_label = row_pool[col]
-                    self._set_cell((image, label, desc_label), cell, y, is_cursor, now)
+                    self._set_cell((image, label, desc_label), cell, y, is_cursor, state)
                     to_show.append((image, label, desc_label))
                     cells.append(dict(cell, pool_index=col))
             self._row_cells.append(cells)
@@ -260,24 +323,34 @@ class GuideWindow(BaseWindow):
             desc_label.setVisible(True)
         self._update_now_line()
 
-    def _label_color_for(self, cell, now, is_cursor):
+    def _state_for_cell(self, cell, window_days, now):
+        if cell['filler']:
+            return 'filler'
+        return catchup.cell_state(cell['start'], cell['end'], window_days, now)
+
+    def _cell_title(self, cell, state):
+        if state == 'past_playable':
+            return CATCHUP_GLYPH + cell['title']
+        return cell['title']
+
+    def _label_color_for(self, cell, state, is_cursor):
         if is_cursor:
             return _CURSOR_TEXT_COLOR
-        if cell['end'] <= now and not cell['filler']:
+        if state == 'past_unplayable':
             return _PAST_TEXT_COLOR
         return _TEXT_COLOR
 
-    def _desc_color_for(self, cell, now, is_cursor):
+    def _desc_color_for(self, cell, state, is_cursor):
         if is_cursor:
             return _DESC_CURSOR_TEXT_COLOR
-        if cell['end'] <= now and not cell['filler']:
+        if state == 'past_unplayable':
             return _DESC_PAST_TEXT_COLOR
         return _DESC_TEXT_COLOR
 
-    def _set_cell(self, pool_entry, cell, y, is_cursor, now):
+    def _set_cell(self, pool_entry, cell, y, is_cursor, state):
         image, label, desc_label = pool_entry
-        text_color = self._label_color_for(cell, now, is_cursor)
-        desc_color = self._desc_color_for(cell, now, is_cursor)
+        text_color = self._label_color_for(cell, state, is_cursor)
+        desc_color = self._desc_color_for(cell, state, is_cursor)
         image.setPosition(cell['x'] + _LEFT_COL_WIDTH, y)
         image.setWidth(max(1, cell['width'] - 2))
         image.setHeight(_ROW_HEIGHT - 2)
@@ -287,7 +360,7 @@ class GuideWindow(BaseWindow):
         label.setPosition(label_x, y)
         label.setWidth(label_width)
         label.setHeight(_TITLE_HEIGHT)
-        label.setLabel(_colored(cell['title'], text_color))
+        label.setLabel(_colored(self._cell_title(cell, state), text_color))
         desc_label.setPosition(label_x, y + _TITLE_HEIGHT)
         desc_label.setWidth(label_width)
         desc_label.setHeight(_ROW_HEIGHT - _TITLE_HEIGHT)
@@ -366,14 +439,19 @@ class GuideWindow(BaseWindow):
         if old_cell is None or new_cell is None:
             return False
         now = datetime.utcnow()
+        window_days = self._window_days_for_channel(self._top_row + row)
+        old_state = self._state_for_cell(old_cell, window_days, now)
+        new_state = self._state_for_cell(new_cell, window_days, now)
         old_pool = self._pool[row][old_cell['pool_index']]
         old_pool[0].setColorDiffuse('FF202020')
-        old_pool[1].setLabel(_colored(old_cell['title'], self._label_color_for(old_cell, now, False)))
-        old_desc_color = self._desc_color_for(old_cell, now, False)
+        old_pool[1].setLabel(_colored(
+            self._cell_title(old_cell, old_state), self._label_color_for(old_cell, old_state, False)
+        ))
+        old_desc_color = self._desc_color_for(old_cell, old_state, False)
         old_pool[2].setLabel(_colored(old_cell['description'], old_desc_color) if old_cell['description'] else '')
         new_pool = self._pool[row][new_cell['pool_index']]
         new_pool[0].setColorDiffuse('FF3A6EA5')
-        new_pool[1].setLabel(_colored(new_cell['title'], _CURSOR_TEXT_COLOR))
+        new_pool[1].setLabel(_colored(self._cell_title(new_cell, new_state), _CURSOR_TEXT_COLOR))
         new_pool[2].setLabel(
             _colored(new_cell['description'], _DESC_CURSOR_TEXT_COLOR) if new_cell['description'] else ''
         )
@@ -410,18 +488,24 @@ class GuideWindow(BaseWindow):
         if new_cell is None:
             return False
         now = datetime.utcnow()
+        new_window_days = self._window_days_for_channel(self._top_row + new_row)
+        new_state = self._state_for_cell(new_cell, new_window_days, now)
         old_cell = self._find_cell(old_row, self._cursor_time)
         if old_cell is not None:
+            old_window_days = self._window_days_for_channel(self._top_row + old_row)
+            old_state = self._state_for_cell(old_cell, old_window_days, now)
             old_pool = self._pool[old_row][old_cell['pool_index']]
             old_pool[0].setColorDiffuse('FF202020')
-            old_pool[1].setLabel(_colored(old_cell['title'], self._label_color_for(old_cell, now, False)))
-            old_desc_color = self._desc_color_for(old_cell, now, False)
+            old_pool[1].setLabel(_colored(
+                self._cell_title(old_cell, old_state), self._label_color_for(old_cell, old_state, False)
+            ))
+            old_desc_color = self._desc_color_for(old_cell, old_state, False)
             old_pool[2].setLabel(
                 _colored(old_cell['description'], old_desc_color) if old_cell['description'] else ''
             )
         new_pool = self._pool[new_row][new_cell['pool_index']]
         new_pool[0].setColorDiffuse('FF3A6EA5')
-        new_pool[1].setLabel(_colored(new_cell['title'], _CURSOR_TEXT_COLOR))
+        new_pool[1].setLabel(_colored(self._cell_title(new_cell, new_state), _CURSOR_TEXT_COLOR))
         new_pool[2].setLabel(
             _colored(new_cell['description'], _DESC_CURSOR_TEXT_COLOR) if new_cell['description'] else ''
         )
@@ -432,3 +516,7 @@ def _abs_path(addon_path, relpath):
     # Python-created controls need absolute texture paths -- bare skin
     # texture names stop resolving for them after any layout mutation.
     return addon_path.rstrip('/') + '/' + relpath
+
+
+def _epoch(dt):
+    return calendar.timegm(dt.utctimetuple())

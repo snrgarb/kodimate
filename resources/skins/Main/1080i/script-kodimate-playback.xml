@@ -84,6 +84,16 @@
             </control>
             <control type="label">
                 <posx>940</posx>
+                <posy>4</posy>
+                <width>200</width>
+                <height>24</height>
+                <font>font13</font>
+                <textcolor>ff3a6ea5</textcolor>
+                <label>$ADDON[script.kodimate 32094]</label>
+                <visible>String.IsEqual(Window.Property(catchup),1)</visible>
+            </control>
+            <control type="label">
+                <posx>940</posx>
                 <posy>30</posy>
                 <width>900</width>
                 <height>40</height>

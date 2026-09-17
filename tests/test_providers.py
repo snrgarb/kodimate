@@ -589,3 +589,18 @@ def test_set_learned_stream_format_writes_column(tmp_path):
         assert row[0] == 'm3u8'
     finally:
         conn.close()
+
+
+def test_set_catchup_url_form_writes_column(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        p1 = providers.create_xtream_provider(conn, "One", "http://x.example", "u", "p")
+
+        providers.set_catchup_url_form(conn, p1, 'query')
+
+        row = conn.execute(
+            "SELECT catchup_url_form FROM provider WHERE id = ?", (p1,)
+        ).fetchone()
+        assert row[0] == 'query'
+    finally:
+        conn.close()

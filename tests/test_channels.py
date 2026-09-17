@@ -77,6 +77,31 @@ def test_numbering_falls_back_to_position_plus_offset_when_no_provider_number(tm
         conn.close()
 
 
+def test_catchup_days_coalesces_channel_over_provider_default(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        conn.execute("UPDATE provider SET catchup_days_default = 5 WHERE id = ?", (pid,))
+        _channel(conn, pid, "a", position=0)
+        conn.execute("UPDATE channel SET catchup_days = 2 WHERE provider_id = ? AND channel_key = 'a'", (pid,))
+        rows = channels.list_channels(conn)
+        assert rows[0]['catchup_days'] == 2
+    finally:
+        conn.close()
+
+
+def test_catchup_days_falls_back_to_provider_default(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        conn.execute("UPDATE provider SET catchup_days_default = 5 WHERE id = ?", (pid,))
+        _channel(conn, pid, "a", position=0)
+        rows = channels.list_channels(conn)
+        assert rows[0]['catchup_days'] == 5
+    finally:
+        conn.close()
+
+
 def test_stale_channel_excluded(tmp_path):
     conn = _conn(tmp_path)
     try:
@@ -264,6 +289,26 @@ def test_list_programmes_description_empty_string_when_null(tmp_path):
             conn, [cid], "2026-01-01T11:00:00Z", "2026-01-01T14:00:00Z"
         )
         assert result[cid][0]['description'] == ""
+    finally:
+        conn.close()
+
+
+def test_list_programmes_includes_catchup_id(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        conn.execute("UPDATE channel SET epg_channel_id = 'x1' WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        conn.execute(
+            "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title, catchup_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (eid, "x1", "2026-01-01T12:00:00Z", "2026-01-01T13:00:00Z", "Show A", "cid-1"),
+        )
+        result = channels.list_programmes(
+            conn, [cid], "2026-01-01T11:00:00Z", "2026-01-01T14:00:00Z"
+        )
+        assert result[cid][0]['catchup_id'] == "cid-1"
     finally:
         conn.close()
 

@@ -344,9 +344,12 @@ def refresh_xtream_provider(conn, provider_id, account, categories, streams, now
             position += 1
             stream_id = str(stream.get('stream_id'))
             tv_archive = m3u._to_int(stream.get('tv_archive'))
-            catchup_days = (
-                m3u._to_int(stream.get('tv_archive_duration')) if tv_archive else None
-            )
+            if tv_archive is None:
+                catchup_days = None
+            elif tv_archive:
+                catchup_days = m3u._to_int(stream.get('tv_archive_duration'))
+            else:
+                catchup_days = 0
 
             conn.execute(
                 """

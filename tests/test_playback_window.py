@@ -705,3 +705,74 @@ def test_on_state_never_blocks_on_window_lock(tmp_path):
     finally:
         release.set()
         holder.join(1.0)
+
+
+# -- catch-up (issue #28) --------------------------------------------------
+
+class RecordingNotify(object):
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, heading, message):
+        self.calls.append((heading, message))
+
+
+def test_catchup_property_set_when_catchup_session(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    start_dt = datetime(2026, 1, 1, 10, 0)
+    end_dt = datetime(2026, 1, 1, 11, 0)
+    catchup = {'start': 0, 'end': 3600, 'now': 3600, 'title': 'Old Show',
+               'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None}
+    window = _window(conn, snapshot, catchup=catchup)
+    window.onInit()
+
+    assert window.getProperty('catchup') == '1'
+    assert window.getProperty('now_title') == 'Old Show'
+    assert window.getProperty('next_title') == ''
+
+
+def test_catchup_failure_toasts_provider_and_closes_without_opening_list(tmp_path):
+    # The addon.getLocalizedString() fake returns a plain "String <id>"
+    # placeholder with no %s slot, so the %-substitution against
+    # provider_name isn't exercised here (same pre-existing limitation as
+    # the untested connection_limit "%d connections" string); this test
+    # covers that notify() is called with the provider snapshot present and
+    # that Failed's list-opening path is skipped for catch-up.
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn)
+    conn.execute("UPDATE provider SET name = 'Acme' WHERE id = ?", (provider_id,))
+    snapshot = playback.load_snapshot(conn, provider_id, snapshot['channel_key'])
+    start_dt = datetime(2026, 1, 1, 10, 0)
+    end_dt = datetime(2026, 1, 1, 11, 0)
+    catchup = {'start': 0, 'end': 3600, 'now': 3600, 'title': 'Old Show',
+               'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None}
+    calls = []
+    notify = lambda heading, message: calls.append((heading, message))
+    window = _window(conn, snapshot, catchup=catchup, probe_results=[401], notify=notify)
+    window.onInit()
+
+    window.session.on_error()
+
+    assert len(calls) == 1
+    assert calls[0][0] == 'Kodimate'
+    assert window.getProperty('list_visible') == '0'
+
+
+def test_zapping_from_catchup_starts_a_live_session(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha', position=0)
+    _channel(conn, provider_id, 'b', name='Bravo', position=1)
+    start_dt = datetime(2026, 1, 1, 10, 0)
+    end_dt = datetime(2026, 1, 1, 11, 0)
+    catchup = {'start': 0, 'end': 3600, 'now': 3600, 'title': 'Old Show',
+               'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None}
+    window = _window(conn, snapshot, catchup=catchup)
+    window.onInit()
+    assert window.getProperty('catchup') == '1'
+
+    window._zap(provider_id, 'b')
+
+    assert window.catchup is None
+    assert window.getProperty('catchup') == '0'
+    assert window.getProperty('channel_name') == 'Bravo'

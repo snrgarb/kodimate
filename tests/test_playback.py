@@ -153,6 +153,189 @@ def _session(snapshot, probe_results=None, persist=None):
     return session, player, scheduler, clock, probe, logger, state, persist
 
 
+def _catchup_xtream_snapshot(**overrides):
+    overrides.setdefault('catchup_url_form', 'auto')
+    overrides.setdefault('provider_catchup_correction_hours', 0)
+    overrides.setdefault('catchup_correction_hours', 0)
+    return _xtream_snapshot(**overrides)
+
+
+def _catchup_m3u_snapshot(**overrides):
+    overrides.setdefault('catchup_mode', 'default')
+    overrides.setdefault('catchup_source', None)
+    overrides.setdefault('provider_catchup_correction_hours', 0)
+    overrides.setdefault('catchup_correction_hours', 0)
+    return _m3u_snapshot(**overrides)
+
+
+def _catchup_session(snapshot, catchup, probe_results=None, persist_catchup=None):
+    player = FakePlayer()
+    scheduler = FakeScheduler()
+    clock = FakeClock()
+    probe = ScriptedProbe(probe_results or [])
+    logger = FakeLogger()
+    state = StateRecorder()
+    persist_learned = RecordingPersist()
+    persist_catchup = persist_catchup if persist_catchup is not None else RecordingPersist()
+    session = playback.PlaybackSession(
+        snapshot, player, probe, scheduler, clock, persist_learned, state, logger=logger,
+        catchup=catchup, persist_catchup_form=persist_catchup,
+    )
+    return session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup
+
+
+def test_catchup_xtream_attempt1_uses_path_form_and_minutes_from_window():
+    catchup = {'start': 1000, 'end': 4600, 'now': 5000}  # 1h programme, all past
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup)
+
+    session.start()
+
+    assert len(player.plays) == 1
+    url = player.plays[0][0]
+    assert '/timeshift/' in url
+    assert url.endswith('.ts')
+    # duration = min(end, now) - start = 4600 - 1000 = 3600s = 60 minutes
+    assert '/60/' in url
+
+
+def test_catchup_xtream_alternate_form_retry_after_transient_probe():
+    catchup = {'start': 1000, 'end': 4600, 'now': 5000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup, probe_results=[404])
+
+    session.start()
+    assert '/timeshift/' in player.plays[0][0]
+
+    session.on_error()
+
+    assert len(player.plays) == 2
+    assert 'streaming/timeshift.php' in player.plays[1][0]
+    assert state.calls[-1] == ('connecting', None)
+
+    session.on_av_started()
+
+    assert state.calls[-1] == ('playing', None)
+    assert persist_catchup.calls == [(7, 'query')]
+    assert persist_learned.calls == []  # never the live-form learner
+
+
+def test_catchup_pinned_form_never_persisted():
+    catchup = {'start': 1000, 'end': 4600, 'now': 5000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(catchup_url_form='path'), catchup, probe_results=[404])
+
+    session.start()
+    session.on_error()
+    session.on_av_started()
+
+    assert persist_catchup.calls == []
+
+
+def test_catchup_m3u_no_retry_fails_catchup_unavailable():
+    catchup = {'start': 1000, 'end': 4600, 'now': 5000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_m3u_snapshot(), catchup, probe_results=['timeout'])
+
+    session.start()
+    session.on_error()
+
+    assert len(player.plays) == 1
+    assert state.calls[-1] == ('failed', 'catchup_unavailable')
+
+
+def test_catchup_login_rejected_still_classifies_but_fails_catchup_unavailable():
+    catchup = {'start': 1000, 'end': 4600, 'now': 5000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup, probe_results=[401])
+
+    session.start()
+    session.on_error()
+
+    assert len(player.plays) == 1  # no second attempt after login_rejected
+    assert state.calls[-1] == ('failed', 'catchup_unavailable')
+
+
+def test_catchup_exhausted_alternate_form_fails_catchup_unavailable():
+    catchup = {'start': 1000, 'end': 4600, 'now': 5000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup, probe_results=[404, 404])
+
+    session.start()
+    session.on_error()
+    session.on_error()
+
+    assert len(player.plays) == 2
+    assert state.calls[-1] == ('failed', 'catchup_unavailable')
+
+
+def test_catchup_drop_reconnects_with_recomputed_start():
+    catchup = {'start': 1000, 'end': 100000, 'now': 5000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup)
+
+    session.start()
+    session.on_av_started()
+    clock.advance(30)  # 30s elapsed while playing -> crosses a minute boundary
+
+    session.on_stopped()  # drop past 5s -> reconnecting
+
+    assert state.calls[-1] == ('reconnecting', None)
+    plays_before = len(player.plays)
+    scheduler.advance(0)
+
+    assert len(player.plays) == plays_before + 1
+    new_url = player.plays[-1][0]
+    # New start = 1000 (original) + 30 (elapsed) = 1030 -> local start
+    # advances by a minute; just confirm the URL differs from attempt 1's.
+    assert new_url != player.plays[0][0]
+
+
+def test_catchup_reconnect_exhaustion_fails_catchup_unavailable():
+    catchup = {'start': 1000, 'end': 100000, 'now': 5000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_m3u_snapshot(), catchup)
+
+    session.start()
+    session.on_av_started()
+    clock.advance(10)
+    session.on_stopped()
+    scheduler.advance(0)
+    session.on_stopped()
+    scheduler.advance(3)
+    session.on_stopped()
+    scheduler.advance(6)
+    session.on_stopped()
+
+    assert state.calls[-1] == ('failed', 'catchup_unavailable')
+
+
+def test_catchup_xtream_uses_provider_correction_not_channel_correction():
+    # programme starts at epoch 3600 = 1970-01-01:01-00; a +1h provider
+    # correction should shift the timeshift stamp back an hour, to :00-00.
+    # A non-zero channel-level correction must be ignored for this call.
+    catchup = {'start': 3600, 'end': 7200, 'now': 8000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(
+            _catchup_xtream_snapshot(provider_catchup_correction_hours=1,
+                                      catchup_correction_hours=5),
+            catchup,
+        )
+
+    session.start()
+
+    url = player.plays[0][0]
+    assert '1970-01-01:00-00' in url
+
+
+def test_live_catchup_none_behaviour_unchanged():
+    session, player, scheduler, clock, probe, logger, state, persist = _session(_xtream_snapshot())
+    session.start()
+    session.on_av_started()
+    assert state.calls[-1] == ('playing', None)
+    assert session.catchup is None
+
+
 def test_connecting_then_playing_on_av_started():
     session, player, scheduler, clock, probe, logger, state, persist = _session(_xtream_snapshot())
 
@@ -436,6 +619,8 @@ def test_load_snapshot_reads_channel_and_provider(tmp_path):
         assert snapshot['kind'] == 'xtream'
         assert snapshot['headers'] == {'User-Agent': 'UA'}
         assert snapshot['xtream_host'] == 'http://panel.example'
+        assert snapshot['provider_name'] == 'P1'
+        assert snapshot['catchup_url_form'] == 'path'
     finally:
         conn.close()
 

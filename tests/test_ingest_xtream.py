@@ -84,9 +84,27 @@ def test_catchup_days_only_set_when_tv_archive_truthy(tmp_path):
     )
     channels = _channels_by_key(conn)
     assert channels['12345']['catchup_days'] == 7
-    # tv_archive == '0' -> no catch-up even though a duration is present.
-    assert channels['12346']['catchup_days'] is None
+    # tv_archive == '0' -> explicit no-catch-up (0), even though a duration
+    # is present: a channel value of 0 beats the provider default (issue #28).
+    assert channels['12346']['catchup_days'] == 0
     assert channels['22345']['catchup_days'] == 3
+
+
+def test_catchup_days_null_when_tv_archive_field_absent(tmp_path):
+    # An absent tv_archive field (not even present, unlike an explicit '0')
+    # must leave catchup_days NULL so the provider default applies, not 0.
+    conn = _make_db(tmp_path)
+    streams = [
+        {
+            'num': '301', 'name': 'No Archive Field', 'stream_id': '99999',
+            'category_id': '5', 'stream_icon': '', 'epg_channel_id': None,
+        },
+    ]
+    ingest.refresh_xtream_provider(
+        conn, 1, _ACCOUNT, _CATEGORIES, streams, '2026-01-01T00:00:00Z'
+    )
+    channels = _channels_by_key(conn)
+    assert channels['99999']['catchup_days'] is None
 
 
 def test_account_fields_written_on_every_refresh(tmp_path):

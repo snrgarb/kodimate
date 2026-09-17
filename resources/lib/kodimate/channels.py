@@ -48,7 +48,8 @@ def list_channels(conn, group_id=None, favourites=False, show_hidden=False):
     sql = (
         "SELECT c.id, c.provider_id, c.channel_key, c.name, c.logo_url, "
         "COALESCE(o.number, c.provider_number + p.number_offset, c.position + p.number_offset) "
-        "AS number, COALESCE(o.hidden, 0) AS hidden, c.epg_channel_id"
+        "AS number, COALESCE(o.hidden, 0) AS hidden, c.epg_channel_id, "
+        "COALESCE(c.catchup_days, p.catchup_days_default) AS catchup_days"
         + _BASE_JOIN
         + ("" if not where else " AND " + " AND ".join(where))
         + " ORDER BY " + order_by
@@ -64,6 +65,7 @@ def list_channels(conn, group_id=None, favourites=False, show_hidden=False):
             'number': row[5],
             'hidden': bool(row[6]),
             'epg_channel_id': row[7],
+            'catchup_days': row[8],
         }
         for row in rows
     ]
@@ -81,7 +83,7 @@ def list_programmes(conn, channel_ids, window_start, window_end):
 
     placeholders = ','.join('?' for _ in channel_ids)
     rows = conn.execute(
-        "SELECT c.id, pr.start, pr.end, pr.title, pr.description "
+        "SELECT c.id, pr.start, pr.end, pr.title, pr.description, pr.catchup_id "
         "FROM channel c "
         "JOIN epg_source e ON e.provider_id = c.provider_id "
         "JOIN programme pr ON pr.epg_source_id = e.id "
@@ -94,6 +96,7 @@ def list_programmes(conn, channel_ids, window_start, window_end):
     for row in rows:
         result[row[0]].append({
             'start': row[1], 'end': row[2], 'title': row[3], 'description': row[4] or '',
+            'catchup_id': row[5],
         })
     return result
 
