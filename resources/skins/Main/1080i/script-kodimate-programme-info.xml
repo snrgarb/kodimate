@@ -108,7 +108,7 @@
                 <focusedcolor>ffffffff</focusedcolor>
                 <visible>String.IsEqual(Window.Property(has_play_catchup),1)</visible>
                 <onright>903</onright>
-                <onleft>900</onleft>
+                <onleft>901</onleft>
                 <onup>902</onup>
                 <ondown>903</ondown>
             </control>
