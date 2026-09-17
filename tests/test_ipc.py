@@ -115,3 +115,46 @@ def test_pending_requests_all_cleared_by_any_result():
     pending.add('all', now=0, generation=0)
     pending.observe_result(7)
     assert pending.timed_out(now=100) == []
+
+
+def test_generation_watcher_ignores_unchanged_generation():
+    window = FakeWindow()
+    window.setProperty('script.kodimate.db_generation', '1')
+    changes = []
+    watcher = ipc.GenerationWatcher(changes.append, window=window)
+    watcher.onNotification('script.kodimate', 'Other.refreshed', '{}')
+    assert changes == []
+
+
+def test_generation_watcher_calls_back_once_on_change():
+    window = FakeWindow()
+    window.setProperty('script.kodimate.db_generation', '1')
+    changes = []
+    watcher = ipc.GenerationWatcher(changes.append, window=window)
+    window.setProperty('script.kodimate.db_generation', '2')
+    watcher.onNotification('script.kodimate', 'Other.refreshed', '{}')
+    assert changes == [2]
+    watcher.onNotification('script.kodimate', 'Other.refreshed', '{}')
+    assert changes == [2]
+
+
+def test_generation_watcher_ignores_other_sender_or_method():
+    window = FakeWindow()
+    window.setProperty('script.kodimate.db_generation', '1')
+    changes = []
+    watcher = ipc.GenerationWatcher(changes.append, window=window)
+    window.setProperty('script.kodimate.db_generation', '2')
+    watcher.onNotification('some.other.addon', 'Other.refreshed', '{}')
+    watcher.onNotification('script.kodimate', 'Other.somethingelse', '{}')
+    assert changes == []
+
+
+def test_generation_watcher_stop_ignores_later_notifications():
+    window = FakeWindow()
+    window.setProperty('script.kodimate.db_generation', '1')
+    changes = []
+    watcher = ipc.GenerationWatcher(changes.append, window=window)
+    watcher.stop()
+    window.setProperty('script.kodimate.db_generation', '2')
+    watcher.onNotification('script.kodimate', 'Other.refreshed', '{}')
+    assert changes == []

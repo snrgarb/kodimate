@@ -1,9 +1,26 @@
 from datetime import datetime
 
+import pytest
+
 from kodimate import db
 from kodimate.windows.channel_list import ChannelListWindow, GROUPS_LIST_ID, CHANNELS_LIST_ID, \
     TOGGLE_HIDDEN_ID
 import xbmcgui
+
+
+@pytest.fixture(autouse=True)
+def _clear_db_generation():
+    xbmcgui._window_properties.pop(10000, None)
+    yield
+    xbmcgui._window_properties.pop(10000, None)
+
+
+def _bump_generation(value):
+    xbmcgui.Window(10000).setProperty('script.kodimate.db_generation', str(value))
+
+
+def _notify_refreshed(window):
+    window._watcher.onNotification('script.kodimate', 'Other.refreshed', '{}')
 
 
 def _conn(tmp_path):
@@ -196,6 +213,96 @@ def test_ok_on_channel_row_opens_playback(tmp_path, monkeypatch):
         assert opened['conn'] is conn
         assert opened['snapshot']['channel_key'] == 'a'
         assert opened['snapshot']['name'] == 'Alpha'
+    finally:
+        conn.close()
+
+
+def test_generation_change_keeps_focus_by_channel_key(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        _seed(conn)
+        window = _window(conn)
+        window.onClick(TOGGLE_HIDDEN_ID)  # reveal Beta too
+        channels_control = window.getControl(CHANNELS_LIST_ID)
+        channels_control.selectItem(1)  # Beta
+
+        conn.execute("UPDATE channel SET name = 'Beta2' WHERE channel_key = 'b'")
+        _bump_generation(2)
+        _notify_refreshed(window)
+
+        selected = channels_control.getSelectedItem()
+        assert selected.getProperty('channel_key') == 'b'
+        assert selected.getLabel() == 'Beta2'
+    finally:
+        conn.close()
+
+
+def test_generation_change_selects_nearest_row_when_focused_channel_went_stale(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        _seed(conn)
+        window = _window(conn)
+        window.onClick(TOGGLE_HIDDEN_ID)  # reveal Alpha + Beta
+        channels_control = window.getControl(CHANNELS_LIST_ID)
+        channels_control.selectItem(1)  # Beta, last row
+
+        conn.execute("UPDATE channel SET stale_since = '2026-01-01T00:00:00' WHERE channel_key = 'b'")
+        _bump_generation(2)
+        _notify_refreshed(window)
+
+        assert channels_control.size() == 1
+        assert channels_control.getSelectedPosition() == 0
+    finally:
+        conn.close()
+
+
+def test_generation_change_falls_back_to_all_when_group_vanishes(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        p1, p2, g1 = _seed(conn)
+        window = _window(conn)
+        groups_control = window.getControl(GROUPS_LIST_ID)
+        groups_control.selectItem(2)  # 'Sports' group
+        window._render_channels()
+
+        conn.execute("UPDATE channel SET stale_since = '2026-01-01T00:00:00' WHERE group_id = ?", (g1,))
+        _bump_generation(2)
+        _notify_refreshed(window)
+
+        assert groups_control.getSelectedPosition() == 0
+        assert groups_control.getSelectedItem().getProperty('kind') == 'all'
+    finally:
+        conn.close()
+
+
+def test_generation_change_deferred_while_modal_open_then_applied_on_close(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        _seed(conn)
+        window = _window(conn)
+        window._enter_modal()
+
+        conn.execute("UPDATE channel SET name = 'Alpha2' WHERE channel_key = 'a'")
+        _bump_generation(2)
+        _notify_refreshed(window)
+
+        channels_control = window.getControl(CHANNELS_LIST_ID)
+        assert channels_control.getSelectedItem().getLabel() == 'Alpha'
+
+        window._exit_modal()
+
+        assert channels_control.getSelectedItem().getLabel() == 'Alpha2'
+    finally:
+        conn.close()
+
+
+def test_generation_watcher_stopped_on_close(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        _seed(conn)
+        window = _window(conn)
+        window.close()
+        assert window._watcher._stopped is True
     finally:
         conn.close()
 

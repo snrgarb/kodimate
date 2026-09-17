@@ -1,10 +1,27 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from kodimate import db, guide
 from kodimate.windows import guide as win_guide
 from kodimate.windows.guide import GuideWindow, CHANNEL_LIST_ID
 import xbmc
 import xbmcgui
+
+
+@pytest.fixture(autouse=True)
+def _clear_db_generation():
+    xbmcgui._window_properties.pop(10000, None)
+    yield
+    xbmcgui._window_properties.pop(10000, None)
+
+
+def _bump_generation(value):
+    xbmcgui.Window(10000).setProperty('script.kodimate.db_generation', str(value))
+
+
+def _notify_refreshed(window):
+    window._watcher.onNotification('script.kodimate', 'Other.refreshed', '{}')
 
 
 def _conn(tmp_path):
@@ -965,5 +982,96 @@ def test_ok_on_filler_cell_does_not_open_dialog(tmp_path):
         window.onClick(CHANNEL_LIST_ID)
 
         assert dialog_cls.opened_with is None
+    finally:
+        conn.close()
+
+
+def test_generation_change_keeps_channel_focus_and_viewport_offset(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        for i in range(guide.VISIBLE_ROWS + 2):
+            _channel(conn, pid, "c%d" % i, "Chan%d" % i, i)
+        window = _window(conn)
+        list_control = window.getControl(CHANNEL_LIST_ID)
+        list_control.selectItem(guide.VISIBLE_ROWS)  # scrolls the viewport down
+        window._handle_vertical_move()
+        old_top_row = window._top_row
+        old_offset = list_control.getSelectedPosition() - old_top_row
+
+        conn.execute("UPDATE channel SET name = 'Renamed' WHERE channel_key = 'c%d' " % guide.VISIBLE_ROWS)
+        _bump_generation(2)
+        _notify_refreshed(window)
+
+        new_selected = list_control.getSelectedPosition()
+        assert list_control.getListItem(new_selected).getLabel() == 'Renamed'
+        assert new_selected - window._top_row == old_offset
+    finally:
+        conn.close()
+
+
+def test_generation_change_selects_nearest_row_when_focused_channel_went_stale(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        _channel(conn, pid, "b", "Beta", 1)
+        window = _window(conn)
+        list_control = window.getControl(CHANNEL_LIST_ID)
+        list_control.selectItem(1)  # Beta
+
+        conn.execute("UPDATE channel SET stale_since = '2026-01-01T00:00:00' WHERE channel_key = 'b'")
+        _bump_generation(2)
+        _notify_refreshed(window)
+
+        assert list_control.size() == 1
+        assert list_control.getSelectedPosition() == 0
+    finally:
+        conn.close()
+
+
+def test_generation_change_deferred_under_modal_then_applied_after_dialog_closes(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
+        window._load_programmes()
+        window._relayout()
+
+        class _BumpingDialog(_FakeDialog):
+            result = None
+
+            @classmethod
+            def open(cls, **kwargs):
+                conn.execute("UPDATE channel SET name = 'Alpha2' WHERE channel_key = 'a'")
+                _bump_generation(2)
+                _notify_refreshed(window)
+                return super(_BumpingDialog, cls).open(**kwargs)
+
+        window.dialog_cls = _BumpingDialog
+
+        list_control = window.getControl(CHANNEL_LIST_ID)
+        assert list_control.getListItem(0).getLabel() == 'Alpha'
+
+        window.onClick(CHANNEL_LIST_ID)
+
+        assert list_control.getListItem(0).getLabel() == 'Alpha2'
+    finally:
+        conn.close()
+
+
+def test_generation_watcher_stopped_on_close(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        window.close()
+        assert window._watcher._stopped is True
     finally:
         conn.close()

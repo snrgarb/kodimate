@@ -3,6 +3,7 @@
 
 See docs/design/refresh-ipc.md for the property contract.
 """
+import xbmc
 import xbmcgui
 
 _PREFIX = 'script.kodimate.'
@@ -48,6 +49,37 @@ def pop_refresh_result(provider_id, window=None):
     if value:
         window.setProperty(key, '')
     return value or None
+
+
+class GenerationWatcher(xbmc.Monitor):
+    """Wakes on the service's `NotifyAll(script.kodimate, refreshed, ...)` and
+    calls `on_change(generation)` when `db_generation` actually moved (the
+    JSON notification payload is ignored -- the property is the truth). See
+    docs/design/refresh-ipc.md."""
+
+    def __init__(self, on_change, window=None):
+        super(GenerationWatcher, self).__init__()
+        self._on_change = on_change
+        self._window = window
+        self._stopped = False
+        self.generation = db_generation(window)
+
+    def onNotification(self, sender, method, data):
+        if self._stopped:
+            return
+        if sender == 'script.kodimate' and method.endswith('refreshed'):
+            self.check()
+
+    def check(self):
+        if self._stopped:
+            return
+        generation = db_generation(self._window)
+        if generation != self.generation:
+            self.generation = generation
+            self._on_change(generation)
+
+    def stop(self):
+        self._stopped = True
 
 
 class PendingRequests(object):

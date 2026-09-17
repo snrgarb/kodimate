@@ -122,6 +122,9 @@ class Control(object):
             return None
         return self._items[self._selected]
 
+    def getListItem(self, position):
+        return self._items[position]
+
 
 class BaseControl(object):
     def __init__(self, x=0, y=0, width=0, height=0):

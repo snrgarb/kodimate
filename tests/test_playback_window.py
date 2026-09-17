@@ -2,10 +2,27 @@
 import threading
 from datetime import datetime
 
+import pytest
+
 from kodimate import channels, db, playback
-from kodimate.windows.playback import PlaybackWindow
+from kodimate.windows.playback import PlaybackWindow, GROUPS_LIST_ID, CHANNELS_LIST_ID
 import xbmc
 import xbmcgui
+
+
+@pytest.fixture(autouse=True)
+def _clear_db_generation():
+    xbmcgui._window_properties.pop(10000, None)
+    yield
+    xbmcgui._window_properties.pop(10000, None)
+
+
+def _bump_generation(value):
+    xbmcgui.Window(10000).setProperty('script.kodimate.db_generation', str(value))
+
+
+def _notify_refreshed(window):
+    window._watcher.onNotification('script.kodimate', 'Other.refreshed', '{}')
 
 
 class FakePlayer(object):
@@ -908,3 +925,96 @@ def test_catchup_bar_width_survives_getTime_raising(tmp_path):
 
     assert window.getControl(704).getWidth() == 0
 
+
+
+# -- generation change (issue #32) --------------------------------------
+
+def test_generation_change_refreshes_now_next_without_touching_stream(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, name='Alpha')
+    eid = _epg_source(conn, provider_id)
+    _programme(conn, eid, 'a', '2026-01-01T11:30:00Z', '2026-01-01T12:00:00Z', 'Now Show')
+    now = datetime(2026, 1, 1, 11, 45)
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+
+    conn.execute("UPDATE programme SET title = 'Updated Show' WHERE title = 'Now Show'")
+    _bump_generation(2)
+    _notify_refreshed(window)
+
+    assert window.getProperty('now_title') == 'Updated Show'
+    assert window.player.stop_calls == 0
+    assert window.session is not None
+
+
+def test_generation_change_deferred_while_digits_pending_then_applied_on_commit(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, name='Alpha')
+    eid = _epg_source(conn, provider_id)
+    _programme(conn, eid, 'a', '2026-01-01T11:30:00Z', '2026-01-01T12:00:00Z', 'Now Show')
+    now = datetime(2026, 1, 1, 11, 45)
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+
+    window._on_digit(9)
+
+    conn.execute("UPDATE programme SET title = 'Updated Show' WHERE title = 'Now Show'")
+    _bump_generation(2)
+    _notify_refreshed(window)
+
+    assert window.getProperty('now_title') == 'Now Show'
+
+    window._cancel_digit_entry()
+
+    assert window.getProperty('now_title') == 'Updated Show'
+
+
+def test_generation_change_reselects_overlay_channel_by_key(tmp_path):
+    conn = _conn(tmp_path)
+    p1, snapshot_a = _setup_channel(conn, channel_key='a', name='Alpha')
+    _channel(conn, p1, 'b', name='Beta', position=1)
+    window = _window(conn, snapshot_a)
+    window.onInit()
+    window.session.on_av_started()
+    window._open_list()
+
+    conn.execute("UPDATE channel SET name = 'Alpha2' WHERE channel_key = 'a'")
+    _bump_generation(2)
+    _notify_refreshed(window)
+
+    channels_control = window.getControl(CHANNELS_LIST_ID)
+    assert channels_control.getSelectedItem().getProperty('channel_key') == 'a'
+    assert channels_control.getSelectedItem().getLabel() == 'Alpha2'
+
+
+def test_generation_change_overlay_selects_nearest_number_when_stale(tmp_path):
+    conn = _conn(tmp_path)
+    p1, snapshot_a = _setup_channel(conn, channel_key='a', name='Alpha', position=0)
+    _channel(conn, p1, 'b', name='Beta', position=1)
+    _channel(conn, p1, 'c', name='Gamma', position=2)
+    window = _window(conn, snapshot_a)
+    window.onInit()
+    window.session.on_av_started()
+    window._open_list()
+
+    conn.execute("UPDATE channel SET stale_since = '2026-01-01T00:00:00' WHERE channel_key = 'a'")
+    _bump_generation(2)
+    _notify_refreshed(window)
+
+    channels_control = window.getControl(CHANNELS_LIST_ID)
+    # 'a' (number 0) went Stale; the nearest remaining channel by number is
+    # 'b' (number 1), not 'c' (number 2).
+    assert channels_control.getSelectedItem().getProperty('channel_key') == 'b'
+    # The snapshot/session are untouched -- still playing 'a'.
+    assert window.player.stop_calls == 0
+
+
+def test_generation_watcher_stopped_on_close(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.close()
+    assert window._watcher._stopped is True

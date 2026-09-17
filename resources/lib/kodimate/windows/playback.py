@@ -15,7 +15,7 @@ import xbmc
 import xbmcaddon
 import xbmcgui
 
-from .. import channels, guide, log, osd, playback
+from .. import channels, guide, ipc, log, osd, playback
 from .. import player as player_module
 from .. import providers
 
@@ -92,6 +92,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self._last_group_position = 0
         self._stop_event = None
         self._thread = None
+        self._render_pending = False
         self._lock = threading.RLock()
         # Set before doModal() draws the first frame: WindowXMLDialog
         # honours setProperty() called here, so the spinner and channel
@@ -146,6 +147,37 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self._thread.start()
 
         self._start_new_session()
+        self._watcher = ipc.GenerationWatcher(self._on_generation_change)
+
+    def _on_generation_change(self, generation):
+        with self._lock:
+            if self._digits:
+                self._render_pending = True
+                return
+            self._refresh_in_place()
+
+    def _refresh_in_place(self):
+        if not self.catchup:
+            self._load_programmes()
+            self._apply_now_next(self.now_fn())
+        if self._list_open:
+            groups_control = self.getControl(GROUPS_LIST_ID)
+            group_item = groups_control.getSelectedItem()
+            group_kind = group_item.getProperty('kind') if group_item is not None else 'all'
+            group_id = group_item.getProperty('group_id') if group_item is not None else ''
+
+            self._render_groups()
+            new_group_position = 0
+            for index in range(groups_control.size()):
+                item = groups_control.getListItem(index)
+                if item.getProperty('kind') == group_kind and (
+                    group_kind != 'group' or item.getProperty('group_id') == group_id
+                ):
+                    new_group_position = index
+                    break
+            groups_control.selectItem(new_group_position)
+            self._last_group_position = new_group_position
+            self._render_channels_list()
 
     @staticmethod
     def _addon_setting_int(key, default):
@@ -430,8 +462,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         )
         items = []
         select_position = 0
+        found = False
         current_provider_id = self.snapshot.get('provider_id') if self.snapshot else None
         current_channel_key = self.snapshot.get('channel_key') if self.snapshot else None
+        current_number = self.snapshot.get('number') if self.snapshot else None
         for index, row in enumerate(rows):
             list_item = xbmcgui.ListItem(label=row['name'])
             list_item.setLabel2(str(row['number']))
@@ -443,6 +477,14 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             items.append(list_item)
             if row['provider_id'] == current_provider_id and row['channel_key'] == current_channel_key:
                 select_position = index
+                found = True
+        if not found and rows and current_number is not None:
+            # The current channel went Stale/hidden: zapping away from it
+            # lands on the nearest listable channel by Effective Channel
+            # Number (ties keep the earlier row in list order).
+            select_position = min(
+                range(len(rows)), key=lambda i: abs(rows[i]['number'] - current_number)
+            )
         control.addItems(items)
         if items:
             control.selectItem(select_position)
@@ -483,6 +525,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             digits = self._digits
             self._digits = ''
             self.setProperty('digits', '')
+            self._apply_pending_render()
             if not digits:
                 return
             rows = channels.list_channels(self.conn)
@@ -491,9 +534,16 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 self._zap(row['provider_id'], row['channel_key'])
 
     def _cancel_digit_entry(self):
-        self._cancel_digit_timer()
-        self._digits = ''
-        self.setProperty('digits', '')
+        with self._lock:
+            self._cancel_digit_timer()
+            self._digits = ''
+            self.setProperty('digits', '')
+            self._apply_pending_render()
+
+    def _apply_pending_render(self):
+        if self._render_pending:
+            self._render_pending = False
+            self._refresh_in_place()
 
     def _cancel_digit_timer(self):
         if self._digit_timer is not None:
@@ -568,6 +618,8 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self.close()
 
     def close(self):
+        if getattr(self, '_watcher', None) is not None:
+            self._watcher.stop()
         if self._stop_event is not None:
             self._stop_event.set()
         if self._thread is not None:

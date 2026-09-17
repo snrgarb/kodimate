@@ -4,13 +4,14 @@ over programme cells (issue #26). OK on a cell opens the shared Programme
 info dialog and dispatches to Watch live / Start Over / Play Catch-up
 playback (issue #28)."""
 import calendar
+import threading
 from datetime import datetime, timedelta
 
 import xbmc
 import xbmcaddon
 import xbmcgui
 
-from .. import catchup, channels, guide, log, osd, playback
+from .. import catchup, channels, guide, ipc, log, osd, playback
 from .base import BaseWindow
 from .playback import PlaybackWindow
 from .programme_info import ProgrammeInfoDialog
@@ -74,6 +75,15 @@ class GuideWindow(BaseWindow):
         self._row_cells = []
         self._last_selected = 0
 
+        self._modal_depth = 0
+        self._render_pending = False
+        self._closed = False
+        self._watcher = None
+        # Guards _modal_depth/_render_pending/_closed and every render below:
+        # GenerationWatcher.onNotification runs on Kodi's Monitor thread
+        # while the UI thread may be inside onAction/onClick.
+        self._lock = threading.RLock()
+
         self._populate_channel_list()
         self._build_pool()
         self._load_programmes()
@@ -83,6 +93,65 @@ class GuideWindow(BaseWindow):
         self._create_now_line()
         self._relayout()
         self.setFocusId(CHANNEL_LIST_ID)
+        self._watcher = ipc.GenerationWatcher(self._on_generation_change)
+
+    def _on_generation_change(self, generation):
+        with self._lock:
+            if self._modal_depth > 0 or self._closed:
+                self._render_pending = True
+                return
+            self._refresh_in_place()
+
+    def _enter_modal(self):
+        with self._lock:
+            self._modal_depth += 1
+
+    def _exit_modal(self):
+        # Never called with the lock held across a modal open() -- callers
+        # take it only to bump/drop _modal_depth, not while doModal() blocks.
+        with self._lock:
+            self._modal_depth -= 1
+            if self._modal_depth <= 0 and self._render_pending:
+                self._render_pending = False
+                self._refresh_in_place()
+                return True
+        return False
+
+    def _refresh_in_place(self):
+        control = self.getControl(CHANNEL_LIST_ID)
+        selected = control.getSelectedPosition()
+        old_offset = selected - self._top_row
+        old_row = self._channel_rows[selected] if 0 <= selected < len(self._channel_rows) else None
+        old_key = (old_row['provider_id'], old_row['channel_key']) if old_row else None
+
+        self._channel_rows = channels.list_channels(self.conn)
+        self._populate_channel_list()
+
+        new_index = 0
+        if old_key is not None:
+            for index, row in enumerate(self._channel_rows):
+                if (row['provider_id'], row['channel_key']) == old_key:
+                    new_index = index
+                    break
+            else:
+                new_index = min(selected, len(self._channel_rows) - 1) if self._channel_rows else 0
+
+        if self._channel_rows:
+            control.selectItem(new_index)
+        top_row = new_index - old_offset
+        max_top = max(0, len(self._channel_rows) - guide.VISIBLE_ROWS)
+        self._top_row = max(0, min(top_row, max_top))
+        self._last_selected = new_index
+
+        self._load_programmes()
+        self._relayout()
+
+    def close(self):
+        with self._lock:
+            self._closed = True
+            if getattr(self, '_watcher', None) is not None:
+                self._watcher.stop()
+        super(GuideWindow, self).close()
 
     def onAction(self, action):
         action_id = action.getId()
@@ -125,34 +194,39 @@ class GuideWindow(BaseWindow):
         window_days = self._window_days_for_channel(channel_index)
         now = datetime.utcnow()
         state = catchup.cell_state(cell['start'], cell['end'], window_days, now)
-        dialog = self.dialog_cls.open(
-            title=cell['title'],
-            times=osd.format_times(cell['start'], cell['end'], self._tz),
-            description=cell.get('description') or '',
-            actions=catchup.actions_for(state, start_over_ok=bool(window_days)),
-        )
-        result = dialog.result
-        if result in ('watch_live', 'start_over', 'play_catchup'):
-            snapshot = playback.load_snapshot(
-                self.conn, channel_row['provider_id'], channel_row['channel_key']
+        self._enter_modal()
+        try:
+            dialog = self.dialog_cls.open(
+                title=cell['title'],
+                times=osd.format_times(cell['start'], cell['end'], self._tz),
+                description=cell.get('description') or '',
+                actions=catchup.actions_for(state, start_over_ok=bool(window_days)),
             )
-            if snapshot is not None:
-                if result == 'watch_live':
-                    self.playback_cls.open(conn=self.conn, snapshot=snapshot)
-                else:
-                    self.playback_cls.open(
-                        conn=self.conn, snapshot=snapshot,
-                        catchup={
-                            'start': _epoch(cell['start']),
-                            'end': _epoch(cell['end']),
-                            'now': _epoch(now),
-                            'catchup_id': self._catchup_id_for_cell(channel_index, cell),
-                            'title': cell['title'],
-                            'start_dt': cell['start'],
-                            'end_dt': cell['end'],
-                        },
-                    )
-        self._relayout()
+            result = dialog.result
+            if result in ('watch_live', 'start_over', 'play_catchup'):
+                snapshot = playback.load_snapshot(
+                    self.conn, channel_row['provider_id'], channel_row['channel_key']
+                )
+                if snapshot is not None:
+                    if result == 'watch_live':
+                        self.playback_cls.open(conn=self.conn, snapshot=snapshot)
+                    else:
+                        self.playback_cls.open(
+                            conn=self.conn, snapshot=snapshot,
+                            catchup={
+                                'start': _epoch(cell['start']),
+                                'end': _epoch(cell['end']),
+                                'now': _epoch(now),
+                                'catchup_id': self._catchup_id_for_cell(channel_index, cell),
+                                'title': cell['title'],
+                                'start_dt': cell['start'],
+                                'end_dt': cell['end'],
+                            },
+                        )
+        finally:
+            refreshed = self._exit_modal()
+        if not refreshed:
+            self._relayout()
 
     def _window_days_for_channel(self, channel_index):
         if 0 <= channel_index < len(self._channel_rows):
@@ -276,54 +350,55 @@ class GuideWindow(BaseWindow):
         the pool so no frame exposes stale text. Always instant -- no
         animation is attached (the native channel list at id 500 handles
         its own scroll)."""
-        for row_pool in self._pool:
-            for image, label, desc_label in row_pool:
-                image.setVisible(False)
-                label.setVisible(False)
-                desc_label.setVisible(False)
+        with self._lock:
+            for row_pool in self._pool:
+                for image, label, desc_label in row_pool:
+                    image.setVisible(False)
+                    label.setVisible(False)
+                    desc_label.setVisible(False)
 
-        selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
-        self._top_row = guide.compute_top_row(self._top_row, selected)
-        focused_row = selected - self._top_row
-        now = datetime.utcnow()
+            selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
+            self._top_row = guide.compute_top_row(self._top_row, selected)
+            focused_row = selected - self._top_row
+            now = datetime.utcnow()
 
-        self._update_header()
-        self._row_cells = []
-        to_show = []
+            self._update_header()
+            self._row_cells = []
+            to_show = []
 
-        for row in range(guide.VISIBLE_ROWS):
-            channel_index = self._top_row + row
-            cells = []
-            if channel_index < len(self._channel_rows):
-                programmes = self._channel_programmes(channel_index)
-                layout_cells = guide.cell_layout(
-                    programmes, self._viewport_start, _GRID_WIDTH, self._no_info_title
-                )
-                window_days = self._window_days_for_channel(channel_index)
-                y = _HEADER_HEIGHT + row * _ROW_HEIGHT
-                row_pool = self._pool[row]
-                cursor_cell = guide.resolve_cursor(layout_cells, self._cursor_time) \
-                    if row == focused_row else None
-                for col, cell in enumerate(layout_cells):
-                    if col >= _POOL_COLS:
-                        log.log(
-                            "guide: pool exhausted for row %d (>%d programmes visible)"
-                            % (row, _POOL_COLS), xbmc.LOGWARNING,
-                        )
-                        break
-                    is_cursor = cell is cursor_cell
-                    state = self._state_for_cell(cell, window_days, now)
-                    image, label, desc_label = row_pool[col]
-                    self._set_cell((image, label, desc_label), cell, y, is_cursor, state)
-                    to_show.append((image, label, desc_label))
-                    cells.append(dict(cell, pool_index=col))
-            self._row_cells.append(cells)
+            for row in range(guide.VISIBLE_ROWS):
+                channel_index = self._top_row + row
+                cells = []
+                if channel_index < len(self._channel_rows):
+                    programmes = self._channel_programmes(channel_index)
+                    layout_cells = guide.cell_layout(
+                        programmes, self._viewport_start, _GRID_WIDTH, self._no_info_title
+                    )
+                    window_days = self._window_days_for_channel(channel_index)
+                    y = _HEADER_HEIGHT + row * _ROW_HEIGHT
+                    row_pool = self._pool[row]
+                    cursor_cell = guide.resolve_cursor(layout_cells, self._cursor_time) \
+                        if row == focused_row else None
+                    for col, cell in enumerate(layout_cells):
+                        if col >= _POOL_COLS:
+                            log.log(
+                                "guide: pool exhausted for row %d (>%d programmes visible)"
+                                % (row, _POOL_COLS), xbmc.LOGWARNING,
+                            )
+                            break
+                        is_cursor = cell is cursor_cell
+                        state = self._state_for_cell(cell, window_days, now)
+                        image, label, desc_label = row_pool[col]
+                        self._set_cell((image, label, desc_label), cell, y, is_cursor, state)
+                        to_show.append((image, label, desc_label))
+                        cells.append(dict(cell, pool_index=col))
+                self._row_cells.append(cells)
 
-        for image, label, desc_label in to_show:
-            image.setVisible(True)
-            label.setVisible(True)
-            desc_label.setVisible(True)
-        self._update_now_line()
+            for image, label, desc_label in to_show:
+                image.setVisible(True)
+                label.setVisible(True)
+                desc_label.setVisible(True)
+            self._update_now_line()
 
     def _state_for_cell(self, cell, window_days, now):
         if cell['filler']:
