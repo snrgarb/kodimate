@@ -101,6 +101,7 @@ class ProviderFormWindow(BaseWindow):
         self._dirty = False
         self._rows = self._row_types()
         self._render()
+        self.setFocusId(LIST_ID)
 
     def _row_types(self):
         if self._kind == 'xtream':
@@ -151,6 +152,8 @@ class ProviderFormWindow(BaseWindow):
 
     def _render(self, hint=None):
         control = self.getControl(LIST_ID)
+        had_focus = self.getFocusId() == LIST_ID
+        selected_position = control.getSelectedPosition()
         control.reset()
         items = []
         for row_type in self._rows:
@@ -166,6 +169,9 @@ class ProviderFormWindow(BaseWindow):
                 items[self._rows.index(hint_row_type)].setProperty('hint', message)
         for item in items:
             control.addItem(item)
+        if had_focus:
+            self.setFocusId(LIST_ID)
+            control.selectItem(min(selected_position, len(items) - 1))
 
     def _row_label(self, row_type):
         return self._addon.getLocalizedString({

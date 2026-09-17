@@ -16,6 +16,30 @@ def _window(conn, kind, provider_id=None):
     return window
 
 
+def test_onInit_focuses_list(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        window = _window(conn, 'm3u')
+        assert window.getFocusId() == LIST_ID
+    finally:
+        conn.close()
+
+
+def test_render_keeps_focus_and_position_when_list_was_focused(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        window = _window(conn, 'm3u')
+        window.getFocusId = lambda: LIST_ID
+        window.getControl(LIST_ID).selectItem(2)
+
+        window._render()
+
+        assert window.getFocusId() == LIST_ID
+        assert window.getControl(LIST_ID).getSelectedPosition() == 2
+    finally:
+        conn.close()
+
+
 def test_title_label_for_xtream_kind(tmp_path):
     conn = _conn(tmp_path)
     try:

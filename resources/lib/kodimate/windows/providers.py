@@ -69,6 +69,8 @@ class ProvidersWindow(BaseWindow):
         self._render()
         if not providers.list_providers(self.conn):
             self.setFocusId(ADD_BUTTON_ID)
+        else:
+            self.setFocusId(LIST_ID)
         self._poll_thread = threading.Thread(target=self._poll_loop)
         self._poll_thread.daemon = True
         self._poll_thread.start()
@@ -114,6 +116,8 @@ class ProvidersWindow(BaseWindow):
             by_id = {row['id']: row for row in rows}
             rows = [by_id[i] for i in order if i in by_id]
         control = self.getControl(LIST_ID)
+        had_focus = self.getFocusId() == LIST_ID
+        selected_position = control.getSelectedPosition()
         control.reset()
         refreshing = set(ipc.refreshing_ids())
         for row in rows:
@@ -129,6 +133,9 @@ class ProvidersWindow(BaseWindow):
                 item.setProperty('expiry_state', state)
                 item.setProperty('expiry', self._addon.getLocalizedString(_STR_EXPIRES) % date_text)
             control.addItem(item)
+        if had_focus and rows:
+            self.setFocusId(LIST_ID)
+            control.selectItem(min(selected_position, len(rows) - 1))
 
     def _status_text(self, row, refreshing):
         if str(row['id']) in refreshing:

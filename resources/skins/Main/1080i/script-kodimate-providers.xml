@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <window>
-    <defaultcontrol always="true">200</defaultcontrol>
+    <defaultcontrol always="true">300</defaultcontrol>
     <coordinates>
         <system>1</system>
         <posx>0</posx>

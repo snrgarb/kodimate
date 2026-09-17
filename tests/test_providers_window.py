@@ -65,6 +65,36 @@ def test_context_menu_offers_options_in_order(tmp_path, monkeypatch):
         conn.close()
 
 
+def test_onInit_focuses_list_when_populated(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        providers.create_m3u_provider(conn, "One", "http://example.com/one.m3u")
+        providers.create_m3u_provider(conn, "Two", "http://example.com/two.m3u")
+        window = _window(conn)
+
+        assert window.getFocusId() == LIST_ID
+        assert window.getControl(LIST_ID).getSelectedPosition() == 0
+    finally:
+        conn.close()
+
+
+def test_render_keeps_focus_and_position_when_list_was_focused(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        providers.create_m3u_provider(conn, "One", "http://example.com/one.m3u")
+        providers.create_m3u_provider(conn, "Two", "http://example.com/two.m3u")
+        window = _window(conn)
+        window.getFocusId = lambda: LIST_ID
+        window.getControl(LIST_ID).selectItem(1)
+
+        window._render()
+
+        assert window.getFocusId() == LIST_ID
+        assert window.getControl(LIST_ID).getSelectedPosition() == 1
+    finally:
+        conn.close()
+
+
 def test_delete_with_yesno_true_soft_deletes_and_requests_refresh(tmp_path, monkeypatch):
     conn = _conn(tmp_path)
     try:
