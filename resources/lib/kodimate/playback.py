@@ -13,6 +13,11 @@ and provider rows and is never re-read for the life of the session
 import json
 import threading
 
+try:
+    from urllib.parse import urlparse
+except ImportError:  # pragma: no cover - Python 2 fallback, unused on target
+    from urlparse import urlparse
+
 from . import fetch
 from . import log as log_module
 from . import tz
@@ -84,6 +89,22 @@ def fetch_probe(url, headers):
     return fetch.probe_stream(url, headers=headers, timeout=PROBE_TIMEOUT_SECONDS)
 
 
+def resolve_redirect(url, headers):
+    """Production `resolver` collaborator: learns the edge's tokenised URL
+    with a single no-follow request, so the player's own request is the
+    only one that ever fetches the stream."""
+    return fetch.resolve_redirect(url, headers=headers)
+
+
+def _mime_type_for(url):
+    path = urlparse(url).path
+    if path.endswith('.ts'):
+        return 'video/mp2t'
+    if path.endswith('.m3u8'):
+        return 'application/vnd.apple.mpegurl'
+    return None
+
+
 class _TimerHandle(object):
     def __init__(self, timer):
         self._timer = timer
@@ -113,12 +134,13 @@ def _classify(probe_status, kind):
 class PlaybackSession(object):
     def __init__(self, snapshot, player, probe, scheduler, clock,
                  persist_learned_form, on_state, logger=None,
-                 catchup=None, persist_catchup_form=None):
+                 catchup=None, persist_catchup_form=None, resolver=None):
         self.snapshot = snapshot
         self.player = player
         self.probe = probe
         self.scheduler = scheduler
         self.clock = clock
+        self.resolver = resolver if resolver is not None else resolve_redirect
         self.persist_learned_form = persist_learned_form
         self.on_state = on_state
         self.logger = logger if logger is not None else log_module
@@ -352,7 +374,13 @@ class PlaybackSession(object):
             # Not retryable, so fail the Attempt outright without playing.
             self._fail('catchup_unavailable')
             return
-        self.player.play(self._current_url, self._current_headers)
+        play_url = self.resolver(self._current_url, self._current_headers)
+        if play_url != self._current_url:
+            self.logger.debug(
+                'Playback redirect resolved for attempt {0}'.format(attempt_number)
+            )
+        mime_type = _mime_type_for(self._current_url)
+        self.player.play(play_url, self._current_headers, mime_type=mime_type)
         self._arm_start_timer()
         self.on_state(self.state, None)
 

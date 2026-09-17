@@ -207,6 +207,131 @@ def test_redirect_handler_strips_credentials_on_cross_host_redirect():
     assert new_request.get_header('Range') == 'bytes=0-0'
 
 
+class _FakeRedirectHeaders(object):
+    def __init__(self, location):
+        self._location = location
+
+    def get(self, key):
+        return self._location if key == 'Location' else None
+
+
+def test_resolve_redirect_returns_location_for_302(monkeypatch):
+    def fake_open(request, timeout=None):
+        raise fetch.HTTPError(
+            request.full_url, 302, 'Found',
+            _FakeRedirectHeaders('http://edge.example/live/play/tok/1'), None,
+        )
+
+    _patch_opener(monkeypatch, fake_open)
+
+    result = fetch.resolve_redirect('https://xc.example/live/u/p/1.ts')
+
+    assert result == 'http://edge.example/live/play/tok/1'
+
+
+def test_resolve_redirect_joins_relative_location(monkeypatch):
+    def fake_open(request, timeout=None):
+        raise fetch.HTTPError(
+            request.full_url, 302, 'Found', _FakeRedirectHeaders('/play/tok/1'), None,
+        )
+
+    _patch_opener(monkeypatch, fake_open)
+
+    result = fetch.resolve_redirect('https://xc.example/live/u/p/1.ts')
+
+    assert result == 'https://xc.example/play/tok/1'
+
+
+def test_resolve_redirect_returns_original_url_on_200(monkeypatch):
+    def fake_open(request, timeout=None):
+        return _FakeStatusResponse(200)
+
+    _patch_opener(monkeypatch, fake_open)
+
+    result = fetch.resolve_redirect('https://xc.example/live/u/p/1.ts')
+
+    assert result == 'https://xc.example/live/u/p/1.ts'
+
+
+def test_resolve_redirect_returns_original_url_on_http_error(monkeypatch):
+    def fake_open(request, timeout=None):
+        raise fetch.HTTPError(request.full_url, 404, 'Not Found', {}, None)
+
+    _patch_opener(monkeypatch, fake_open)
+
+    result = fetch.resolve_redirect('https://xc.example/live/u/p/1.ts')
+
+    assert result == 'https://xc.example/live/u/p/1.ts'
+
+
+def test_resolve_redirect_returns_original_url_on_timeout(monkeypatch):
+    def fake_open(request, timeout=None):
+        raise fetch.URLError(TimeoutError('timed out'))
+
+    _patch_opener(monkeypatch, fake_open)
+
+    result = fetch.resolve_redirect('https://xc.example/live/u/p/1.ts')
+
+    assert result == 'https://xc.example/live/u/p/1.ts'
+
+
+def test_resolve_redirect_returns_original_url_when_no_location(monkeypatch):
+    def fake_open(request, timeout=None):
+        raise fetch.HTTPError(
+            request.full_url, 302, 'Found', _FakeRedirectHeaders(None), None,
+        )
+
+    _patch_opener(monkeypatch, fake_open)
+
+    result = fetch.resolve_redirect('https://xc.example/live/u/p/1.ts')
+
+    assert result == 'https://xc.example/live/u/p/1.ts'
+
+
+def test_resolve_redirect_rejects_non_http_scheme_location(monkeypatch):
+    def fake_open(request, timeout=None):
+        raise fetch.HTTPError(
+            request.full_url, 302, 'Found', _FakeRedirectHeaders('file:///etc/passwd'), None,
+        )
+
+    _patch_opener(monkeypatch, fake_open)
+
+    result = fetch.resolve_redirect('https://xc.example/live/u/p/1.ts')
+
+    assert result == 'https://xc.example/live/u/p/1.ts'
+
+
+def test_resolve_redirect_rejects_location_with_pipe_char(monkeypatch):
+    def fake_open(request, timeout=None):
+        raise fetch.HTTPError(
+            request.full_url, 302, 'Found',
+            _FakeRedirectHeaders('http://edge.example/x|User-Agent=evil'), None,
+        )
+
+    _patch_opener(monkeypatch, fake_open)
+
+    result = fetch.resolve_redirect('https://xc.example/live/u/p/1.ts')
+
+    assert result == 'https://xc.example/live/u/p/1.ts'
+
+
+def test_resolve_redirect_closes_response_on_redirect(monkeypatch):
+    closed = []
+
+    def fake_open(request, timeout=None):
+        exc = fetch.HTTPError(
+            request.full_url, 302, 'Found', _FakeRedirectHeaders('http://edge.example/x'), None,
+        )
+        exc.close = lambda: closed.append(True)
+        raise exc
+
+    _patch_opener(monkeypatch, fake_open)
+
+    fetch.resolve_redirect('https://xc.example/live/u/p/1.ts')
+
+    assert closed == [True]
+
+
 def test_redirect_handler_keeps_credentials_on_same_host_redirect():
     request = fetch.Request(
         'http://origin.example/live/u/p/1.ts',

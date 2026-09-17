@@ -7,10 +7,12 @@ from kodimate import providers
 class FakePlayer(object):
     def __init__(self):
         self.plays = []
+        self.mime_types = []
         self.stop_calls = 0
 
-    def play(self, url, headers):
+    def play(self, url, headers, mime_type=None):
         self.plays.append((url, headers))
+        self.mime_types.append(mime_type)
 
     def stop(self):
         self.stop_calls += 1
@@ -139,7 +141,19 @@ def _m3u_snapshot(**overrides):
     return snapshot
 
 
-def _session(snapshot, probe_results=None, persist=None):
+class RecordingResolver(object):
+    def __init__(self, results=None):
+        self._results = list(results) if results is not None else None
+        self.calls = []
+
+    def __call__(self, url, headers):
+        self.calls.append((url, headers))
+        if self._results is not None:
+            return self._results.pop(0)
+        return url
+
+
+def _session(snapshot, probe_results=None, persist=None, resolver=None):
     player = FakePlayer()
     scheduler = FakeScheduler()
     clock = FakeClock()
@@ -147,8 +161,11 @@ def _session(snapshot, probe_results=None, persist=None):
     logger = FakeLogger()
     state = StateRecorder()
     persist = persist if persist is not None else RecordingPersist()
+    kwargs = {}
+    if resolver is not None:
+        kwargs['resolver'] = resolver
     session = playback.PlaybackSession(
-        snapshot, player, probe, scheduler, clock, persist, state, logger=logger,
+        snapshot, player, probe, scheduler, clock, persist, state, logger=logger, **kwargs
     )
     return session, player, scheduler, clock, probe, logger, state, persist
 
@@ -168,7 +185,7 @@ def _catchup_m3u_snapshot(**overrides):
     return _m3u_snapshot(**overrides)
 
 
-def _catchup_session(snapshot, catchup, probe_results=None, persist_catchup=None):
+def _catchup_session(snapshot, catchup, probe_results=None, persist_catchup=None, resolver=None):
     player = FakePlayer()
     scheduler = FakeScheduler()
     clock = FakeClock()
@@ -177,9 +194,12 @@ def _catchup_session(snapshot, catchup, probe_results=None, persist_catchup=None
     state = StateRecorder()
     persist_learned = RecordingPersist()
     persist_catchup = persist_catchup if persist_catchup is not None else RecordingPersist()
+    kwargs = {}
+    if resolver is not None:
+        kwargs['resolver'] = resolver
     session = playback.PlaybackSession(
         snapshot, player, probe, scheduler, clock, persist_learned, state, logger=logger,
-        catchup=catchup, persist_catchup_form=persist_catchup,
+        catchup=catchup, persist_catchup_form=persist_catchup, **kwargs
     )
     return session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup
 
@@ -701,3 +721,116 @@ def test_load_snapshot_returns_none_when_missing(tmp_path):
         assert playback.load_snapshot(conn, 1, 'missing') is None
     finally:
         conn.close()
+
+
+def test_begin_attempt_plays_resolver_result_but_probes_original_url():
+    resolver = RecordingResolver(results=['http://edge.example/live/play/tok/42.ts'])
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _m3u_snapshot(stream_url='http://host/live/u/p/42.ts'), probe_results=[404],
+        resolver=resolver,
+    )
+
+    session.start()
+
+    original_url = 'http://host/live/u/p/42.ts'
+    assert resolver.calls[0][0] == original_url
+    assert player.plays[0][0] == 'http://edge.example/live/play/tok/42.ts'
+
+    session.on_error()
+
+    assert probe.calls[0][0] == original_url
+
+
+def test_begin_attempt_plays_original_url_when_resolver_returns_unchanged():
+    resolver = RecordingResolver()  # default: returns url unchanged
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _m3u_snapshot(stream_url='http://host/live/u/p/42.ts'), resolver=resolver,
+    )
+
+    session.start()
+
+    assert player.plays[0][0] == 'http://host/live/u/p/42.ts'
+
+
+def test_mime_type_ts_passed_to_player():
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _m3u_snapshot(stream_url='http://host/live/u/p/42.ts'),
+    )
+
+    session.start()
+
+    assert player.mime_types[0] == 'video/mp2t'
+
+
+def test_mime_type_m3u8_passed_to_player():
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _m3u_snapshot(stream_url='http://host/live/u/p/42.m3u8'),
+    )
+
+    session.start()
+
+    assert player.mime_types[0] == 'application/vnd.apple.mpegurl'
+
+
+def test_mime_type_ts_ignores_query_string():
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _m3u_snapshot(stream_url='http://host/live/u/p/42.ts?token=x'),
+    )
+
+    session.start()
+
+    assert player.mime_types[0] == 'video/mp2t'
+
+
+def test_mime_type_none_for_unrecognised_extension():
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _m3u_snapshot(stream_url='http://host/live/u/p/42'),
+    )
+
+    session.start()
+
+    assert player.mime_types[0] is None
+
+
+def test_reconnect_attempt_calls_resolver_again():
+    resolver = RecordingResolver(results=[
+        'http://host/live/u/p/42.ts',  # attempt 1 (start)
+        'http://edge.example/tok2',    # reconnect attempt 1
+    ])
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _m3u_snapshot(stream_url='http://host/live/u/p/42.ts'), resolver=resolver,
+    )
+
+    session.start()
+    session.on_av_started()
+    clock.advance(10)
+    session.on_stopped()  # drop past 5s -> reconnecting
+    scheduler.advance(0)
+
+    assert len(resolver.calls) == 2
+    assert player.plays[-1][0] == 'http://edge.example/tok2'
+
+
+def test_retry_attempt_after_start_failure_calls_resolver_again():
+    resolver = RecordingResolver()
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _xtream_snapshot(), probe_results=[404], resolver=resolver,
+    )
+
+    session.start()
+    session.on_error()
+
+    assert len(resolver.calls) == 2
+    assert len(player.plays) == 2
+
+
+def test_catchup_attempt_calls_resolver():
+    resolver = RecordingResolver()
+    catchup = {'start': 1000, 'end': 4600, 'now': 5000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup, resolver=resolver)
+
+    session.start()
+
+    assert len(resolver.calls) == 1
+    assert resolver.calls[0][0] == player.plays[0][0]  # default resolver: unchanged

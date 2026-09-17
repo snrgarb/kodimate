@@ -9,10 +9,10 @@ import os
 try:
     from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
     from urllib.error import HTTPError, URLError
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, urljoin
 except ImportError:  # pragma: no cover - Python 2 fallback, unused on target
     from urllib2 import Request, urlopen, HTTPError, URLError, build_opener, HTTPRedirectHandler
-    from urlparse import urlparse
+    from urlparse import urlparse, urljoin
 
 # Playlists are read fully into memory; cap how much we'll pull from an
 # untrusted HTTP response or local file.
@@ -168,6 +168,47 @@ def probe_stream(url, headers=None, timeout=5):
         return 'error'
     try:
         return response.getcode()
+    finally:
+        response.close()
+
+
+_REDIRECT_CODES = (301, 302, 303, 307, 308)
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def resolve_redirect(url, headers=None, timeout=3):
+    """Follow one redirect out-of-band to learn its tokenised target URL,
+    without ever fetching the target's body. Returns `url` unchanged on a
+    non-redirect response, a redirect with no Location, or any error."""
+    request_headers = dict(headers) if headers else {}
+    if 'User-Agent' not in request_headers:
+        request_headers['User-Agent'] = DEFAULT_USER_AGENT
+    request = Request(url, headers=request_headers)
+    opener = build_opener(_NoRedirectHandler)
+    try:
+        response = opener.open(request, timeout=timeout)
+    except HTTPError as exc:
+        try:
+            if exc.code in _REDIRECT_CODES:
+                location = exc.headers.get('Location') if exc.headers else None
+                if location:
+                    target = urljoin(url, location)
+                    if urlparse(target).scheme in ('http', 'https') and '|' not in target:
+                        return target
+            return url
+        finally:
+            try:
+                exc.close()
+            except Exception:
+                pass
+    except Exception:
+        return url
+    try:
+        return url
     finally:
         response.close()
 

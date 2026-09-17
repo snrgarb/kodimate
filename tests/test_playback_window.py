@@ -36,7 +36,7 @@ class FakePlayer(object):
         self.time = 0
         self.time_raises = False
 
-    def play(self, url, headers):
+    def play(self, url, headers, mime_type=None):
         self.plays.append((url, headers))
 
     def stop(self):

@@ -1,0 +1,26 @@
+# -*- coding: utf-8 -*-
+import xbmc
+
+from kodimate import player
+
+
+def test_play_sets_mime_type_and_content_lookup_when_given():
+    xbmc.play_calls[:] = []
+    p = player.KodimatePlayer()
+
+    p.play('http://edge.example/1.ts', mime_type='video/mp2t')
+
+    listitem = xbmc.play_calls[-1][1]
+    assert listitem._mime_type == 'video/mp2t'
+    assert listitem._content_lookup is False
+
+
+def test_play_does_not_set_mime_type_when_not_given():
+    xbmc.play_calls[:] = []
+    p = player.KodimatePlayer()
+
+    p.play('http://edge.example/1.ts')
+
+    listitem = xbmc.play_calls[-1][1]
+    assert not hasattr(listitem, '_mime_type')
+    assert not hasattr(listitem, '_content_lookup')

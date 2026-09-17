@@ -27,11 +27,14 @@ class KodimatePlayer(xbmc.Player):
         if self._session is session:
             self._session = None
 
-    def play(self, url, headers=None):
+    def play(self, url, headers=None, mime_type=None):
         target = url
         if headers:
             target = url + '|' + urlencode(headers)
         item = xbmcgui.ListItem(path=target)
+        if mime_type:
+            item.setMimeType(mime_type)
+            item.setContentLookup(False)
         super(KodimatePlayer, self).play(target, item)
 
     def onAVStarted(self):
