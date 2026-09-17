@@ -94,3 +94,44 @@ def back_layer(list_open, bar_visible):
     if bar_visible:
         return 'hide_bar'
     return 'leave'
+
+
+_CHANNEL_LABELS = {1: '1.0', 2: '2.0', 6: '5.1', 8: '7.1'}
+
+
+def format_stream_info(width, height, video_codec, fps, audio_codec, audio_channels):
+    """Dict with keys 'res', 'fps', 'vcodec', 'audio', each a short display
+    string derived independently from the matching raw Kodi infolabel (empty
+    string when that particular input is unavailable/unparseable)."""
+    try:
+        width_n = int(str(width).replace(',', '').strip())
+        height_n = int(str(height).replace(',', '').strip())
+    except ValueError:
+        res = ''
+    else:
+        if height_n >= 2000 or width_n >= 3800:
+            res = '4K'
+        elif height_n >= 1000:
+            res = 'FHD'
+        elif height_n >= 700:
+            res = 'HD'
+        else:
+            res = 'SD'
+
+    try:
+        fps_text = u'%dfps' % round(float(fps))
+    except (TypeError, ValueError):
+        fps_text = ''
+
+    vcodec = video_codec.upper() if video_codec else ''
+
+    try:
+        channels_n = int(audio_channels)
+    except (TypeError, ValueError):
+        channels_n = None
+    channels_text = _CHANNEL_LABELS.get(channels_n, u'%dch' % channels_n) if channels_n is not None else None
+
+    audio_bits = [bit for bit in (audio_codec.upper() if audio_codec else None, channels_text) if bit]
+    audio = u' '.join(audio_bits)
+
+    return {'res': res, 'fps': fps_text, 'vcodec': vcodec, 'audio': audio}

@@ -110,3 +110,44 @@ def test_back_layer_priority():
     assert osd.back_layer(list_open=True, bar_visible=True) == 'close_list'
     assert osd.back_layer(list_open=False, bar_visible=True) == 'hide_bar'
     assert osd.back_layer(list_open=False, bar_visible=False) == 'leave'
+
+
+def test_format_stream_info_full_example():
+    info = osd.format_stream_info('3,840', '2,160', 'hevc', '50.000', 'eac3', '6')
+    assert info == {'res': '4K', 'fps': '50fps', 'vcodec': 'HEVC', 'audio': 'EAC3 5.1'}
+
+
+def test_format_stream_info_resolution_tiers():
+    assert osd.format_stream_info('3,840', '2,160', '', '', '', '')['res'] == '4K'
+    assert osd.format_stream_info('1,920', '1,080', '', '', '', '')['res'] == 'FHD'
+    assert osd.format_stream_info('1,280', '720', '', '', '', '')['res'] == 'HD'
+    assert osd.format_stream_info('720', '576', '', '', '', '')['res'] == 'SD'
+
+
+def test_format_stream_info_res_empty_when_width_or_height_missing():
+    assert osd.format_stream_info('', '2,160', 'hevc', '50.000', 'eac3', '6')['res'] == ''
+    assert osd.format_stream_info('3,840', '', 'hevc', '50.000', 'eac3', '6')['res'] == ''
+
+
+def test_format_stream_info_other_keys_independent_of_resolution():
+    info = osd.format_stream_info('', '', 'h264', '25.000', 'eac3', '2')
+    assert info == {'res': '', 'fps': '25fps', 'vcodec': 'H264', 'audio': 'EAC3 2.0'}
+
+
+def test_format_stream_info_fps_rounds():
+    assert osd.format_stream_info('', '', '', '29.970', '', '')['fps'] == '30fps'
+    assert osd.format_stream_info('', '', '', '50.000', '', '')['fps'] == '50fps'
+    assert osd.format_stream_info('', '', '', '25.000', '', '')['fps'] == '25fps'
+
+
+def test_format_stream_info_fps_empty_when_unparseable():
+    assert osd.format_stream_info('', '', '', '', '', '')['fps'] == ''
+
+
+def test_format_stream_info_unknown_channel_count():
+    info = osd.format_stream_info('', '', '', '', '', '3')
+    assert info['audio'] == '3ch'
+
+
+def test_format_stream_info_audio_empty_when_no_codec_or_channels():
+    assert osd.format_stream_info('', '', '', '', '', '')['audio'] == ''

@@ -214,6 +214,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self.setProperty('state', 'connecting')
         self.setProperty('status_text', xbmcaddon.Addon().getLocalizedString(_STR_CONNECTING))
         self.setProperty('reason', '')
+        self.setProperty('stream_res', '')
+        self.setProperty('stream_fps', '')
+        self.setProperty('stream_vcodec', '')
+        self.setProperty('stream_audio', '')
         self.setProperty('catchup', '1' if self.catchup else '0')
         self._playing = False
         if self.catchup is None and self.conn is not None:
@@ -402,6 +406,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         try:
             if not self._playing:
                 return
+            self._update_stream_info()
             if self.catchup:
                 self._apply_catchup_bar()
                 return
@@ -412,6 +417,20 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self._apply_now_next(now)
         except Exception as exc:
             log.debug('Playback OSD tick failed: {0}'.format(exc))
+
+    def _update_stream_info(self):
+        info = osd.format_stream_info(
+            xbmc.getInfoLabel('Player.Process(videowidth)'),
+            xbmc.getInfoLabel('Player.Process(videoheight)'),
+            xbmc.getInfoLabel('VideoPlayer.VideoCodec'),
+            xbmc.getInfoLabel('Player.Process(videofps)'),
+            xbmc.getInfoLabel('VideoPlayer.AudioCodec'),
+            xbmc.getInfoLabel('VideoPlayer.AudioChannels'),
+        )
+        self.setProperty('stream_res', info['res'])
+        self.setProperty('stream_fps', info['fps'])
+        self.setProperty('stream_vcodec', info['vcodec'])
+        self.setProperty('stream_audio', info['audio'])
 
     # -- Groups/Channels overlay --------------------------------------------
 

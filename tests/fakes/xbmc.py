@@ -7,6 +7,7 @@ LOGFATAL = 4
 log_calls = []
 executebuiltin_calls = []
 play_calls = []
+_info_labels = {}
 
 
 def log(msg, level=LOGINFO):
@@ -15,6 +16,10 @@ def log(msg, level=LOGINFO):
 
 def executebuiltin(cmd):
     executebuiltin_calls.append(cmd)
+
+
+def getInfoLabel(label):
+    return _info_labels.get(label, '')
 
 
 def sleep(ms):

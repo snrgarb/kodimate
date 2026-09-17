@@ -1057,6 +1057,50 @@ def test_catchup_session_does_not_overwrite_last_channel(tmp_path):
     assert autoplay.resolve_autoplay_channel(conn) == (provider_id, 'b')
 
 
+# -- stream info -------------------------------------------------------
+
+def test_tick_sets_stream_properties_while_playing(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    xbmc._info_labels['Player.Process(videowidth)'] = '3,840'
+    xbmc._info_labels['Player.Process(videoheight)'] = '2,160'
+    xbmc._info_labels['VideoPlayer.VideoCodec'] = 'hevc'
+    xbmc._info_labels['Player.Process(videofps)'] = '50.000'
+    xbmc._info_labels['VideoPlayer.AudioCodec'] = 'eac3'
+    xbmc._info_labels['VideoPlayer.AudioChannels'] = '6'
+    try:
+        window._tick()
+        assert window.getProperty('stream_res') == '4K'
+        assert window.getProperty('stream_fps') == '50fps'
+        assert window.getProperty('stream_vcodec') == 'HEVC'
+        assert window.getProperty('stream_audio') == 'EAC3 5.1'
+    finally:
+        xbmc._info_labels.clear()
+
+
+def test_zap_clears_stream_properties(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
+    _channel(conn, provider_id, 'b', name='Bravo', position=1)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.setProperty('stream_res', '4K')
+    window.setProperty('stream_fps', '50fps')
+    window.setProperty('stream_vcodec', 'HEVC')
+    window.setProperty('stream_audio', 'EAC3 5.1')
+
+    window._zap(provider_id, 'b')
+
+    assert window.getProperty('stream_res') == ''
+    assert window.getProperty('stream_fps') == ''
+    assert window.getProperty('stream_vcodec') == ''
+    assert window.getProperty('stream_audio') == ''
+
+
 def test_open_list_on_init_opens_the_overlay(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
