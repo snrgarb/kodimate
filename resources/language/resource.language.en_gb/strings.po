@@ -451,3 +451,7 @@ msgstr ""
 msgctxt "#32108"
 msgid "Channel-list overlay on autoplay"
 msgstr ""
+
+msgctxt "#32109"
+msgid "Up next: "
+msgstr ""

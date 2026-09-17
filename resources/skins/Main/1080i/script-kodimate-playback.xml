@@ -201,7 +201,8 @@
                 <height>40</height>
                 <font>font12</font>
                 <textcolor>ff808080</textcolor>
-                <label>$INFO[Window.Property(next_title)]</label>
+                <label>$ADDON[script.kodimate 32109]$INFO[Window.Property(next_title)]</label>
+                <visible>!String.IsEmpty(Window.Property(next_title))</visible>
             </control>
             <control type="label">
                 <posx>60</posx>
