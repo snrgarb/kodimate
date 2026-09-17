@@ -1075,3 +1075,54 @@ def test_generation_watcher_stopped_on_close(tmp_path):
         assert window._watcher._stopped is True
     finally:
         conn.close()
+
+
+def test_reentering_oninit_does_not_rebuild_pool_or_now_line(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        _channel(conn, pid, "b", "Beta", 1)
+        window = _window(conn)
+
+        added_before = len(window._added_controls)
+        now_line_before = window.now_line
+        watcher_before = window._watcher
+        top_row_before = window._top_row
+        viewport_start_before = window._viewport_start
+        cursor_time_before = window._cursor_time
+        selected_before = window.getControl(CHANNEL_LIST_ID).getSelectedPosition()
+
+        window.onInit()
+
+        assert len(window._added_controls) == added_before
+        assert window.now_line is now_line_before
+        assert window._watcher is watcher_before
+        assert window._top_row == top_row_before
+        assert window._viewport_start == viewport_start_before
+        assert window._cursor_time == cursor_time_before
+        assert window.getControl(CHANNEL_LIST_ID).getSelectedPosition() == selected_before
+    finally:
+        conn.close()
+
+
+def test_reentering_oninit_applies_deferred_refresh(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+
+        list_control = window.getControl(CHANNEL_LIST_ID)
+        assert list_control.getListItem(0).getLabel() == 'Alpha'
+
+        conn.execute("UPDATE channel SET name = 'Alpha2' WHERE channel_key = 'a'")
+        _bump_generation(2)
+        window._render_pending = True
+
+        window.onInit()
+
+        assert window._render_pending is False
+        assert list_control.getListItem(0).getLabel() == 'Alpha2'
+    finally:
+        conn.close()

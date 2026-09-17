@@ -63,6 +63,16 @@ class GuideWindow(BaseWindow):
     playback_cls = PlaybackWindow
 
     def onInit(self):
+        if getattr(self, '_initialised', False):
+            with self._lock:
+                if self._render_pending:
+                    self._render_pending = False
+                    self._refresh_in_place()
+                else:
+                    self._relayout()
+            self.setFocusId(CHANNEL_LIST_ID)
+            return
+
         addon = xbmcaddon.Addon()
         addon_path = addon.getAddonInfo('path')
         self._no_info_title = addon.getLocalizedString(_STR_NO_INFO)
@@ -94,6 +104,7 @@ class GuideWindow(BaseWindow):
         self._relayout()
         self.setFocusId(CHANNEL_LIST_ID)
         self._watcher = ipc.GenerationWatcher(self._on_generation_change)
+        self._initialised = True
 
     def _on_generation_change(self, generation):
         with self._lock:
