@@ -17,34 +17,6 @@
             <visible>!String.IsEqual(Window.Property(state),playing)</visible>
         </control>
 
-        <!-- Busy spinner: Estuary's native DialogBusy spinner, visible while
-             connecting or reconnecting. -->
-        <control type="group">
-            <centerleft>50%</centerleft>
-            <centertop>50%</centertop>
-            <width>80</width>
-            <height>80</height>
-            <visible>String.IsEqual(Window.Property(state),connecting) | String.IsEqual(Window.Property(state),reconnecting)</visible>
-            <control type="image">
-                <centerleft>50%</centerleft>
-                <centertop>50%</centertop>
-                <width>80</width>
-                <height>80</height>
-                <aspectratio>keep</aspectratio>
-                <animation effect="rotate" end="-45" center="auto" time="200" delay="600" loop="true" reversible="false" condition="true">Conditional</animation>
-                <texture colordiffuse="ffffffff">spinner.png</texture>
-            </control>
-            <control type="image">
-                <centerleft>50%</centerleft>
-                <centertop>50%</centertop>
-                <width>50</width>
-                <height>50</height>
-                <aspectratio>keep</aspectratio>
-                <animation effect="rotate" end="45" center="auto" time="200" delay="600" loop="true" reversible="false" condition="true">Conditional</animation>
-                <texture flipx="true" colordiffuse="ffffffff">spinner.png</texture>
-            </control>
-        </control>
-
         <!-- Top info bar -->
         <control type="group">
             <visible>String.IsEqual(Window.Property(bar_visible),1)</visible>
