@@ -109,7 +109,9 @@ def format_stream_info(width, height, video_codec, fps, audio_codec, audio_chann
     except ValueError:
         res = ''
     else:
-        if height_n >= 2000 or width_n >= 3800:
+        if width_n <= 0 or height_n <= 0:
+            res = ''
+        elif height_n >= 2000 or width_n >= 3800:
             res = '4K'
         elif height_n >= 1000:
             res = 'FHD'
@@ -119,9 +121,11 @@ def format_stream_info(width, height, video_codec, fps, audio_codec, audio_chann
             res = 'SD'
 
     try:
-        fps_text = u'%dfps' % round(float(fps))
+        fps_n = round(float(fps))
     except (TypeError, ValueError):
         fps_text = ''
+    else:
+        fps_text = u'%dfps' % fps_n if fps_n > 0 else ''
 
     vcodec = video_codec.upper() if video_codec else ''
 

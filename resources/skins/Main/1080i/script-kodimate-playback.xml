@@ -44,6 +44,7 @@
                 <font>font13</font>
                 <textcolor>ffffffff</textcolor>
                 <label>$INFO[Window.Property(channel_number)]</label>
+                <visible>!String.IsEqual(Window.Property(catchup),1)</visible>
             </control>
             <control type="label">
                 <posx>220</posx>
@@ -142,24 +143,43 @@
                     </control>
                 </control>
             </control>
-            <control type="label">
-                <posx>940</posx>
-                <posy>4</posy>
-                <width>200</width>
-                <height>24</height>
-                <font>font13</font>
-                <textcolor>ff3a6ea5</textcolor>
-                <label>$ADDON[script.kodimate 32094]</label>
-                <visible>String.IsEqual(Window.Property(catchup),1)</visible>
-            </control>
-            <control type="label">
+            <control type="grouplist">
                 <posx>940</posx>
                 <posy>30</posy>
                 <width>900</width>
                 <height>40</height>
-                <font>font12</font>
-                <textcolor>ffffffff</textcolor>
-                <label>$INFO[Window.Property(now_title)]</label>
+                <orientation>horizontal</orientation>
+                <itemgap>10</itemgap>
+                <control type="group">
+                    <width>130</width>
+                    <height>32</height>
+                    <visible>String.IsEqual(Window.Property(catchup),1)</visible>
+                    <control type="image">
+                        <posy>4</posy>
+                        <width>130</width>
+                        <height>32</height>
+                        <texture>white.png</texture>
+                        <colordiffuse>ff3a6ea5</colordiffuse>
+                    </control>
+                    <control type="label">
+                        <posy>4</posy>
+                        <width>130</width>
+                        <height>32</height>
+                        <font>font12</font>
+                        <align>center</align>
+                        <aligny>center</aligny>
+                        <textcolor>ffffffff</textcolor>
+                        <label>$ADDON[script.kodimate 32094]</label>
+                    </control>
+                </control>
+                <control type="label">
+                    <width>760</width>
+                    <height>40</height>
+                    <font>font12</font>
+                    <textcolor>ffffffff</textcolor>
+                    <aligny>center</aligny>
+                    <label>$INFO[Window.Property(now_title)]</label>
+                </control>
             </control>
             <control type="image" id="703">
                 <posx>940</posx>

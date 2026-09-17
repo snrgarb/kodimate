@@ -144,6 +144,16 @@ def test_format_stream_info_fps_empty_when_unparseable():
     assert osd.format_stream_info('', '', '', '', '', '')['fps'] == ''
 
 
+def test_format_stream_info_fps_empty_when_zero():
+    assert osd.format_stream_info('', '', '', '0', '', '')['fps'] == ''
+    assert osd.format_stream_info('', '', '', '0.000', '', '')['fps'] == ''
+
+
+def test_format_stream_info_res_empty_when_width_or_height_zero():
+    assert osd.format_stream_info('0', '1,080', '', '', '', '')['res'] == ''
+    assert osd.format_stream_info('1,920', '0', '', '', '', '')['res'] == ''
+
+
 def test_format_stream_info_unknown_channel_count():
     info = osd.format_stream_info('', '', '', '', '', '3')
     assert info['audio'] == '3ch'

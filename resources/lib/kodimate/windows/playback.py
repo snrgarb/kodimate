@@ -104,6 +104,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self.setProperty('bar_visible', '1')
         self.setProperty('list_visible', '0')
         self.setProperty('digits', '')
+        self.setProperty('catchup', '1' if self.catchup else '0')
         if self.snapshot is not None:
             self.setProperty('channel_name', self.snapshot['name'])
             self.setProperty('channel_number', str(self.snapshot['number']))
@@ -438,10 +439,11 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             xbmc.getInfoLabel('VideoPlayer.AudioCodec'),
             xbmc.getInfoLabel('VideoPlayer.AudioChannels'),
         )
-        self.setProperty('stream_res', info['res'])
-        self.setProperty('stream_fps', info['fps'])
-        self.setProperty('stream_vcodec', info['vcodec'])
-        self.setProperty('stream_audio', info['audio'])
+        if info['res'] and info['fps'] and info['vcodec'] and info['audio']:
+            self.setProperty('stream_res', info['res'])
+            self.setProperty('stream_fps', info['fps'])
+            self.setProperty('stream_vcodec', info['vcodec'])
+            self.setProperty('stream_audio', info['audio'])
 
     # -- Groups/Channels overlay --------------------------------------------
 
