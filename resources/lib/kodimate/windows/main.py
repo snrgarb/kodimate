@@ -2,11 +2,13 @@
 import xbmcgui
 
 from .base import BaseWindow
+from .catchup_browser import CatchupBrowserWindow
 from .channel_list import ChannelListWindow
 from .guide import GuideWindow
 
 CHANNELS_BUTTON_ID = 201
 GUIDE_BUTTON_ID = 202
+CATCHUP_BUTTON_ID = 203
 
 
 class MainWindow(BaseWindow):
@@ -21,3 +23,5 @@ class MainWindow(BaseWindow):
             ChannelListWindow.open(conn=self.conn)
         elif control_id == GUIDE_BUTTON_ID:
             GuideWindow.open(conn=self.conn)
+        elif control_id == CATCHUP_BUTTON_ID:
+            CatchupBrowserWindow.open(conn=self.conn)

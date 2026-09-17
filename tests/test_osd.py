@@ -106,6 +106,44 @@ def test_format_times_uses_en_dash():
     assert text == u'12:00–13:00'
 
 
+def test_neighbour_programme_steps_forward_and_back():
+    programmes = [
+        _prog(datetime(2026, 1, 1, 10, 0), datetime(2026, 1, 1, 11, 0), 'A'),
+        _prog(datetime(2026, 1, 1, 11, 0), datetime(2026, 1, 1, 12, 0), 'B'),
+        _prog(datetime(2026, 1, 1, 12, 0), datetime(2026, 1, 1, 13, 0), 'C'),
+    ]
+    assert osd.neighbour_programme(programmes, programmes[1], -1)['title'] == 'A'
+    assert osd.neighbour_programme(programmes, programmes[1], 1)['title'] == 'C'
+
+
+def test_neighbour_programme_clamps_at_ends():
+    programmes = [
+        _prog(datetime(2026, 1, 1, 10, 0), datetime(2026, 1, 1, 11, 0), 'A'),
+        _prog(datetime(2026, 1, 1, 11, 0), datetime(2026, 1, 1, 12, 0), 'B'),
+    ]
+    assert osd.neighbour_programme(programmes, programmes[0], -1) is programmes[0]
+    assert osd.neighbour_programme(programmes, programmes[1], 1) is programmes[1]
+
+
+def test_neighbour_programme_none_current_or_empty_list():
+    assert osd.neighbour_programme([], None, 1) is None
+    prog = _prog(datetime(2026, 1, 1, 10, 0), datetime(2026, 1, 1, 11, 0), 'A')
+    assert osd.neighbour_programme([], prog, 1) is prog
+    assert osd.neighbour_programme([prog], None, 1) is None
+
+
+def test_neighbour_programme_unmatched_current_returns_current():
+    programmes = [_prog(datetime(2026, 1, 1, 10, 0), datetime(2026, 1, 1, 11, 0), 'A')]
+    other = _prog(datetime(2026, 1, 1, 9, 0), datetime(2026, 1, 1, 9, 30), 'X')
+    assert osd.neighbour_programme(programmes, other, 1) is other
+
+
+def test_format_position():
+    assert osd.format_position(0, 3600) == u'0:00:00 / 1:00:00'
+    assert osd.format_position(125, 3725) == u'0:02:05 / 1:02:05'
+    assert osd.format_position(-5, 60) == u'0:00:00 / 0:01:00'
+
+
 def test_back_layer_priority():
     assert osd.back_layer(list_open=True, bar_visible=True) == 'close_list'
     assert osd.back_layer(list_open=False, bar_visible=True) == 'hide_bar'

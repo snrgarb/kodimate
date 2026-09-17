@@ -87,6 +87,39 @@ def format_times(start, end, tz=None):
     return u'%s–%s' % (local_start.strftime('%H:%M'), local_end.strftime('%H:%M'))
 
 
+def neighbour_programme(programmes, current, direction):
+    """The programme adjacent to `current` in `programmes` (matched by
+    'start', ordered by 'start') in `direction` (-1 previous, +1 next);
+    `current` itself if there is no such neighbour (clamps at the ends of
+    the loaded list, or `current`/`programmes` is empty)."""
+    if current is None or not programmes:
+        return current
+    ordered = sorted(programmes, key=lambda p: p['start'])
+    index = None
+    for i, programme in enumerate(ordered):
+        if programme['start'] == current['start']:
+            index = i
+            break
+    if index is None:
+        return current
+    new_index = index + direction
+    if 0 <= new_index < len(ordered):
+        return ordered[new_index]
+    return current
+
+
+def _format_hms(seconds):
+    seconds = max(0, int(seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return u'%d:%02d:%02d' % (hours, minutes, secs)
+
+
+def format_position(position_seconds, duration_seconds):
+    """'H:MM:SS / H:MM:SS' (player position / requested duration)."""
+    return u'%s / %s' % (_format_hms(position_seconds), _format_hms(duration_seconds))
+
+
 def back_layer(list_open, bar_visible):
     """Which layer a Back press should act on."""
     if list_open:

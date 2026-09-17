@@ -1163,3 +1163,438 @@ def test_open_list_on_init_opens_the_overlay(tmp_path):
 
     assert window.getProperty('list_visible') == '1'
     assert window._list_open is True
+
+
+# -- OSD Left/Right programme stepping (issue #30) --------------------------
+
+import calendar as _calendar
+
+
+def _epoch(dt):
+    return _calendar.timegm(dt.utctimetuple())
+
+
+def _setup_channel_with_programmes(conn):
+    provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
+    eid = _epg_source(conn, provider_id)
+    _programme(conn, eid, 'a', '2026-01-01T10:00:00Z', '2026-01-01T11:00:00Z', 'Show1')
+    _programme(conn, eid, 'a', '2026-01-01T11:00:00Z', '2026-01-01T12:00:00Z', 'Show2')
+    _programme(conn, eid, 'a', '2026-01-01T12:00:00Z', '2026-01-01T13:00:00Z', 'Show3')
+    _programme(conn, eid, 'a', '2026-01-01T13:00:00Z', '2026-01-01T14:00:00Z', 'Show4')
+    snapshot['catchup_mode'] = 'shift'
+    snapshot['catchup_days'] = 3
+    return provider_id, snapshot
+
+
+def test_left_right_do_not_open_list(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+
+    assert window.getProperty('list_visible') == '0'
+    assert window._list_open is False
+
+
+def test_up_down_still_open_list_in_playback(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+
+    assert window.getProperty('list_visible') == '1'
+
+
+def test_step_left_updates_osd_immediately_without_stream_change(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+
+    assert window.getProperty('now_title') == 'Show2'
+    assert len(window.player.plays) == plays_before
+
+
+def test_step_commits_after_debounce_with_exactly_one_play(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(1.5)
+
+    assert len(window.player.plays) == plays_before + 1
+    assert window.catchup is not None
+    assert window.catchup['title'] == 'Show2'
+
+
+def test_rapid_left_presses_commit_only_once(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(0.5)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(0.5)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+
+    assert len(window.player.plays) == plays_before
+    assert window.getProperty('now_title') == 'Show1'
+
+    window.scheduler.advance(1.5)
+
+    assert len(window.player.plays) == plays_before + 1
+    assert window.catchup['title'] == 'Show1'
+
+
+def test_step_clamps_at_earliest_loaded_programme(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 10, 30)  # Show1 is "now"
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+
+    assert window.getProperty('now_title') == 'Show1'
+    assert window.scheduler.pending_count() == 0 or window._step_timer is None
+
+
+def test_back_cancels_pending_step_and_restores_osd(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    assert window.getProperty('now_title') == 'Show2'
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
+
+    assert window.getProperty('now_title') == 'Show3'
+    assert window._step_programme is None
+    window.scheduler.advance(1.5)
+    assert len(window.player.plays) == plays_before
+
+
+def test_step_to_now_while_in_catchup_goes_live(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)  # Show3 airing now
+    start_dt = datetime(2026, 1, 1, 11, 0)
+    end_dt = datetime(2026, 1, 1, 12, 0)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
+        'title': 'Show2', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+    }
+    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
+    window.onInit()
+    window.session.on_av_started()
+    assert window.getProperty('catchup') == '1'
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+    window.scheduler.advance(1.5)
+
+    assert window.catchup is None
+    assert window.getProperty('catchup') == '0'
+
+
+def test_ok_on_bar_visible_opens_dialog_and_starts_catchup(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)  # Show3 airing now
+
+    class _Dialog(object):
+        opened_with = None
+        result = 'start_over'
+
+        @classmethod
+        def open(cls, **kwargs):
+            _Dialog.opened_with = kwargs
+            return cls()
+
+    window = _window(conn, snapshot, now_fn=FakeNow(now), dialog_cls=_Dialog)
+    window.onInit()
+    window.session.on_av_started()
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_SELECT_ITEM))
+
+    assert _Dialog.opened_with['title'] == 'Show3'
+    assert 'start_over' in _Dialog.opened_with['actions']
+    assert window.catchup is not None
+    assert window.catchup['title'] == 'Show3'
+    assert len(window.player.plays) == plays_before + 1
+
+
+def test_ok_on_bar_visible_watch_live_from_catchup(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    start_dt = datetime(2026, 1, 1, 11, 0)
+    end_dt = datetime(2026, 1, 1, 12, 0)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
+        'title': 'Show2', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+    }
+
+    class _Dialog(object):
+        result = 'watch_live'
+
+        @classmethod
+        def open(cls, **kwargs):
+            return cls()
+
+    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict, dialog_cls=_Dialog)
+    window.onInit()
+    window.session.on_av_started()
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_SELECT_ITEM))
+
+    assert window.catchup is None
+    assert window.getProperty('catchup') == '0'
+
+
+def test_ok_on_bar_visible_cancels_pending_step(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+
+    class _Dialog(object):
+        result = None
+
+        @classmethod
+        def open(cls, **kwargs):
+            return cls()
+
+    window = _window(conn, snapshot, now_fn=FakeNow(now), dialog_cls=_Dialog)
+    window.onInit()
+    window.session.on_av_started()
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_SELECT_ITEM))
+
+    assert window._step_timer is None
+    assert window._step_programme is None
+
+
+# -- CATCH-UP position/duration label (issue #30) ----------------------------
+
+def test_catchup_bar_shows_position_over_duration(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    snapshot['catchup_mode'] = 'shift'
+    start_dt = datetime(2026, 1, 1, 10, 0)
+    end_dt = datetime(2026, 1, 1, 11, 0)
+    catchup_dict = {'start': 0, 'end': 3600, 'now': 3600, 'title': 'Old Show',
+                     'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None}
+    window = _window(conn, snapshot, catchup=catchup_dict)
+    window.onInit()
+    window.player.time = 900
+    window.session.on_av_started()
+    window._tick()
+
+    assert window.getProperty('now_times') == u'0:15:00 / 1:00:00'
+
+
+# -- Up-next countdown (issue #30) -------------------------------------------
+
+def _catchup_end_setup(conn, next_state='live'):
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    start_dt = datetime(2026, 1, 1, 11, 0)
+    end_dt = datetime(2026, 1, 1, 12, 0)
+    now = datetime(2026, 1, 1, 12, 30) if next_state == 'live' else datetime(2026, 1, 1, 13, 30)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(end_dt),
+        'title': 'Show2', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+    }
+    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
+    return window
+
+
+def test_tick_reaching_duration_starts_upnext_countdown(tmp_path):
+    conn = _conn(tmp_path)
+    window = _catchup_end_setup(conn)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.time = 3600  # duration = end(3600) - start(0) = 3600
+
+    window._tick()
+
+    assert window.getProperty('upnext') == '1'
+    assert window.getProperty('upnext_title') == 'Show3'
+    assert window.getProperty('upnext_seconds') == '5'
+    assert window.player.stop_calls == 0  # video kept playing under the countdown
+
+
+def test_upnext_countdown_ticks_down_and_awaits_stopped_before_playing_next(tmp_path):
+    conn = _conn(tmp_path)
+    window = _catchup_end_setup(conn)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.time = 3600
+    window._tick()
+    plays_before = len(window.player.plays)
+
+    for _ in range(5):
+        window.scheduler.advance(1)
+
+    assert window.getProperty('upnext') == '0'
+    assert window.player.stop_calls == 1
+    assert len(window.player.plays) == plays_before  # not yet -- awaiting onPlayBackStopped
+
+    window.on_stopped()
+
+    assert len(window.player.plays) == plays_before + 1
+    assert window.catchup is None  # Show3 is airing now -> live
+    assert window.getProperty('catchup') == '0'
+
+
+def test_upnext_fallback_timer_proceeds_if_stopped_callback_never_arrives(tmp_path):
+    conn = _conn(tmp_path)
+    window = _catchup_end_setup(conn)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.time = 3600
+    window._tick()
+    plays_before = len(window.player.plays)
+
+    for _ in range(5):
+        window.scheduler.advance(1)  # expiry: player.stop() called, awaiting callback
+    window.scheduler.advance(3)  # fallback fires
+
+    assert len(window.player.plays) == plays_before + 1
+    assert window.catchup is None
+
+
+def test_upnext_next_programme_past_starts_catchup_session(tmp_path):
+    conn = _conn(tmp_path)
+    window = _catchup_end_setup(conn, next_state='past')
+    window.onInit()
+    window.session.on_av_started()
+    window.player.time = 3600
+    window._tick()
+    for _ in range(5):
+        window.scheduler.advance(1)
+    plays_before = len(window.player.plays)
+
+    window.on_stopped()
+
+    assert len(window.player.plays) == plays_before + 1
+    assert window.catchup is not None
+    assert window.catchup['title'] == 'Show3'
+
+
+def test_upnext_no_next_programme_closes_window(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
+    eid = _epg_source(conn, provider_id)
+    start_dt = datetime(2026, 1, 1, 11, 0)
+    end_dt = datetime(2026, 1, 1, 12, 0)
+    _programme(conn, eid, 'a', '2026-01-01T11:00:00Z', '2026-01-01T12:00:00Z', 'Show2')
+    now = datetime(2026, 1, 1, 12, 30)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(end_dt),
+        'title': 'Show2', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+    }
+    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.time = 3600
+    window._tick()
+
+    for _ in range(5):
+        window.scheduler.advance(1)
+    window.on_stopped()
+
+    assert window._stop_event.is_set()
+
+
+def test_back_during_upnext_countdown_aborts_and_closes(tmp_path):
+    conn = _conn(tmp_path)
+    window = _catchup_end_setup(conn)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.time = 3600
+    window._tick()
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
+
+    assert window._stop_event.is_set()
+    assert window.player.stop_calls >= 1
+
+
+def test_up_down_during_upnext_cancels_countdown_and_opens_list(tmp_path):
+    conn = _conn(tmp_path)
+    window = _catchup_end_setup(conn)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.time = 3600
+    window._tick()
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+
+    assert window.getProperty('upnext') == '0'
+    assert window.getProperty('list_visible') == '1'
+
+
+def test_on_ended_near_duration_routes_to_upnext_instead_of_reconnect(tmp_path):
+    conn = _conn(tmp_path)
+    window = _catchup_end_setup(conn)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.time = 3598  # within the 5s tolerance of duration=3600
+
+    window.on_ended()
+
+    assert window.getProperty('upnext') == '1'
+    assert window.getProperty('state') != 'reconnecting'
+
+
+# -- Back from Catch-up (issue #30) ------------------------------------------
+
+def test_back_on_bare_video_bar_hidden_in_catchup_closes_and_stops(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    snapshot['catchup_mode'] = 'shift'
+    start_dt = datetime(2026, 1, 1, 10, 0)
+    end_dt = datetime(2026, 1, 1, 11, 0)
+    catchup_dict = {'start': 0, 'end': 3600, 'now': 3600, 'title': 'Old Show',
+                     'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None}
+    window = _window(conn, snapshot, catchup=catchup_dict)
+    window.onInit()
+    window.session.on_av_started()
+    window._hide_bar()
+    assert window.getProperty('bar_visible') == '0'
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
+
+    assert window._stop_event.is_set()
+    assert window.player.stop_calls >= 1

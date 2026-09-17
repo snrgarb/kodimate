@@ -225,6 +225,16 @@
                 <visible>!String.IsEmpty(Window.Property(next_title))</visible>
             </control>
             <control type="label">
+                <posx>940</posx>
+                <posy>130</posy>
+                <width>900</width>
+                <height>40</height>
+                <font>font12</font>
+                <textcolor>ffffffff</textcolor>
+                <label>$ADDON[script.kodimate 32109]$INFO[Window.Property(upnext_title)] ($INFO[Window.Property(upnext_seconds)])</label>
+                <visible>String.IsEqual(Window.Property(upnext),1)</visible>
+            </control>
+            <control type="label">
                 <posx>60</posx>
                 <posy>170</posy>
                 <width>1760</width>

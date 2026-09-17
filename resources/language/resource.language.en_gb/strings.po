@@ -455,3 +455,15 @@ msgstr ""
 msgctxt "#32109"
 msgid "Up next: "
 msgstr ""
+
+msgctxt "#32110"
+msgid "Catch-up"
+msgstr ""
+
+msgctxt "#32111"
+msgid "Today"
+msgstr ""
+
+msgctxt "#32112"
+msgid "Yesterday"
+msgstr ""

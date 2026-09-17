@@ -7,6 +7,7 @@ all driven off window properties and injectable collaborators
 (player/probe/scheduler/clock/persist_learned_form/osd_hide_seconds/
 number_commit_delay/now_fn) so the window is unit-testable with fakes.
 """
+import calendar
 import threading
 import time
 from datetime import datetime, timedelta
@@ -15,9 +16,10 @@ import xbmc
 import xbmcaddon
 import xbmcgui
 
-from .. import autoplay, channels, guide, ipc, log, osd, playback
+from .. import autoplay, catchup, channels, guide, ipc, log, osd, playback, urls
 from .. import player as player_module
 from .. import providers
+from . import programme_info
 
 _STR_CONNECTING = 32084
 _STR_RECONNECTING = 32085
@@ -54,8 +56,17 @@ PROGRESS_KNOB_SIZE = 8
 _DEFAULT_OSD_HIDE_SECONDS = 3
 _DEFAULT_NUMBER_COMMIT_DELAY = 1.5
 
-_PROGRAMME_WINDOW_BEFORE = timedelta(hours=1)
+# Wide enough to step (Left/Right) back through a Catch-up window.
+_PROGRAMME_WINDOW_BEFORE = timedelta(days=7)
 _PROGRAMME_WINDOW_AFTER = timedelta(hours=12)
+
+_UPNEXT_END_TOLERANCE_SECONDS = 5
+
+_NO_UPNEXT_TARGET = object()
+
+
+def _epoch(dt):
+    return calendar.timegm(dt.utctimetuple())
 
 
 class PlaybackWindow(xbmcgui.WindowXMLDialog):
@@ -79,6 +90,8 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
     persist_catchup_form = None
     notify = None
     open_list_on_init = False
+    dialog_cls = programme_info.ProgrammeInfoDialog
+    upnext_delay = 5
 
     def __init__(self, *args, **kwargs):
         for key, value in kwargs.items():
@@ -94,6 +107,15 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self._stop_event = None
         self._thread = None
         self._render_pending = False
+        self._step_programme = None
+        self._step_timer = None
+        self._upnext = False
+        self._upnext_timer = None
+        self._upnext_fallback_timer = None
+        self._upnext_programme = None
+        self._upnext_remaining = 0
+        self._upnext_session_stopped = False
+        self._awaiting_upnext_stop_target = _NO_UPNEXT_TARGET
         self._lock = threading.RLock()
         # Set before doModal() draws the first frame: WindowXMLDialog
         # honours setProperty() called here, so the spinner and channel
@@ -105,6 +127,9 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self.setProperty('list_visible', '0')
         self.setProperty('digits', '')
         self.setProperty('catchup', '1' if self.catchup else '0')
+        self.setProperty('upnext', '0')
+        self.setProperty('upnext_title', '')
+        self.setProperty('upnext_seconds', '')
         if self.snapshot is not None:
             self.setProperty('channel_name', self.snapshot['name'])
             self.setProperty('channel_number', str(self.snapshot['number']))
@@ -232,13 +257,59 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self.persist_learned_form, self._on_state,
             catchup=self.catchup, persist_catchup_form=self.persist_catchup_form,
         )
-        self.player.attach(self.session)
+        self.player.attach(self)
         self.session.start()
         xbmc.sleep(_ACTIVATE_FULLSCREEN_SLEEP_MS)
         xbmc.executebuiltin('ActivateWindow(fullscreenvideo)')
 
+    # -- player callbacks (issue #30): the window is attached to the
+    # player (not the session directly) so it can intercept a Catch-up
+    # programme naturally ending and route it to the Up-next countdown
+    # instead of the session's Drop/reconnect handling. -----------------
+
+    def on_av_started(self):
+        session = self.session
+        if session is not None:
+            session.on_av_started()
+
+    def on_error(self):
+        session = self.session
+        if session is not None:
+            session.on_error()
+
+    def on_stopped(self):
+        self._on_player_stop_or_end(is_ended=False)
+
+    def on_ended(self):
+        self._on_player_stop_or_end(is_ended=True)
+
+    def _on_player_stop_or_end(self, is_ended):
+        with self._lock:
+            if self._awaiting_upnext_stop_target is not _NO_UPNEXT_TARGET:
+                target = self._awaiting_upnext_stop_target
+                self._awaiting_upnext_stop_target = _NO_UPNEXT_TARGET
+                self._cancel_upnext_fallback_timer()
+                self._advance_upnext(target)
+                return
+            if self.catchup and self._playing and not self._upnext and self._near_catchup_end():
+                session = self.session
+                self._playing = False
+                if session is not None:
+                    session.abort()
+                    self.player.detach(session)
+                self._begin_upnext(session_already_stopped=True)
+                return
+            session = self.session
+        if session is not None:
+            if is_ended:
+                session.on_ended()
+            else:
+                session.on_stopped()
+
     def _zap(self, provider_id, channel_key):
         with self._lock:
+            self._cancel_step_timer()
+            self._step_programme = None
             self._abort_current_session()
             snapshot = playback.load_snapshot(self.conn, provider_id, channel_key)
             if snapshot is None:
@@ -301,16 +372,16 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self.setProperty('channel_name', self.snapshot['name'])
         self.setProperty('channel_number', str(self.snapshot['number']))
         self.setProperty('channel_logo', self.snapshot.get('logo_url') or '')
+        self._load_programmes()
         if self.catchup:
             self._apply_catchup_bar()
             return
-        self._load_programmes()
         self._apply_now_next(self.now_fn())
 
     def _apply_catchup_bar(self):
         self.setProperty('now_title', self.catchup.get('title') or '')
-        self.setProperty('now_times', osd.format_times(
-            self.catchup['start_dt'], self.catchup['end_dt'], self._tz,
+        self.setProperty('now_times', osd.format_position(
+            self._catchup_elapsed_seconds(), self._catchup_duration_seconds(),
         ))
         self.setProperty('next_title', '')
         offset_seconds = self.session.catchup_offset_seconds if self.session is not None else 0
@@ -319,6 +390,215 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self.catchup['start'], self.catchup['end'], offset_seconds, player_seconds,
         )
         self._set_progress(fraction)
+
+    def _catchup_duration_seconds(self):
+        if not self.catchup:
+            return 0
+        return max(0, min(self.catchup['end'], self.catchup['now']) - self.catchup['start'])
+
+    def _catchup_elapsed_seconds(self):
+        offset_seconds = self.session.catchup_offset_seconds if self.session is not None else 0
+        return offset_seconds + self._player_time_seconds()
+
+    def _near_catchup_end(self):
+        duration = self._catchup_duration_seconds()
+        if duration <= 0:
+            return False
+        elapsed = self._catchup_elapsed_seconds()
+        return elapsed > 0 and (duration - elapsed) <= _UPNEXT_END_TOLERANCE_SECONDS
+
+    def _catchup_reached_end(self):
+        duration = self._catchup_duration_seconds()
+        return duration > 0 and self._catchup_elapsed_seconds() >= duration
+
+    # -- Up-next countdown (issue #30) ----------------------------------
+
+    def _next_programme_after(self, end_dt):
+        candidates = sorted(self._programmes, key=lambda p: p['start'])
+        for programme in candidates:
+            if programme['start'] >= end_dt:
+                return programme
+        return None
+
+    def _begin_upnext(self, session_already_stopped):
+        with self._lock:
+            if self._upnext:
+                return
+            self._upnext = True
+            self._upnext_session_stopped = session_already_stopped
+            next_programme = self._next_programme_after(self.catchup['end_dt'])
+            self._upnext_programme = next_programme
+            self.setProperty('upnext', '1')
+            self.setProperty('upnext_title', next_programme['title'] if next_programme is not None else '')
+            self._upnext_remaining = self.upnext_delay
+            self.setProperty('upnext_seconds', str(self._upnext_remaining))
+            self._show_bar(arm_hide=False)
+            self._arm_upnext_tick()
+
+    def _arm_upnext_tick(self):
+        self._upnext_timer = self.scheduler(1, self._upnext_tick)
+
+    def _upnext_tick(self):
+        with self._lock:
+            if not self._upnext:
+                return
+            self._upnext_remaining -= 1
+            if self._upnext_remaining <= 0:
+                self.setProperty('upnext_seconds', '0')
+                self._expire_upnext()
+                return
+            self.setProperty('upnext_seconds', str(self._upnext_remaining))
+            self._arm_upnext_tick()
+
+    def _expire_upnext(self):
+        self._cancel_upnext_timer()
+        self._upnext = False
+        self.setProperty('upnext', '0')
+        next_programme = self._upnext_programme
+        self._upnext_programme = None
+        if self._upnext_session_stopped:
+            self._advance_upnext(next_programme)
+            return
+        self._awaiting_upnext_stop_target = next_programme
+        session = self.session
+        if session is not None:
+            session.abort()
+            self.player.detach(session)
+        self._upnext_fallback_timer = self.scheduler(3, self._on_upnext_fallback)
+
+    def _on_upnext_fallback(self):
+        with self._lock:
+            if self._awaiting_upnext_stop_target is _NO_UPNEXT_TARGET:
+                return
+            target = self._awaiting_upnext_stop_target
+            self._awaiting_upnext_stop_target = _NO_UPNEXT_TARGET
+            self._advance_upnext(target)
+
+    def _advance_upnext(self, next_programme):
+        with self._lock:
+            if next_programme is None:
+                self.close()
+                return
+            now = self.now_fn()
+            state = catchup.cell_state(
+                next_programme['start'], next_programme['end'], self._catchup_window_days(), now,
+            )
+            if state not in ('live', 'past_playable'):
+                self.close()
+                return
+            self._abort_current_session()
+            if state == 'live':
+                self.catchup = None
+            else:
+                self.catchup = self._catchup_dict_for(next_programme, now)
+            self._start_new_session()
+
+    def _cancel_upnext(self):
+        if not self._upnext:
+            return
+        self._upnext = False
+        self._cancel_upnext_timer()
+        self.setProperty('upnext', '0')
+        self.setProperty('upnext_title', '')
+        self.setProperty('upnext_seconds', '')
+
+    def _cancel_upnext_timer(self):
+        if self._upnext_timer is not None:
+            self._upnext_timer.cancel()
+            self._upnext_timer = None
+
+    def _cancel_upnext_fallback_timer(self):
+        if self._upnext_fallback_timer is not None:
+            self._upnext_fallback_timer.cancel()
+            self._upnext_fallback_timer = None
+
+    # -- Left/Right programme stepping (issue #30) -----------------------
+
+    def _catchup_window_days(self):
+        snapshot = self.snapshot
+        supported = True if snapshot['kind'] != 'm3u' else urls.m3u_catchup_supported(snapshot)
+        return catchup.effective_window_days(snapshot.get('catchup_days'), None, url_supported=supported)
+
+    def _catchup_dict_for(self, programme, now):
+        return {
+            'start': _epoch(programme['start']),
+            'end': _epoch(programme['end']),
+            'now': _epoch(now),
+            'catchup_id': programme.get('catchup_id'),
+            'title': programme.get('title') or '',
+            'start_dt': programme['start'],
+            'end_dt': programme['end'],
+        }
+
+    def _start_catchup_for(self, programme):
+        with self._lock:
+            self._abort_current_session()
+            self.catchup = self._catchup_dict_for(programme, self.now_fn())
+            self._start_new_session()
+
+    def _referenced_programme(self):
+        if self._step_programme is not None:
+            return self._step_programme
+        if self.catchup:
+            for programme in self._programmes:
+                if programme['start'] == self.catchup['start_dt']:
+                    return programme
+            return {
+                'start': self.catchup['start_dt'], 'end': self.catchup['end_dt'],
+                'title': self.catchup.get('title') or '', 'description': '',
+                'catchup_id': self.catchup.get('catchup_id'),
+            }
+        now_prog, _ = osd.now_next(self._programmes, self.now_fn())
+        return now_prog
+
+    def _restore_osd_to_actual(self):
+        if self.catchup:
+            self._apply_catchup_bar()
+        else:
+            self._apply_now_next(self.now_fn())
+
+    def _on_step(self, direction):
+        with self._lock:
+            if self._upnext:
+                return
+            current = self._referenced_programme()
+            if current is None:
+                return
+            target = osd.neighbour_programme(self._programmes, current, direction)
+            if target is current:
+                return
+            self._step_programme = target
+            self.setProperty('now_title', target['title'])
+            self.setProperty('now_times', osd.format_times(target['start'], target['end'], self._tz))
+            self._show_bar(arm_hide=True)
+            self._cancel_step_timer()
+            self._step_timer = self.scheduler(self.number_commit_delay, self._commit_step)
+
+    def _commit_step(self):
+        with self._lock:
+            self._cancel_step_timer()
+            programme = self._step_programme
+            if programme is None:
+                return
+            now = self.now_fn()
+            window_days = self._catchup_window_days()
+            state = catchup.cell_state(programme['start'], programme['end'], window_days, now)
+            if state == 'live':
+                self._step_programme = None
+                if self.catchup is not None:
+                    self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
+                return
+            if state == 'past_playable':
+                self._step_programme = None
+                self._start_catchup_for(programme)
+                return
+            # 'future' or 'past_unplayable': OSD already shows the stepped
+            # programme; no stream change.
+
+    def _cancel_step_timer(self):
+        if self._step_timer is not None:
+            self._step_timer.cancel()
+            self._step_timer = None
 
     def _set_progress(self, fraction):
         if self._stopped():
@@ -354,6 +634,8 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 'start': guide.parse_iso(row['start']),
                 'end': guide.parse_iso(row['end']),
                 'title': row['title'] or '',
+                'description': row.get('description') or '',
+                'catchup_id': row.get('catchup_id'),
             }
             for row in raw.get(channel_id, [])
         ]
@@ -417,6 +699,9 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 return
             if self.catchup:
                 self._apply_catchup_bar()
+                if not self._upnext and self._catchup_reached_end():
+                    self._playing = False
+                    self._begin_upnext(session_already_stopped=False)
                 return
             now = self.now_fn()
             now_prog, _ = osd.now_next(self._programmes, now)
@@ -551,6 +836,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
 
     def _on_digit(self, digit):
         with self._lock:
+            if self._upnext:
+                self._cancel_upnext()
+            self._cancel_step_timer()
+            self._step_programme = None
             if self.getProperty('state') in _CONNECTING_STATES:
                 self._abort_current_session()
             self._digits += str(digit)
@@ -616,11 +905,18 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                         self._render_channels_list()
                 return
 
-            if action_id in (xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN,
-                              xbmcgui.ACTION_MOVE_LEFT, xbmcgui.ACTION_MOVE_RIGHT):
+            if action_id in (xbmcgui.ACTION_MOVE_LEFT, xbmcgui.ACTION_MOVE_RIGHT):
+                self._on_step(-1 if action_id == xbmcgui.ACTION_MOVE_LEFT else 1)
+                return
+
+            if action_id in (xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN):
+                if self._upnext:
+                    self._cancel_upnext()
                 self._open_list()
 
     def _on_ok(self):
+        if self._upnext:
+            self._cancel_upnext()
         if self._digits:
             self._commit_digits()
             return
@@ -630,12 +926,42 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self._start_new_session()
             return
         if self.getProperty('bar_visible') == '1':
-            self._hide_bar()
+            self._on_ok_bar_visible()
         else:
             self._show_bar(arm_hide=(self.getProperty('state') == 'playing'))
 
+    def _on_ok_bar_visible(self):
+        self._cancel_step_timer()
+        programme = self._referenced_programme()
+        if programme is None:
+            return
+        now = self.now_fn()
+        window_days = self._catchup_window_days()
+        state = catchup.cell_state(programme['start'], programme['end'], window_days, now)
+        dialog = self.dialog_cls.open(
+            title=programme.get('title') or '',
+            times=osd.format_times(programme['start'], programme['end'], self._tz),
+            description=programme.get('description') or '',
+            actions=catchup.actions_for(state, start_over_ok=bool(window_days)),
+        )
+        result = dialog.result
+        self._step_programme = None
+        if result == 'watch_live':
+            self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
+        elif result in ('start_over', 'play_catchup'):
+            self._start_catchup_for(programme)
+
     def _on_back(self):
         with self._lock:
+            if self._upnext:
+                self._cancel_upnext()
+                self._abort_and_close()
+                return
+            if self._step_programme is not None:
+                self._cancel_step_timer()
+                self._step_programme = None
+                self._restore_osd_to_actual()
+                return
             if self._digits:
                 self._cancel_digit_entry()
                 return
@@ -665,4 +991,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self._thread.join(5.0)
         self._cancel_hide_timer()
         self._cancel_digit_timer()
+        self._cancel_step_timer()
+        self._cancel_upnext_timer()
+        self._cancel_upnext_fallback_timer()
         super(PlaybackWindow, self).close()

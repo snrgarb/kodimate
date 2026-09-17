@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<window>
+    <defaultcontrol always="true">200</defaultcontrol>
+    <coordinates>
+        <system>1</system>
+        <posx>0</posx>
+        <posy>0</posy>
+    </coordinates>
+    <backgroundcolor>ff101010</backgroundcolor>
+    <controls>
+        <control type="list" id="200">
+            <posx>80</posx>
+            <posy>80</posy>
+            <width>560</width>
+            <height>920</height>
+            <onup>200</onup>
+            <ondown>200</ondown>
+            <onleft>200</onleft>
+            <onright>201</onright>
+            <onback>9000</onback>
+            <itemlayout height="70" width="560">
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>560</width>
+                    <height>68</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff202020</colordiffuse>
+                </control>
+                <control type="label">
+                    <posx>10</posx>
+                    <posy>0</posy>
+                    <width>90</width>
+                    <height>68</height>
+                    <textcolor>ffcccccc</textcolor>
+                    <label>$INFO[ListItem.Property(number)]</label>
+                </control>
+                <control type="image">
+                    <posx>110</posx>
+                    <posy>4</posy>
+                    <width>100</width>
+                    <height>60</height>
+                    <aspectratio>keep</aspectratio>
+                    <texture fallback="channel-placeholder.png">$INFO[ListItem.Icon]</texture>
+                </control>
+                <control type="label">
+                    <posx>230</posx>
+                    <posy>0</posy>
+                    <width>320</width>
+                    <height>68</height>
+                    <textcolor>ffcccccc</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                </control>
+            </itemlayout>
+            <focusedlayout height="70" width="560">
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>560</width>
+                    <height>68</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff3a6ea5</colordiffuse>
+                    <visible>Control.HasFocus(200)</visible>
+                </control>
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>560</width>
+                    <height>68</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff2c3e50</colordiffuse>
+                    <visible>!Control.HasFocus(200)</visible>
+                </control>
+                <control type="label">
+                    <posx>10</posx>
+                    <posy>0</posy>
+                    <width>90</width>
+                    <height>68</height>
+                    <textcolor>ffffffff</textcolor>
+                    <label>$INFO[ListItem.Property(number)]</label>
+                </control>
+                <control type="image">
+                    <posx>110</posx>
+                    <posy>4</posy>
+                    <width>100</width>
+                    <height>60</height>
+                    <aspectratio>keep</aspectratio>
+                    <texture fallback="channel-placeholder.png">$INFO[ListItem.Icon]</texture>
+                </control>
+                <control type="label">
+                    <posx>230</posx>
+                    <posy>0</posy>
+                    <width>320</width>
+                    <height>68</height>
+                    <textcolor>ffffffff</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                </control>
+            </focusedlayout>
+        </control>
+        <control type="list" id="201">
+            <posx>680</posx>
+            <posy>80</posy>
+            <width>1160</width>
+            <height>920</height>
+            <onup>201</onup>
+            <ondown>201</ondown>
+            <onleft>200</onleft>
+            <onright>201</onright>
+            <onback>9000</onback>
+            <itemlayout height="60" width="1160">
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>1160</width>
+                    <height>58</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff202020</colordiffuse>
+                    <visible>!String.IsEqual(ListItem.Property(header),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>1160</width>
+                    <height>58</height>
+                    <textcolor>ff606060</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>String.IsEqual(ListItem.Property(header),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>10</posx>
+                    <posy>0</posy>
+                    <width>220</width>
+                    <height>58</height>
+                    <textcolor>ffcccccc</textcolor>
+                    <label>$INFO[ListItem.Property(times)]</label>
+                    <visible>!String.IsEqual(ListItem.Property(header),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>240</posx>
+                    <posy>0</posy>
+                    <width>900</width>
+                    <height>58</height>
+                    <textcolor>ffcccccc</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>!String.IsEqual(ListItem.Property(header),1)</visible>
+                </control>
+            </itemlayout>
+            <focusedlayout height="60" width="1160">
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>1160</width>
+                    <height>58</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff3a6ea5</colordiffuse>
+                    <visible>Control.HasFocus(201) + !String.IsEqual(ListItem.Property(header),1)</visible>
+                </control>
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>1160</width>
+                    <height>58</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff2c3e50</colordiffuse>
+                    <visible>!Control.HasFocus(201) + !String.IsEqual(ListItem.Property(header),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>1160</width>
+                    <height>58</height>
+                    <textcolor>ff606060</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>String.IsEqual(ListItem.Property(header),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>10</posx>
+                    <posy>0</posy>
+                    <width>220</width>
+                    <height>58</height>
+                    <textcolor>ffffffff</textcolor>
+                    <label>$INFO[ListItem.Property(times)]</label>
+                    <visible>!String.IsEqual(ListItem.Property(header),1)</visible>
+                </control>
+                <control type="label">
+                    <posx>240</posx>
+                    <posy>0</posy>
+                    <width>900</width>
+                    <height>58</height>
+                    <textcolor>ffffffff</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <visible>!String.IsEqual(ListItem.Property(header),1)</visible>
+                </control>
+            </focusedlayout>
+        </control>
+    </controls>
+</window>

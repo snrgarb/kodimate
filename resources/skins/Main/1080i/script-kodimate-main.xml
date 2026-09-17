@@ -53,6 +53,19 @@
             <textcolor>ffcccccc</textcolor>
             <focusedcolor>ffffffff</focusedcolor>
             <onup>200</onup>
+            <ondown>203</ondown>
+        </control>
+        <control type="button" id="203">
+            <posx>80</posx>
+            <posy>380</posy>
+            <width>360</width>
+            <height>60</height>
+            <label>$ADDON[script.kodimate 32110]</label>
+            <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
+            <texturenofocus colordiffuse="ff202020">white.png</texturenofocus>
+            <textcolor>ffcccccc</textcolor>
+            <focusedcolor>ffffffff</focusedcolor>
+            <onup>202</onup>
             <ondown>201</ondown>
         </control>
     </controls>
