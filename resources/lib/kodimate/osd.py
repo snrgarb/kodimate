@@ -71,6 +71,15 @@ def progress_fraction(programme, now):
     return max(0.0, min(1.0, elapsed / total))
 
 
+def catchup_progress_fraction(start, end, offset_seconds, player_seconds):
+    """Fraction of a catch-up programme elapsed, clamped to 0..1."""
+    total = end - start
+    if total <= 0:
+        return 0.0
+    elapsed = offset_seconds + player_seconds
+    return max(0.0, min(1.0, elapsed / total))
+
+
 def format_times(start, end, tz=None):
     """'HH:MM–HH:MM' (en dash) in local time."""
     local_start = guide.utc_to_local(start, tz)

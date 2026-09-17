@@ -91,6 +91,13 @@ def test_progress_fraction_clamped():
     assert osd.progress_fraction(prog, datetime(2026, 1, 1, 14, 0)) == 1.0
 
 
+def test_catchup_progress_fraction_clamped():
+    assert osd.catchup_progress_fraction(0, 3600, 0, 900) == 0.25
+    assert osd.catchup_progress_fraction(0, 3600, 0, -100) == 0.0
+    assert osd.catchup_progress_fraction(0, 3600, 3600, 100) == 1.0
+    assert osd.catchup_progress_fraction(3600, 3600, 0, 100) == 0.0
+
+
 def test_format_times_uses_en_dash():
     from datetime import timezone
     text = osd.format_times(

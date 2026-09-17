@@ -265,6 +265,23 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self.catchup['start_dt'], self.catchup['end_dt'], self._tz,
         ))
         self.setProperty('next_title', '')
+        offset_seconds = self.session.catchup_offset_seconds if self.session is not None else 0
+        player_seconds = self._player_time_seconds()
+        fraction = osd.catchup_progress_fraction(
+            self.catchup['start'], self.catchup['end'], offset_seconds, player_seconds,
+        )
+        try:
+            self.getControl(PROGRESS_FILL_ID).setWidth(int(PROGRESS_WIDTH * fraction))
+        except Exception:
+            pass
+
+    def _player_time_seconds(self):
+        if not self._playing:
+            return 0
+        try:
+            return self.player.getTime()
+        except Exception:
+            return 0
 
     def _load_programmes(self):
         self._programmes = []
@@ -336,7 +353,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         if self._stop_event is not None and self._stop_event.is_set():
             return
         try:
-            if not self._playing or self.getProperty('bar_visible') != '1' or self.catchup:
+            if not self._playing or self.getProperty('bar_visible') != '1':
+                return
+            if self.catchup:
+                self._apply_catchup_bar()
                 return
             now = self.now_fn()
             now_prog, _ = osd.now_next(self._programmes, now)

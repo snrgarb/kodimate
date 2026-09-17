@@ -14,12 +14,19 @@ class FakePlayer(object):
         self.stop_calls = 0
         self.attached = None
         self.detached = None
+        self.time = 0
+        self.time_raises = False
 
     def play(self, url, headers):
         self.plays.append((url, headers))
 
     def stop(self):
         self.stop_calls += 1
+
+    def getTime(self):
+        if self.time_raises:
+            raise RuntimeError('no time')
+        return self.time
 
     def attach(self, session):
         self.attached = session
@@ -776,3 +783,59 @@ def test_zapping_from_catchup_starts_a_live_session(tmp_path):
     assert window.catchup is None
     assert window.getProperty('catchup') == '0'
     assert window.getProperty('channel_name') == 'Bravo'
+
+
+def test_catchup_bar_width_reflects_player_time_once_playing(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    snapshot['catchup_mode'] = 'shift'
+    start_dt = datetime(2026, 1, 1, 10, 0)
+    end_dt = datetime(2026, 1, 1, 11, 0)
+    catchup = {'start': 0, 'end': 3600, 'now': 3600, 'title': 'Old Show',
+               'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None}
+    window = _window(conn, snapshot, catchup=catchup)
+    window.onInit()
+
+    assert window.getControl(704).getWidth() == 0
+
+    window.player.time = 900
+    window.session.on_av_started()
+    window._tick()
+
+    assert window.getControl(704).getWidth() == 150  # 25% of PROGRESS_WIDTH(600)
+
+
+def test_catchup_tick_updates_width_as_player_time_advances(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    snapshot['catchup_mode'] = 'shift'
+    start_dt = datetime(2026, 1, 1, 10, 0)
+    end_dt = datetime(2026, 1, 1, 11, 0)
+    catchup = {'start': 0, 'end': 3600, 'now': 3600, 'title': 'Old Show',
+               'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None}
+    window = _window(conn, snapshot, catchup=catchup)
+    window.onInit()
+    window.session.on_av_started()
+
+    window.player.time = 1800
+    window._tick()
+
+    assert window.getControl(704).getWidth() == 300  # 50% of PROGRESS_WIDTH(600)
+
+
+def test_catchup_bar_width_survives_getTime_raising(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    snapshot['catchup_mode'] = 'shift'
+    start_dt = datetime(2026, 1, 1, 10, 0)
+    end_dt = datetime(2026, 1, 1, 11, 0)
+    catchup = {'start': 0, 'end': 3600, 'now': 3600, 'title': 'Old Show',
+               'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None}
+    window = _window(conn, snapshot, catchup=catchup)
+    window.onInit()
+    window.player.time_raises = True
+    window.session.on_av_started()
+    window._tick()
+
+    assert window.getControl(704).getWidth() == 0
+

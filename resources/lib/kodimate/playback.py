@@ -147,6 +147,10 @@ class PlaybackSession(object):
         self._explicit_format = bool(snapshot.get('stream_format'))
         self._probing = False
 
+    @property
+    def catchup_offset_seconds(self):
+        return self._catchup_offset_seconds
+
     # -- entry point ---------------------------------------------------
 
     def start(self):
