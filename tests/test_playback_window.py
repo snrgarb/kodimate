@@ -309,8 +309,8 @@ def test_tick_updates_progress_fill_width(tmp_path):
     window._tick()
 
     assert window.getControl(704).getWidth() == 300  # 50% of PROGRESS_WIDTH(600)
-    assert window.getControl(705).getX() == 1230  # 940 + 300 - 10
-    assert window.getControl(705).getY() == 72
+    assert window.getControl(705).getX() == 1236  # 940 + 300 - 4
+    assert window.getControl(705).getY() == 78
 
 
 def test_tick_updates_progress_while_bar_hidden(tmp_path):
@@ -870,8 +870,8 @@ def test_catchup_bar_width_reflects_player_time_once_playing(tmp_path):
     window._tick()
 
     assert window.getControl(704).getWidth() == 150  # 25% of PROGRESS_WIDTH(600)
-    assert window.getControl(705).getX() == 1080  # 940 + 150 - 10
-    assert window.getControl(705).getY() == 72
+    assert window.getControl(705).getX() == 1086  # 940 + 150 - 4
+    assert window.getControl(705).getY() == 78
 
 
 def test_catchup_tick_updates_width_as_player_time_advances(tmp_path):
