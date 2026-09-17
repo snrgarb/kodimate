@@ -442,10 +442,14 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
     def onClick(self, control_id):
         with self._lock:
             if control_id == GROUPS_LIST_ID:
+                if not self._list_open:
+                    return
                 self._last_group_position = self.getControl(GROUPS_LIST_ID).getSelectedPosition()
                 self._render_channels_list()
                 self.setFocusId(CHANNELS_LIST_ID)
             elif control_id == CHANNELS_LIST_ID:
+                if not self._list_open:
+                    return
                 item = self.getControl(CHANNELS_LIST_ID).getSelectedItem()
                 if item is None:
                     return

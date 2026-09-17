@@ -349,6 +349,54 @@ def test_ok_on_channel_row_zaps_and_closes_list(tmp_path):
     assert window.session.state == 'connecting'
 
 
+def test_click_on_channels_list_ignored_when_list_closed(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
+    _channel(conn, provider_id, 'b', name='Bravo', position=1)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+    channels_control = window.getControl(201)
+    target_position = next(
+        i for i, item in enumerate(channels_control._items) if item.getProperty('channel_key') == 'b'
+    )
+    channels_control.selectItem(target_position)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
+    assert window._list_open is False
+    plays_before = len(window.player.plays)
+    state_before = window.session.state
+
+    window.onClick(201)
+
+    assert len(window.player.plays) == plays_before
+    assert window.session.state == state_before
+
+
+def test_click_on_channels_list_ignored_when_list_closed_during_catchup(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha', position=0)
+    _channel(conn, provider_id, 'b', name='Bravo', position=1)
+    start_dt = datetime(2026, 1, 1, 10, 0)
+    end_dt = datetime(2026, 1, 1, 11, 0)
+    catchup = {'start': 0, 'end': 3600, 'now': 3600, 'title': 'Old Show',
+               'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None}
+    window = _window(conn, snapshot, catchup=catchup)
+    window.onInit()
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+    channels_control = window.getControl(201)
+    target_position = next(
+        i for i, item in enumerate(channels_control._items) if item.getProperty('channel_key') == 'b'
+    )
+    channels_control.selectItem(target_position)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
+    assert window._list_open is False
+
+    window.onClick(201)
+
+    assert window.catchup is not None
+    assert window.getProperty('catchup') == '1'
+
+
 def test_overlay_channel_row_gets_now_title_property(tmp_path):
     conn = _conn(tmp_path)
     provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
