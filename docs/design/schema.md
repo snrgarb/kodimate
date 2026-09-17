@@ -38,7 +38,7 @@ Same columns as `programme`. Created per EPG refresh, dropped by the swap and at
 
 ### meta
 
-`key`, `value` — holds `schema_version`.
+`key`, `value` — holds `schema_version`, plus `last_channel_provider_id`/`last_channel_key` (written by the script, read at startup for autoplay).
 
 ## Effective Channel Number
 

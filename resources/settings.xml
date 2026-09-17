@@ -37,6 +37,16 @@
         </category>
         <category id="playback" label="32090">
             <group id="1" label="">
+                <setting id="autoplay_last_channel" type="boolean" label="32107">
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle"/>
+                </setting>
+                <setting id="autoplay_overlay_list" type="boolean" label="32108">
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle"/>
+                </setting>
                 <setting id="osd_hide_seconds" type="integer" label="32091">
                     <level>0</level>
                     <default>3</default>

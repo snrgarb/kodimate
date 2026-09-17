@@ -8,8 +8,9 @@ import xbmc
 import xbmcaddon
 import xbmcvfs
 
-from kodimate import db, log, providers
+from kodimate import autoplay, db, log, providers
 from kodimate.windows.main import MainWindow
+from kodimate.windows.playback import PlaybackWindow
 from kodimate.windows.providers import ProvidersWindow
 
 
@@ -23,6 +24,13 @@ def run():
         if arg == 'providers' or providers.count_enabled(conn) == 0:
             ProvidersWindow.open(conn=conn)
         else:
+            if addon.getSettingBool('autoplay_last_channel'):
+                snapshot = autoplay.startup_snapshot(conn)
+                if snapshot is not None:
+                    PlaybackWindow.open(
+                        conn=conn, snapshot=snapshot,
+                        open_list_on_init=addon.getSettingBool('autoplay_overlay_list'),
+                    )
             MainWindow.open(conn=conn)
     finally:
         conn.close()

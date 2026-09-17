@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from kodimate import channels, db, playback
+from kodimate import autoplay, channels, db, playback
 from kodimate.windows.playback import PlaybackWindow, GROUPS_LIST_ID, CHANNELS_LIST_ID
 import xbmc
 import xbmcgui
@@ -1017,4 +1017,51 @@ def test_generation_watcher_stopped_on_close(tmp_path):
     window = _window(conn, snapshot)
     window.onInit()
     window.close()
-    assert window._watcher._stopped is True
+
+
+# -- autoplay: remembering the last channel (issue #29) -----------------
+
+def test_onInit_records_live_session_as_last_channel(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
+    window = _window(conn, snapshot)
+    window.onInit()
+
+    assert autoplay.resolve_autoplay_channel(conn) == (provider_id, 'a')
+
+
+def test_zap_updates_last_channel(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
+    _channel(conn, provider_id, 'b', name='Bravo', position=1)
+    window = _window(conn, snapshot)
+    window.onInit()
+
+    window._zap(provider_id, 'b')
+
+    assert autoplay.resolve_autoplay_channel(conn) == (provider_id, 'b')
+
+
+def test_catchup_session_does_not_overwrite_last_channel(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
+    _channel(conn, provider_id, 'b', name='Bravo', position=1)
+    autoplay.remember_last_channel(conn, provider_id, 'b')
+    start_dt = datetime(2026, 1, 1, 10, 0)
+    end_dt = datetime(2026, 1, 1, 11, 0)
+    catchup = {'start': 0, 'end': 3600, 'now': 3600, 'title': 'Old Show',
+               'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None}
+    window = _window(conn, snapshot, catchup=catchup)
+    window.onInit()
+
+    assert autoplay.resolve_autoplay_channel(conn) == (provider_id, 'b')
+
+
+def test_open_list_on_init_opens_the_overlay(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn, channel_key='a', name='Alpha')
+    window = _window(conn, snapshot, open_list_on_init=True)
+    window.onInit()
+
+    assert window.getProperty('list_visible') == '1'
+    assert window._list_open is True

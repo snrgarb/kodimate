@@ -15,7 +15,7 @@ import xbmc
 import xbmcaddon
 import xbmcgui
 
-from .. import channels, guide, ipc, log, osd, playback
+from .. import autoplay, channels, guide, ipc, log, osd, playback
 from .. import player as player_module
 from .. import providers
 
@@ -78,6 +78,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
     catchup = None
     persist_catchup_form = None
     notify = None
+    open_list_on_init = False
 
     def __init__(self, *args, **kwargs):
         for key, value in kwargs.items():
@@ -147,6 +148,8 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self._thread.start()
 
         self._start_new_session()
+        if self.open_list_on_init:
+            self._open_list()
         self._watcher = ipc.GenerationWatcher(self._on_generation_change)
 
     def _on_generation_change(self, generation):
@@ -213,6 +216,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self.setProperty('reason', '')
         self.setProperty('catchup', '1' if self.catchup else '0')
         self._playing = False
+        if self.catchup is None and self.conn is not None:
+            autoplay.remember_last_channel(
+                self.conn, self.snapshot['provider_id'], self.snapshot['channel_key']
+            )
         self._load_channel_info()
         self._show_bar(arm_hide=False)
         self.session = playback.PlaybackSession(

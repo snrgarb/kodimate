@@ -443,3 +443,11 @@ msgstr ""
 msgctxt "#32106"
 msgid "Reset to provider default"
 msgstr ""
+
+msgctxt "#32107"
+msgid "Autoplay last channel"
+msgstr ""
+
+msgctxt "#32108"
+msgid "Channel-list overlay on autoplay"
+msgstr ""
