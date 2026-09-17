@@ -69,15 +69,6 @@
             <textcolor>ffaaaaaa</textcolor>
         </control>
 
-        <control type="image">
-            <posx>298</posx>
-            <posy>60</posy>
-            <width>2</width>
-            <height>980</height>
-            <texture>white.png</texture>
-            <colordiffuse>ff3a3a3a</colordiffuse>
-        </control>
-
         <control type="list" id="500">
             <posx>0</posx>
             <posy>60</posy>
@@ -141,6 +132,15 @@
                     <visible>String.IsEqual(ListItem.Property(catchup),1)</visible>
                 </control>
             </focusedlayout>
+        </control>
+
+        <control type="image">
+            <posx>298</posx>
+            <posy>60</posy>
+            <width>2</width>
+            <height>980</height>
+            <texture>white.png</texture>
+            <colordiffuse>ff3a3a3a</colordiffuse>
         </control>
     </controls>
 </window>
