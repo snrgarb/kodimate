@@ -1,15 +1,10 @@
 # -*- coding: utf-8 -*-
 """Script-side provider CRUD and list query (pure SQL, no xbmc imports)."""
 import os
-import sqlite3
-import time
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 from . import db
-
-_MAX_RETRIES = 3
-_RETRY_SLEEP_SECONDS = 0.1
 
 ERROR_PLAYLIST_REQUIRED = 32010
 ERROR_PLAYLIST_INVALID = 32011
@@ -25,15 +20,7 @@ ERROR_CORRECTION_INVALID = 32058
 _EXPIRY_WARNING_DAYS = 7
 
 
-def _execute_with_retry(conn, fn):
-    """Run fn(conn) retrying up to _MAX_RETRIES times on 'database is locked'."""
-    for attempt in range(_MAX_RETRIES):
-        try:
-            return fn(conn)
-        except sqlite3.OperationalError as exc:
-            if 'database is locked' not in str(exc) or attempt == _MAX_RETRIES - 1:
-                raise
-            time.sleep(_RETRY_SLEEP_SECONDS)
+_execute_with_retry = db.execute_with_retry  # back-compat alias for existing callers/tests
 
 
 _EXTRA_COLUMNS = (

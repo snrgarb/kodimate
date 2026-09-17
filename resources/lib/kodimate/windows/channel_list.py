@@ -16,6 +16,14 @@ CHANNELS_LIST_ID = 201
 
 _STR_ALL_CHANNELS = 32038
 _STR_FAVOURITES = 32039
+_STR_MOVE = 32078
+_STR_RENUMBER = 32100
+_STR_RENUMBER_HEADING = 32101
+_STR_HIDE = 32102
+_STR_UNHIDE = 32103
+_STR_ADD_FAVOURITE = 32104
+_STR_REMOVE_FAVOURITE = 32105
+_STR_RESET = 32106
 
 _GROUP_SELECTION_DEBOUNCE_SECONDS = 0.35
 
@@ -25,6 +33,13 @@ class ChannelListWindow(BaseWindow):
     now_fn = datetime.utcnow
 
     def onInit(self):
+        if getattr(self, '_initialised', False):
+            with self._lock:
+                if self._render_pending:
+                    self._render_pending = False
+                    self._refresh_in_place()
+            return
+
         self._show_hidden = False
         self._last_group_position = 0
         self._render_timer = None
@@ -32,6 +47,9 @@ class ChannelListWindow(BaseWindow):
         self._modal_depth = 0
         self._render_pending = False
         self._watcher = None
+        self._move_key = None
+        self._move_order = None
+        self._move_original_order = None
         # Guards _modal_depth/_render_pending/_closed and every render below:
         # GenerationWatcher.onNotification runs on Kodi's Monitor thread
         # while the UI thread may be inside onAction/onClick.
@@ -40,6 +58,7 @@ class ChannelListWindow(BaseWindow):
         self._render_groups()
         self._render_channels()
         self._watcher = ipc.GenerationWatcher(self._on_generation_change)
+        self._initialised = True
 
     def _on_generation_change(self, generation):
         with self._lock:
@@ -108,6 +127,16 @@ class ChannelListWindow(BaseWindow):
 
     def onAction(self, action):
         action_id = action.getId()
+        if self._move_key is not None:
+            if action_id in (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU):
+                self._cancel_move()
+                return
+            if action_id == xbmcgui.ACTION_MOVE_UP:
+                self._shift_move(-1)
+                return
+            if action_id == xbmcgui.ACTION_MOVE_DOWN:
+                self._shift_move(1)
+                return
         if action_id in (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU):
             self.close()
             return
@@ -116,6 +145,8 @@ class ChannelListWindow(BaseWindow):
             if position != self._last_group_position:
                 self._last_group_position = position
                 self._schedule_render_channels()
+        elif action_id == xbmcgui.ACTION_CONTEXT_MENU and self.getFocusId() == CHANNELS_LIST_ID:
+            self._context_menu()
 
     def onClick(self, control_id):
         if control_id == TOGGLE_HIDDEN_ID:
@@ -128,7 +159,10 @@ class ChannelListWindow(BaseWindow):
             self._render_channels()
             self.setFocusId(CHANNELS_LIST_ID)
         elif control_id == CHANNELS_LIST_ID:
-            self._open_playback()
+            if self._move_key is not None:
+                self._drop_move()
+            else:
+                self._open_playback()
 
     def _open_playback(self):
         item = self.getControl(CHANNELS_LIST_ID).getSelectedItem()
@@ -143,6 +177,126 @@ class ChannelListWindow(BaseWindow):
                 PlaybackWindow.open(conn=self.conn, snapshot=snapshot)
             finally:
                 self._exit_modal()
+
+    def _context_menu(self):
+        item = self.getControl(CHANNELS_LIST_ID).getSelectedItem()
+        if item is None:
+            return
+        provider_id = int(item.getProperty('provider_id'))
+        channel_key = item.getProperty('channel_key')
+        hidden = item.getProperty('hidden') == '1'
+        favourite = item.getProperty('favourite') == '1'
+        group_item = self._selected_group_item()
+        in_favourites = group_item is not None and group_item.getProperty('kind') == 'favourites'
+
+        addon = xbmcaddon.Addon()
+        options = [addon.getLocalizedString(_STR_RENUMBER)]
+        actions = ['renumber']
+        options.append(addon.getLocalizedString(_STR_UNHIDE if hidden else _STR_HIDE))
+        actions.append('unhide' if hidden else 'hide')
+        options.append(addon.getLocalizedString(_STR_REMOVE_FAVOURITE if favourite else _STR_ADD_FAVOURITE))
+        actions.append('unfavourite' if favourite else 'favourite')
+        if in_favourites:
+            options.append(addon.getLocalizedString(_STR_MOVE))
+            actions.append('move')
+        options.append(addon.getLocalizedString(_STR_RESET))
+        actions.append('reset')
+
+        self._enter_modal()
+        try:
+            choice = xbmcgui.Dialog().contextmenu(options)
+        finally:
+            self._exit_modal()
+        if choice is None or choice < 0:
+            return
+        action = actions[choice]
+        if action == 'renumber':
+            self._renumber(provider_id, channel_key, item.getProperty('number'))
+        elif action in ('hide', 'unhide'):
+            channels.set_hidden(self.conn, provider_id, channel_key, action == 'hide')
+            self._refresh_after_edit(provider_id, channel_key)
+        elif action in ('favourite', 'unfavourite'):
+            channels.set_favourite(self.conn, provider_id, channel_key, action == 'favourite')
+            self._refresh_after_edit(provider_id, channel_key)
+        elif action == 'move':
+            self._start_move(provider_id, channel_key)
+        elif action == 'reset':
+            channels.reset(self.conn, provider_id, channel_key)
+            self._refresh_after_edit(provider_id, channel_key)
+
+    def _renumber(self, provider_id, channel_key, current_number):
+        addon = xbmcaddon.Addon()
+        self._enter_modal()
+        try:
+            value = xbmcgui.Dialog().numeric(
+                0, addon.getLocalizedString(_STR_RENUMBER_HEADING), str(current_number)
+            )
+        finally:
+            self._exit_modal()
+        if value:
+            channels.set_number(self.conn, provider_id, channel_key, int(value))
+        self._refresh_after_edit(provider_id, channel_key)
+
+    def _refresh_after_edit(self, provider_id, channel_key):
+        channels_control = self.getControl(CHANNELS_LIST_ID)
+        position = channels_control.getSelectedPosition()
+        self._render_channels()
+        count = channels_control.size()
+        if count:
+            new_position = None
+            for index in range(count):
+                row_item = channels_control.getListItem(index)
+                if row_item.getProperty('channel_key') == channel_key and \
+                        row_item.getProperty('provider_id') == str(provider_id):
+                    new_position = index
+                    break
+            if new_position is None:
+                new_position = min(position, count - 1)
+            channels_control.selectItem(new_position)
+        self.setFocusId(CHANNELS_LIST_ID)
+
+    def _start_move(self, provider_id, channel_key):
+        self._cancel_pending_render()
+        self._enter_modal()
+        rows = channels.list_channels(self.conn, favourites=True, show_hidden=self._show_hidden)
+        order = [(row['provider_id'], row['channel_key']) for row in rows]
+        self._move_order = order
+        self._move_original_order = list(order)
+        self._move_key = (provider_id, channel_key)
+
+    def _shift_move(self, delta):
+        index = self._move_order.index(self._move_key)
+        new_index = index + delta
+        if new_index < 0 or new_index >= len(self._move_order):
+            return
+        self._move_order[index], self._move_order[new_index] = \
+            self._move_order[new_index], self._move_order[index]
+        self._render_channels(order=self._move_order)
+        self.setFocusId(CHANNELS_LIST_ID)
+        self.getControl(CHANNELS_LIST_ID).selectItem(new_index)
+
+    def _drop_move(self):
+        moved_key = self._move_key
+        order = self._move_order
+        channels.set_favourite_order(self.conn, order)
+        self._move_key = None
+        self._move_order = None
+        self._move_original_order = None
+        self._exit_modal()
+        self._render_channels()
+        self.getControl(CHANNELS_LIST_ID).selectItem(order.index(moved_key))
+        self.setFocusId(CHANNELS_LIST_ID)
+
+    def _cancel_move(self):
+        moved_key = self._move_key
+        order = self._move_original_order
+        self._move_key = None
+        self._move_order = None
+        self._move_original_order = None
+        self._exit_modal()
+        self._render_channels()
+        self.getControl(CHANNELS_LIST_ID).selectItem(order.index(moved_key))
+        self.setFocusId(CHANNELS_LIST_ID)
 
     def close(self):
         with self._lock:
@@ -167,7 +321,7 @@ class ChannelListWindow(BaseWindow):
 
     def _render_channels_if_open(self):
         with self._lock:
-            if not self._closed:
+            if not self._closed and self._move_key is None:
                 self._render_channels()
 
     def _render_groups(self):
@@ -196,7 +350,7 @@ class ChannelListWindow(BaseWindow):
     def _selected_group_item(self):
         return self.getControl(GROUPS_LIST_ID).getSelectedItem()
 
-    def _render_channels(self):
+    def _render_channels(self, order=None):
         with self._lock:
             item = self._selected_group_item()
             kind = item.getProperty('kind') if item is not None else 'all'
@@ -214,6 +368,9 @@ class ChannelListWindow(BaseWindow):
                 self.conn, group_id=group_id, favourites=favourites,
                 show_hidden=self._show_hidden,
             )
+            if order is not None:
+                by_key = {(row['provider_id'], row['channel_key']): row for row in rows}
+                rows = [by_key[key] for key in order if key in by_key]
             now_titles = channels.now_titles(
                 self.conn, [row['id'] for row in rows], guide.format_iso(self.now_fn())
             )
@@ -222,6 +379,7 @@ class ChannelListWindow(BaseWindow):
                 list_item.setLabel2(str(row['number']))
                 list_item.setProperty('number', str(row['number']))
                 list_item.setProperty('hidden', '1' if row['hidden'] else '0')
+                list_item.setProperty('favourite', '1' if row['favourite'] else '0')
                 list_item.setProperty('channel_key', row['channel_key'])
                 list_item.setProperty('provider_id', str(row['provider_id']))
                 list_item.setProperty('now_title', now_titles.get(row['id']) or '')

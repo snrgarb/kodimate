@@ -190,6 +190,12 @@ def _mark_stale_purge_and_clean_groups(conn, provider_id, now_iso, now_dt):
 
     purge_cutoff = _to_iso(now_dt - timedelta(days=_STALE_PURGE_DAYS))
     conn.execute(
+        "DELETE FROM channel_override WHERE provider_id = ? AND channel_key IN "
+        "(SELECT channel_key FROM channel WHERE provider_id = ? "
+        "AND stale_since IS NOT NULL AND stale_since <= ?)",
+        (provider_id, provider_id, purge_cutoff),
+    )
+    conn.execute(
         "DELETE FROM channel WHERE provider_id = ? "
         "AND stale_since IS NOT NULL AND stale_since <= ?",
         (provider_id, purge_cutoff),

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Pure-SQL queries for the Channel List window (issue #19)."""
-from . import urls
+from . import db, urls
 
 _BASE_JOIN = """
     FROM channel c
@@ -51,7 +51,8 @@ def list_channels(conn, group_id=None, favourites=False, show_hidden=False):
         "COALESCE(o.number, c.provider_number + p.number_offset, c.position + p.number_offset) "
         "AS number, COALESCE(o.hidden, 0) AS hidden, c.epg_channel_id, "
         "COALESCE(c.catchup_days, p.catchup_days_default) AS catchup_days, "
-        "p.kind, c.stream_url, c.catchup_mode, c.catchup_source"
+        "p.kind, c.stream_url, c.catchup_mode, c.catchup_source, "
+        "COALESCE(o.favourite, 0) AS favourite"
         + _BASE_JOIN
         + ("" if not where else " AND " + " AND ".join(where))
         + " ORDER BY " + order_by
@@ -73,9 +74,92 @@ def list_channels(conn, group_id=None, favourites=False, show_hidden=False):
                     {'stream_url': row[10], 'catchup_mode': row[11], 'catchup_source': row[12]}
                 )
             ),
+            'favourite': bool(row[13]),
         }
         for row in rows
     ]
+
+
+def set_number(conn, provider_id, channel_key, number):
+    """Set (or clear, with number=None) the override number for one channel."""
+    def _do(conn):
+        conn.execute(
+            "INSERT INTO channel_override (provider_id, channel_key, number) VALUES (?, ?, ?) "
+            "ON CONFLICT(provider_id, channel_key) DO UPDATE SET number = excluded.number",
+            (provider_id, channel_key, number),
+        )
+
+    return db.execute_with_retry(conn, _do)
+
+
+def set_hidden(conn, provider_id, channel_key, hidden):
+    def _do(conn):
+        conn.execute(
+            "INSERT INTO channel_override (provider_id, channel_key, hidden) VALUES (?, ?, ?) "
+            "ON CONFLICT(provider_id, channel_key) DO UPDATE SET hidden = excluded.hidden",
+            (provider_id, channel_key, 1 if hidden else 0),
+        )
+
+    return db.execute_with_retry(conn, _do)
+
+
+def set_favourite(conn, provider_id, channel_key, favourite):
+    """Add/remove a channel from Favourites. Adding appends to the end of the
+    order; removing clears the order so a later add starts fresh at the end."""
+    def _do(conn):
+        if favourite:
+            row = conn.execute(
+                "SELECT COALESCE(MAX(favourite_order), -1) + 1 FROM channel_override "
+                "WHERE favourite = 1"
+            ).fetchone()
+            order = row[0]
+            conn.execute(
+                "INSERT INTO channel_override (provider_id, channel_key, favourite, favourite_order) "
+                "VALUES (?, ?, 1, ?) "
+                "ON CONFLICT(provider_id, channel_key) DO UPDATE "
+                "SET favourite = 1, favourite_order = excluded.favourite_order",
+                (provider_id, channel_key, order),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO channel_override (provider_id, channel_key, favourite, favourite_order) "
+                "VALUES (?, ?, 0, NULL) "
+                "ON CONFLICT(provider_id, channel_key) DO UPDATE "
+                "SET favourite = 0, favourite_order = NULL",
+                (provider_id, channel_key),
+            )
+
+    return db.execute_with_retry(conn, _do)
+
+
+def set_favourite_order(conn, ordered_keys):
+    """Renumber favourite_order to 0..n-1 for [(provider_id, channel_key), ...]."""
+    def _do(conn):
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for index, (provider_id, channel_key) in enumerate(ordered_keys):
+                conn.execute(
+                    "UPDATE channel_override SET favourite_order = ? "
+                    "WHERE provider_id = ? AND channel_key = ?",
+                    (index, provider_id, channel_key),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+    return db.execute_with_retry(conn, _do)
+
+
+def reset(conn, provider_id, channel_key):
+    """Clear number/hidden/favourite overrides for one channel."""
+    def _do(conn):
+        conn.execute(
+            "DELETE FROM channel_override WHERE provider_id = ? AND channel_key = ?",
+            (provider_id, channel_key),
+        )
+
+    return db.execute_with_retry(conn, _do)
 
 
 def list_programmes(conn, channel_ids, window_start, window_end):

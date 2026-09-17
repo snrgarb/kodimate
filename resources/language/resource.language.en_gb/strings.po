@@ -415,3 +415,31 @@ msgstr ""
 msgctxt "#32099"
 msgid "Close"
 msgstr ""
+
+msgctxt "#32100"
+msgid "Renumber…"
+msgstr ""
+
+msgctxt "#32101"
+msgid "Channel number"
+msgstr ""
+
+msgctxt "#32102"
+msgid "Hide"
+msgstr ""
+
+msgctxt "#32103"
+msgid "Unhide"
+msgstr ""
+
+msgctxt "#32104"
+msgid "Add to Favourites"
+msgstr ""
+
+msgctxt "#32105"
+msgid "Remove from Favourites"
+msgstr ""
+
+msgctxt "#32106"
+msgid "Reset to provider default"
+msgstr ""

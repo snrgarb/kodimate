@@ -165,6 +165,39 @@ def test_override_row_survives_rebuild(tmp_path):
     assert ingest.listable_channel_count(conn, 1) == 3
 
 
+def test_override_row_survives_stale_then_returning(tmp_path):
+    conn = _make_db(tmp_path)
+    ingest.refresh_m3u_provider(conn, 1, _read_fixture('basic.m3u'), '2024-01-01T00:00:00Z')
+    conn.execute(
+        "INSERT INTO channel_override (provider_id, channel_key, hidden) VALUES (1, 'one.us', 1)"
+    )
+
+    ingest.refresh_m3u_provider(conn, 1, _read_fixture('one_channel.m3u'), '2024-01-02T00:00:00Z')
+    ingest.refresh_m3u_provider(conn, 1, _read_fixture('basic.m3u'), '2024-01-03T00:00:00Z')
+
+    override = conn.execute(
+        "SELECT hidden FROM channel_override WHERE provider_id = 1 AND channel_key = 'one.us'"
+    ).fetchone()
+    assert override == (1,)
+
+
+def test_override_row_purged_with_stale_channel(tmp_path):
+    conn = _make_db(tmp_path)
+    ingest.refresh_m3u_provider(conn, 1, _read_fixture('basic.m3u'), '2024-01-01T00:00:00Z')
+    conn.execute(
+        "INSERT INTO channel_override (provider_id, channel_key, hidden) VALUES "
+        "(1, 'example.com/four', 1)"
+    )
+    ingest.refresh_m3u_provider(conn, 1, _read_fixture('one_channel.m3u'), '2024-01-02T00:00:00Z')
+    # 7 days after going stale on 2024-01-02: purge should happen once "now" reaches 2024-01-09.
+    ingest.refresh_m3u_provider(conn, 1, _read_fixture('one_channel.m3u'), '2024-01-09T00:00:01Z')
+
+    override = conn.execute(
+        "SELECT * FROM channel_override WHERE provider_id = 1 AND channel_key = 'example.com/four'"
+    ).fetchone()
+    assert override is None
+
+
 def test_epg_source_upserted_from_header(tmp_path):
     conn = _make_db(tmp_path)
     outcome = ingest.refresh_m3u_provider(conn, 1, _read_fixture('basic.m3u'), '2024-01-01T00:00:00Z')

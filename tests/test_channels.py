@@ -293,6 +293,93 @@ def test_group_id_filter(tmp_path):
         conn.close()
 
 
+def test_set_number_upserts_and_reflects_in_list_channels(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", provider_number=5, position=0)
+        channels.set_number(conn, pid, "a", 42)
+        rows = channels.list_channels(conn)
+        assert rows[0]['number'] == 42
+        channels.set_number(conn, pid, "a", 7)
+        rows = channels.list_channels(conn)
+        assert rows[0]['number'] == 7
+    finally:
+        conn.close()
+
+
+def test_set_hidden_upserts_and_reflects_in_list_channels(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", position=0)
+        channels.set_hidden(conn, pid, "a", True)
+        assert channels.list_channels(conn) == []
+        channels.set_hidden(conn, pid, "a", False)
+        assert len(channels.list_channels(conn)) == 1
+    finally:
+        conn.close()
+
+
+def test_set_favourite_appends_at_end_of_order(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", name="A", position=0)
+        _channel(conn, pid, "b", name="B", position=1)
+        _override(conn, pid, "a", favourite=1, favourite_order=0)
+        channels.set_favourite(conn, pid, "b", True)
+        rows = channels.list_channels(conn, favourites=True)
+        assert [r['name'] for r in rows] == ["A", "B"]
+    finally:
+        conn.close()
+
+
+def test_set_favourite_false_removes_from_favourites(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", position=0)
+        _override(conn, pid, "a", favourite=1, favourite_order=0)
+        channels.set_favourite(conn, pid, "a", False)
+        assert channels.list_channels(conn, favourites=True) == []
+    finally:
+        conn.close()
+
+
+def test_set_favourite_order_renumbers(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", name="A", position=0)
+        _channel(conn, pid, "b", name="B", position=1)
+        _override(conn, pid, "a", favourite=1, favourite_order=0)
+        _override(conn, pid, "b", favourite=1, favourite_order=1)
+        channels.set_favourite_order(conn, [(pid, "b"), (pid, "a")])
+        rows = channels.list_channels(conn, favourites=True)
+        assert [r['name'] for r in rows] == ["B", "A"]
+    finally:
+        conn.close()
+
+
+def test_reset_deletes_override_row(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", provider_number=5, position=0)
+        _override(conn, pid, "a", number=999, hidden=1, favourite=1, favourite_order=0)
+        channels.reset(conn, pid, "a")
+        row = conn.execute(
+            "SELECT * FROM channel_override WHERE provider_id = ? AND channel_key = 'a'", (pid,)
+        ).fetchone()
+        assert row is None
+        rows = channels.list_channels(conn)
+        assert rows[0]['number'] == 5
+        assert rows[0]['hidden'] is False
+    finally:
+        conn.close()
+
+
 def _epg_source(conn, provider_id, url="http://epg"):
     cursor = conn.execute(
         "INSERT INTO epg_source (provider_id, url) VALUES (?, ?)", (provider_id, url)

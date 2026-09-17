@@ -7,8 +7,23 @@ open_db() so that whichever process starts first creates the v1 schema
 """
 import os
 import sqlite3
+import time
 
 SCHEMA_VERSION = 5
+
+_MAX_RETRIES = 3
+_RETRY_SLEEP_SECONDS = 0.1
+
+
+def execute_with_retry(conn, fn):
+    """Run fn(conn) retrying up to _MAX_RETRIES times on 'database is locked'."""
+    for attempt in range(_MAX_RETRIES):
+        try:
+            return fn(conn)
+        except sqlite3.OperationalError as exc:
+            if 'database is locked' not in str(exc) or attempt == _MAX_RETRIES - 1:
+                raise
+            time.sleep(_RETRY_SLEEP_SECONDS)
 
 _SCHEMA_STATEMENTS = [
     """CREATE TABLE IF NOT EXISTS provider (
