@@ -22,7 +22,7 @@ All Kodi interaction is injected so this is testable without xbmc*:
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
-from . import epg, fetch, ingest, m3u, xtream
+from . import epg, fetch, ingest, m3u, urls, xtream
 
 _ISO_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
 
@@ -224,6 +224,7 @@ class RefreshService(object):
                     self.conn, provider_id, text, self.now(),
                     expected_config_version=config_version,
                 )
+                self._refresh_m3u_server_timezone(provider_id, row)
             else:
                 host, username, password = row['xtream_host'], row['xtream_username'], row['xtream_password']
                 account = xtream.fetch_account(host, username, password, row['user_agent'], self.fetcher)
@@ -259,6 +260,33 @@ class RefreshService(object):
         if requested_by_ui:
             self.props.set('refresh_result.{0}'.format(provider_id), 'ok')
         return outcome
+
+    def _refresh_m3u_server_timezone(self, provider_id, row):
+        # Non-fatal: an M3U Provider has no player_api.php login of its own,
+        # so this borrows credentials from the first XC-shaped live URL
+        # among its (non-stale) channels, if any.
+        try:
+            channel_row = self.conn.execute(
+                "SELECT stream_url FROM channel "
+                "WHERE provider_id = ? AND stale_since IS NULL",
+                (provider_id,),
+            ).fetchall()
+            for (stream_url,) in channel_row:
+                creds = urls.xc_credentials(stream_url)
+                if creds is None:
+                    continue
+                host, username, password = creds
+                zone = xtream.fetch_server_timezone(
+                    host, username, password, row['user_agent'], self.fetcher
+                )
+                if zone:
+                    self.conn.execute(
+                        "UPDATE provider SET server_timezone = ? WHERE id = ?",
+                        (zone, provider_id),
+                    )
+                return
+        except Exception:
+            return
 
     def _refresh_epg(self, provider_id, row, config_version):
         """Fetch/parse the provider's EPG Source (non-fatal to the channel

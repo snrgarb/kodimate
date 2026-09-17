@@ -14,10 +14,14 @@ from . import guide
 RETENTION_DAYS = guide.RETENTION_DAYS
 
 
-def effective_window_days(channel_catchup_days, provider_default):
+def effective_window_days(channel_catchup_days, provider_default, url_supported=True):
     """The Effective Catch-up Window: the channel's value if set (0 means
     explicitly no Catch-up, beating the provider default), else the
-    provider default. None at both levels means no Catch-up."""
+    provider default. None at both levels means no Catch-up. A Channel
+    whose mode cannot produce a Catch-up URL (`url_supported=False`) is
+    always unplayable, regardless of window."""
+    if not url_supported:
+        return None
     days = channel_catchup_days if channel_catchup_days is not None else provider_default
     if not days:
         return None

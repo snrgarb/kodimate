@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Pure-SQL queries for the Channel List window (issue #19)."""
+from . import urls
 
 _BASE_JOIN = """
     FROM channel c
@@ -49,7 +50,8 @@ def list_channels(conn, group_id=None, favourites=False, show_hidden=False):
         "SELECT c.id, c.provider_id, c.channel_key, c.name, c.logo_url, "
         "COALESCE(o.number, c.provider_number + p.number_offset, c.position + p.number_offset) "
         "AS number, COALESCE(o.hidden, 0) AS hidden, c.epg_channel_id, "
-        "COALESCE(c.catchup_days, p.catchup_days_default) AS catchup_days"
+        "COALESCE(c.catchup_days, p.catchup_days_default) AS catchup_days, "
+        "p.kind, c.stream_url, c.catchup_mode, c.catchup_source"
         + _BASE_JOIN
         + ("" if not where else " AND " + " AND ".join(where))
         + " ORDER BY " + order_by
@@ -66,6 +68,11 @@ def list_channels(conn, group_id=None, favourites=False, show_hidden=False):
             'hidden': bool(row[6]),
             'epg_channel_id': row[7],
             'catchup_days': row[8],
+            'catchup_supported': (
+                True if row[9] != 'm3u' else urls.m3u_catchup_supported(
+                    {'stream_url': row[10], 'catchup_mode': row[11], 'catchup_source': row[12]}
+                )
+            ),
         }
         for row in rows
     ]

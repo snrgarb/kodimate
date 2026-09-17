@@ -31,6 +31,13 @@ def test_fetch_account_parses_expiry_and_formats():
     assert account['allowed_output_formats'] == ['m3u8', 'ts']
 
 
+def test_fetch_account_returns_server_timezone():
+    account = xtream.fetch_account(
+        'http://xc.example', 'user', 'pass', None, _fetcher_from('xtream_account.json')
+    )
+    assert account['server_timezone'] == 'Europe/London'
+
+
 def test_fetch_account_no_expiry_is_none():
     account = xtream.fetch_account(
         'http://xc.example', 'user', 'pass', None,
@@ -92,3 +99,25 @@ def test_fetch_streams_raises_not_an_xtream_server_when_element_not_dict():
 
     with pytest.raises(fetch.FetchError, match='Not an Xtream server'):
         xtream.fetch_streams('http://xc.example', 'user', 'pass', None, fetcher)
+
+
+def test_fetch_server_timezone_returns_zone_name():
+    zone = xtream.fetch_server_timezone(
+        'http://xc.example', 'user', 'pass', None, _fetcher_from('xtream_account.json')
+    )
+    assert zone == 'Europe/London'
+
+
+def test_fetch_server_timezone_returns_none_when_absent():
+    zone = xtream.fetch_server_timezone(
+        'http://xc.example', 'user', 'pass', None, _fetcher_from('xtream_account_no_expiry.json')
+    )
+    assert zone is None
+
+
+def test_fetch_server_timezone_returns_none_on_error_instead_of_raising():
+    def fetcher(url, user_agent):
+        return '<html>not json</html>'
+
+    zone = xtream.fetch_server_timezone('http://xc.example', 'user', 'pass', None, fetcher)
+    assert zone is None

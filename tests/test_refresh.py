@@ -16,6 +16,13 @@ _XMLTV = (
     '<programme start="20240101120000 +0000" stop="20240101123000 +0000" '
     'channel="bbcnews.uk"><title>News</title></programme></tv>'
 )
+_XC_SHAPED_M3U = (
+    '#EXTM3U\n#EXTINF:-1 tvg-id="one",Chan\nhttp://xc.example/live/user/pass/100.ts\n'
+)
+_XC_ACCOUNT_JSON_WITH_TIMEZONE = (
+    '{"user_info": {"auth": 1, "status": "Active"}, '
+    '"server_info": {"timezone": "America/Toronto"}}'
+)
 
 
 class FakeProps(object):
@@ -80,6 +87,81 @@ def test_manual_refresh_ok(tmp_path):
     assert props.get('db_generation') == '1'
     assert props.get('refresh_result.3') == 'ok'
     assert notify.calls == [(1, [3])]
+
+
+def test_m3u_refresh_with_xc_shaped_channel_fetches_and_persists_server_timezone(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 3)
+    props = FakeProps()
+    props.set('refresh_request', '3;ui')
+
+    seen_sources = []
+
+    def fetcher(source, user_agent):
+        seen_sources.append(source)
+        if 'player_api.php' in source:
+            return _XC_ACCOUNT_JSON_WITH_TIMEZONE
+        return _XC_SHAPED_M3U
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=fetcher,
+        now=lambda: datetime(2024, 1, 1),
+        settings=_no_startup_settings(),
+    )
+    svc.tick()
+
+    assert props.get('refresh_result.3') == 'ok'
+    row = conn.execute("SELECT server_timezone FROM provider WHERE id = 3").fetchone()
+    assert row[0] == 'America/Toronto'
+    player_api_calls = [s for s in seen_sources if 'player_api.php' in s]
+    assert len(player_api_calls) == 1
+    assert 'username=user' in player_api_calls[0] and 'password=pass' in player_api_calls[0]
+
+
+def test_m3u_refresh_server_timezone_fetch_failure_is_non_fatal(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 3)
+    props = FakeProps()
+    props.set('refresh_request', '3;ui')
+
+    def fetcher(source, user_agent):
+        if 'player_api.php' in source:
+            return '<html>not json</html>'
+        return _XC_SHAPED_M3U
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=fetcher,
+        now=lambda: datetime(2024, 1, 1),
+        settings=_no_startup_settings(),
+    )
+    svc.tick()
+
+    assert props.get('refresh_result.3') == 'ok'
+    row = conn.execute("SELECT server_timezone FROM provider WHERE id = 3").fetchone()
+    assert row[0] is None
+
+
+def test_m3u_refresh_non_xc_playlist_does_not_fetch_server_timezone(tmp_path):
+    conn = _make_conn(tmp_path)
+    _add_provider(conn, 3)
+    props = FakeProps()
+    props.set('refresh_request', '3;ui')
+
+    seen_sources = []
+
+    def fetcher(source, user_agent):
+        seen_sources.append(source)
+        return _BASIC
+
+    svc = refresh.RefreshService(
+        conn, props, FakeNotify(), fetcher=fetcher,
+        now=lambda: datetime(2024, 1, 1),
+        settings=_no_startup_settings(),
+    )
+    svc.tick()
+
+    assert props.get('refresh_result.3') == 'ok'
+    assert not any('player_api.php' in s for s in seen_sources)
 
 
 def test_manual_refresh_failure(tmp_path):

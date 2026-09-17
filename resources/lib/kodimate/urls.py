@@ -8,10 +8,15 @@ all Kodi and database interaction.
 Timezone convention: wherever a Unix timestamp is broken down into
 Y/m/d/H/M/S components (bare `{Y}{m}{d}...` tokens and the `{name:<fmt>}`
 mini-language in `substitute_template`), the breakdown uses UTC
-(`datetime.utcfromtimestamp`), never the host machine's local timezone.
-This keeps template expansion deterministic and testable regardless of
-where the addon runs; any provider-local wall-clock adjustment is applied
-explicitly beforehand via `corrected_start`/`xtream_local_start`.
+(`datetime.utcfromtimestamp`) plus the caller-supplied
+`local_offset_seconds` (default 0, the Provider's `server_timezone`
+offset at that instant -- see `tz.zone_offset_seconds`), never the host
+machine's local timezone. Epoch tokens (`{utc}`, `{lutc}`, `{start}`,
+`{end}`, `{now}`, `{timestamp}`, `{duration}`, `{offset}`) are unaffected
+by `local_offset_seconds`. This keeps template expansion deterministic
+and testable regardless of where the addon runs; any additional
+provider-local wall-clock correction is applied explicitly beforehand
+via `corrected_start`/`xtream_local_start`.
 """
 import re
 from datetime import datetime
@@ -78,8 +83,14 @@ def m3u_live_url(channel):
     return channel['stream_url']
 
 
-def substitute_template(template, start, end, now, catchup_id=None):
-    """Expand catch-up placeholder tokens in `template` against start/end/now."""
+def substitute_template(template, start, end, now, catchup_id=None, local_offset_seconds=0):
+    """Expand catch-up placeholder tokens in `template` against start/end/now.
+
+    Wall-clock tokens (bare `{Y}{m}{d}{H}{M}{S}` and the `{name:fmt}`
+    mini-language) render `value + local_offset_seconds`; epoch tokens
+    (`{utc}`, `{lutc}`, `{start}`, `{end}`, `{now}`, `{timestamp}`,
+    `{duration}`, `{offset}`) are unaffected.
+    """
     def _repl(m):
         name = m.group('name')
         fmt = m.group('fmt')
@@ -103,13 +114,13 @@ def substitute_template(template, start, end, now, catchup_id=None):
             return str(diff)
 
         if name in ('Y', 'm', 'd', 'H', 'M', 'S'):
-            dt = datetime.utcfromtimestamp(start)
+            dt = datetime.utcfromtimestamp(start + local_offset_seconds)
             return dt.strftime('%' + name)
 
         value_name = _DATE_VALUE_NAMES[name]
         value = {'start': start, 'end': end, 'now': now}[value_name]
         if fmt is not None:
-            dt = datetime.utcfromtimestamp(value)
+            dt = datetime.utcfromtimestamp(value + local_offset_seconds)
             strftime_fmt = re.sub(r'[YmdHMS]', lambda mm: '%' + mm.group(0), fmt)
             return dt.strftime(strftime_fmt)
         return str(value)
@@ -135,12 +146,14 @@ def _finish(result, template_has_pipe, pipe):
     return result
 
 
-def _append_mode(live_url, source, start, end, now, catchup_id, pipe):
+def _append_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds=0):
     if source:
-        appended = substitute_template(source, start, end, now, catchup_id)
+        appended = substitute_template(source, start, end, now, catchup_id, local_offset_seconds)
         has_own_pipe = '|' in source
     else:
-        appended = substitute_template('?utc={utc}&lutc={lutc}', start, end, now, catchup_id)
+        appended = substitute_template(
+            '?utc={utc}&lutc={lutc}', start, end, now, catchup_id, local_offset_seconds
+        )
         has_own_pipe = False
     return _finish(live_url + appended, has_own_pipe, pipe)
 
@@ -150,6 +163,14 @@ _XC_LIVE_RE = re.compile(
     r'^(?P<host>https?://[^/]+)/(?:live/)?(?P<user>[^/]+)/(?P<pass>[^/]+)'
     r'/(?P<id>[^./?]+)(?:\.(?P<ext>[a-zA-Z0-9]+))?$'
 )
+
+
+def xc_credentials(live_url):
+    """(host, username, password) if `live_url` is Xtream-Codes-shaped, else None."""
+    m = _XC_LIVE_RE.match(live_url)
+    if m is None:
+        return None
+    return m.group('host'), m.group('user'), m.group('pass')
 
 
 def _xc_template(live_url):
@@ -183,15 +204,26 @@ def _flussonic_template(live_url, mode):
     return base + suffix + query
 
 
-def _default_mode(live_url, source, start, end, now, catchup_id, pipe):
+def _default_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds=0):
     if source:
-        result = substitute_template(source, start, end, now, catchup_id)
+        result = substitute_template(source, start, end, now, catchup_id, local_offset_seconds)
         return _finish(result, '|' in source, pipe)
-    return _append_mode(live_url, source, start, end, now, catchup_id, pipe)
+    # No catchup-source: only an XC-shaped live URL can produce a Catch-up
+    # URL here. pvr.iptvsimple's own `?utc=&lutc=` append is SHIFT-mode-only
+    # and is never used as a `default` fallback (docs/research/xtream-timeshift-over-m3u.md).
+    template = _xc_template(live_url)
+    if template is None:
+        return None
+    result = substitute_template(template, start, end, now, catchup_id, local_offset_seconds)
+    return _finish(result, '|' in template, pipe)
 
 
-def m3u_catchup_url(channel, start, end, now, catchup_id=None):
-    """Build the catch-up URL for an M3U channel, dispatching on catchup_mode."""
+def m3u_catchup_url(channel, start, end, now, catchup_id=None, local_offset_seconds=0):
+    """Build the catch-up URL for an M3U channel, dispatching on catchup_mode.
+
+    Returns None when the channel's mode cannot produce a Catch-up URL
+    (`default` mode, no `catchup_source`, and a non-XC-shaped live URL).
+    """
     stream_url = channel.get('stream_url') or ''
     live_url, pipe = _split_pipe(stream_url)
 
@@ -201,37 +233,49 @@ def m3u_catchup_url(channel, start, end, now, catchup_id=None):
     source = channel.get('catchup_source')
 
     if mode == 'append':
-        return _append_mode(live_url, source, start, end, now, catchup_id, pipe)
+        return _append_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds)
 
     if mode in ('shift', 'timeshift'):
         sep = '&' if '?' in live_url else '?'
         template = live_url + sep + 'utc={utc}&lutc={lutc}'
-        result = substitute_template(template, start, end, now, catchup_id)
+        result = substitute_template(template, start, end, now, catchup_id, local_offset_seconds)
         return _finish(result, False, pipe)
 
     if mode in ('flussonic', 'flussonic-hls', 'flussonic-ts', 'fs'):
         template = _flussonic_template(live_url, mode)
         if template is None:
-            return _default_mode(live_url, source, start, end, now, catchup_id, pipe)
-        result = substitute_template(template, start, end, now, catchup_id)
+            return _default_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds)
+        result = substitute_template(template, start, end, now, catchup_id, local_offset_seconds)
         return _finish(result, '|' in template, pipe)
 
     if mode == 'xc':
         template = _xc_template(live_url)
         if template is None:
-            return _default_mode(live_url, source, start, end, now, catchup_id, pipe)
-        result = substitute_template(template, start, end, now, catchup_id)
+            return _default_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds)
+        result = substitute_template(template, start, end, now, catchup_id, local_offset_seconds)
         return _finish(result, '|' in template, pipe)
 
     if mode == 'vod':
         if source:
-            result = substitute_template(source, start, end, now, catchup_id)
+            result = substitute_template(source, start, end, now, catchup_id, local_offset_seconds)
             return _finish(result, '|' in source, pipe)
-        result = substitute_template('{catchup-id}', start, end, now, catchup_id)
+        result = substitute_template('{catchup-id}', start, end, now, catchup_id, local_offset_seconds)
         return _finish(result, False, pipe)
 
     # 'default' (and anything unrecognized, normalized above)
-    return _default_mode(live_url, source, start, end, now, catchup_id, pipe)
+    return _default_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds)
+
+
+def m3u_catchup_supported(channel):
+    """True iff `m3u_catchup_url` can produce a URL for `channel`."""
+    stream_url = channel.get('stream_url') or ''
+    live_url, _pipe = _split_pipe(stream_url)
+    mode = (channel.get('catchup_mode') or 'default').strip().lower()
+    if mode not in _KNOWN_MODES:
+        mode = 'default'
+    if mode != 'default' or channel.get('catchup_source'):
+        return True
+    return _xc_template(live_url) is not None
 
 
 def correction_seconds(channel_correction_hours, provider_correction_hours):

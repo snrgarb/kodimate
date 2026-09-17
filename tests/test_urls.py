@@ -114,6 +114,21 @@ def test_substitute_catchup_id():
     assert urls.substitute_template('{catchup-id}', 1, 2, 3, catchup_id=99) == '99'
 
 
+def test_substitute_local_offset_shifts_wall_clock_tokens():
+    epoch = 1709670615  # 2024-03-05T20:30:15Z
+    template = '{Y}{m}{d}{H}{M}{S}'
+    # -4h (Toronto EDT-style offset)
+    result = urls.substitute_template(template, epoch, epoch, epoch, local_offset_seconds=-14400)
+    assert result == '20240305163015'
+
+
+def test_substitute_local_offset_leaves_epoch_tokens_unchanged():
+    epoch = 1709670615
+    assert urls.substitute_template(
+        '{utc}', epoch, epoch, epoch, local_offset_seconds=-14400
+    ) == str(epoch)
+
+
 # ---------------------------------------------------------------------------
 # xc_name_heuristic
 # ---------------------------------------------------------------------------
@@ -146,10 +161,45 @@ def test_m3u_catchup_default_with_source():
     assert urls.m3u_catchup_url(channel, START, END, NOW) == 'http://host/vod?from=1000&to=1600'
 
 
-def test_m3u_catchup_default_without_source_falls_back_to_append():
+def test_m3u_catchup_default_without_source_non_xc_url_yields_none():
     channel = {'stream_url': 'http://host/live.m3u8', 'catchup_mode': 'default'}
     result = urls.m3u_catchup_url(channel, START, END, NOW)
-    assert result == 'http://host/live.m3u8?utc=1000&lutc=1700'
+    assert result is None
+
+
+def test_m3u_catchup_default_without_source_xc_shaped_ts_url_builds_timeshift():
+    channel = {
+        'stream_url': 'https://xc.example/live/u/p/1.ts',
+        'catchup_mode': 'default',
+    }
+    result = urls.m3u_catchup_url(channel, START, 100600, NOW)
+    dt = datetime.utcfromtimestamp(START)
+    stamp = dt.strftime('%Y-%m-%d:%H-%M')
+    assert result == (
+        'https://xc.example/timeshift/u/p/1660/{0}/1.ts'.format(stamp)
+    )
+
+
+def test_m3u_catchup_default_without_source_xc_shaped_url_uses_local_offset():
+    channel = {
+        'stream_url': 'https://xc.example/live/u/p/1.ts',
+        'catchup_mode': 'default',
+    }
+    result = urls.m3u_catchup_url(channel, START, 100600, NOW, local_offset_seconds=-14400)
+    dt = datetime.utcfromtimestamp(START - 14400)
+    stamp = dt.strftime('%Y-%m-%d:%H-%M')
+    assert result == (
+        'https://xc.example/timeshift/u/p/1660/{0}/1.ts'.format(stamp)
+    )
+
+
+def test_m3u_catchup_default_with_source_unchanged():
+    channel = {
+        'stream_url': 'http://host/live.m3u8',
+        'catchup_mode': 'default',
+        'catchup_source': 'http://host/vod?from={utc}&to={utcend}',
+    }
+    assert urls.m3u_catchup_url(channel, START, END, NOW) == 'http://host/vod?from=1000&to=1600'
 
 
 def test_m3u_catchup_append_with_source():
@@ -227,22 +277,22 @@ def test_m3u_catchup_xc():
     assert result == 'http://host/timeshift/u/p/1660/{0}/42.ts'.format(stamp)
 
 
-def test_m3u_catchup_xc_falls_back_when_url_does_not_match():
+def test_m3u_catchup_xc_falls_back_to_default_mode_when_url_does_not_match():
     channel = {
         'stream_url': 'http://host/notxtreamshape' + PIPE,
         'catchup_mode': 'xc',
     }
     result = urls.m3u_catchup_url(channel, START, END, NOW)
-    assert result == 'http://host/notxtreamshape?utc={0}&lutc={1}{2}'.format(START, NOW, PIPE)
+    assert result is None
 
 
-def test_m3u_catchup_flussonic_falls_back_when_url_does_not_match():
+def test_m3u_catchup_flussonic_falls_back_to_default_mode_when_url_does_not_match():
     channel = {
         'stream_url': 'http://host' + PIPE,
         'catchup_mode': 'flussonic-ts',
     }
     result = urls.m3u_catchup_url(channel, START, END, NOW)
-    assert result == 'http://host?utc={0}&lutc={1}{2}'.format(START, NOW, PIPE)
+    assert result is None
 
 
 def test_m3u_catchup_vod_with_source():
@@ -348,6 +398,46 @@ def test_xtream_local_start_applies_tz_and_correction():
     dt = urls.xtream_local_start(start_epoch, 7200, provider)
     expected = datetime.utcfromtimestamp(start_epoch + 9000)
     assert dt == expected
+
+
+# ---------------------------------------------------------------------------
+# m3u_catchup_supported / xc_credentials
+# ---------------------------------------------------------------------------
+
+def test_m3u_catchup_supported_true_for_default_with_source():
+    channel = {
+        'stream_url': 'http://host/live.m3u8',
+        'catchup_mode': 'default',
+        'catchup_source': 'http://host/vod?from={utc}',
+    }
+    assert urls.m3u_catchup_supported(channel) is True
+
+
+def test_m3u_catchup_supported_true_for_default_no_source_xc_shaped():
+    channel = {
+        'stream_url': 'https://xc.example/live/u/p/1.ts',
+        'catchup_mode': 'default',
+    }
+    assert urls.m3u_catchup_supported(channel) is True
+
+
+def test_m3u_catchup_supported_false_for_default_no_source_non_xc():
+    channel = {'stream_url': 'http://host/live.m3u8', 'catchup_mode': 'default'}
+    assert urls.m3u_catchup_supported(channel) is False
+
+
+def test_m3u_catchup_supported_true_for_other_modes():
+    channel = {'stream_url': 'http://host/live.m3u8', 'catchup_mode': 'append'}
+    assert urls.m3u_catchup_supported(channel) is True
+
+
+def test_xc_credentials_matches_xc_shaped_url():
+    url = 'https://xc.example/live/u/p/1.ts'
+    assert urls.xc_credentials(url) == ('https://xc.example', 'u', 'p')
+
+
+def test_xc_credentials_none_for_non_xc_url():
+    assert urls.xc_credentials('http://host/live.m3u8') is None
 
 
 # ---------------------------------------------------------------------------

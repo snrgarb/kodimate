@@ -19,6 +19,7 @@ _ACCOUNT = {
     'account_expires_at': '2026-01-08T00:00:00Z',
     'max_connections': 1,
     'allowed_output_formats': ['ts', 'm3u8'],
+    'server_timezone': 'America/Toronto',
 }
 
 _CATEGORIES = [
@@ -113,12 +114,13 @@ def test_account_fields_written_on_every_refresh(tmp_path):
         conn, 1, _ACCOUNT, _CATEGORIES, _STREAMS, '2026-01-01T00:00:00Z'
     )
     row = conn.execute(
-        "SELECT account_expires_at, max_connections, allowed_output_formats "
+        "SELECT account_expires_at, max_connections, allowed_output_formats, server_timezone "
         "FROM provider WHERE id = 1"
     ).fetchone()
     assert row[0] == '2026-01-08T00:00:00Z'
     assert row[1] == 1
     assert json.loads(row[2]) == ['ts', 'm3u8']
+    assert row[3] == 'America/Toronto'
 
 
 def test_epg_source_registered_from_xmltv_php(tmp_path):

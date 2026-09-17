@@ -46,7 +46,7 @@ def _exp_date_iso(exp_date):
 
 
 def fetch_account(host, username, password, user_agent, fetcher):
-    """Log in and return {account_expires_at, max_connections, allowed_output_formats}."""
+    """Log in and return {account_expires_at, max_connections, allowed_output_formats, server_timezone}."""
     data = _fetch_json(_player_api_url(host, username, password), user_agent, fetcher)
     user_info = data.get('user_info') if isinstance(data, dict) else None
     if not isinstance(user_info, dict):
@@ -59,13 +59,28 @@ def fetch_account(host, username, password, user_agent, fetcher):
     if not isinstance(allowed_formats, list):
         allowed_formats = None
 
+    server_info = data.get('server_info')
+
     return {
         'account_expires_at': _exp_date_iso(user_info.get('exp_date')),
         'max_connections': m3u._to_int(user_info.get('max_connections')),
         'allowed_output_formats': allowed_formats,
+        'server_timezone': server_info.get('timezone') if isinstance(server_info, dict) else None,
         'status': user_info.get('status'),
         'active_connections': m3u._to_int(user_info.get('active_cons')),
     }
+
+
+def fetch_server_timezone(host, username, password, user_agent, fetcher):
+    """Best-effort `server_info.timezone` lookup: None on any error, never raises."""
+    try:
+        data = _fetch_json(_player_api_url(host, username, password), user_agent, fetcher)
+        server_info = data.get('server_info') if isinstance(data, dict) else None
+        if not isinstance(server_info, dict):
+            return None
+        return server_info.get('timezone') or None
+    except Exception:
+        return None
 
 
 def _require_list_of_dicts(data):

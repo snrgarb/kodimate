@@ -235,12 +235,28 @@ def test_catchup_pinned_form_never_persisted():
 def test_catchup_m3u_no_retry_fails_catchup_unavailable():
     catchup = {'start': 1000, 'end': 4600, 'now': 5000}
     session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
-        _catchup_session(_catchup_m3u_snapshot(), catchup, probe_results=['timeout'])
+        _catchup_session(
+            _catchup_m3u_snapshot(stream_url='http://host/live/u/p/42.ts'),
+            catchup, probe_results=['timeout'],
+        )
 
     session.start()
     session.on_error()
 
     assert len(player.plays) == 1
+    assert state.calls[-1] == ('failed', 'catchup_unavailable')
+
+
+def test_catchup_m3u_unbuildable_url_fails_immediately_with_no_play():
+    # default mode, no catchup-source, non-XC-shaped live URL: no URL can be
+    # built at all, so the Attempt must fail without ever calling player.play.
+    catchup = {'start': 1000, 'end': 4600, 'now': 5000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_m3u_snapshot(), catchup)
+
+    session.start()
+
+    assert len(player.plays) == 0
     assert state.calls[-1] == ('failed', 'catchup_unavailable')
 
 
@@ -294,7 +310,9 @@ def test_catchup_drop_reconnects_with_recomputed_start():
 def test_catchup_reconnect_exhaustion_fails_catchup_unavailable():
     catchup = {'start': 1000, 'end': 100000, 'now': 5000}
     session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
-        _catchup_session(_catchup_m3u_snapshot(), catchup)
+        _catchup_session(
+            _catchup_m3u_snapshot(stream_url='http://host/live/u/p/42.ts'), catchup,
+        )
 
     session.start()
     session.on_av_started()
@@ -326,6 +344,57 @@ def test_catchup_xtream_uses_provider_correction_not_channel_correction():
 
     url = player.plays[0][0]
     assert '1970-01-01:00-00' in url
+
+
+def test_catchup_xtream_stamp_uses_server_timezone_september_dst():
+    # 2026-09-17T12:00:00Z -> America/Toronto is EDT (-4h) in September.
+    epoch = 1789646400
+    catchup = {'start': epoch, 'end': epoch + 3600, 'now': epoch + 4000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(
+            _catchup_xtream_snapshot(server_timezone='America/Toronto'), catchup,
+        )
+
+    session.start()
+
+    from datetime import datetime
+    expected_stamp = datetime.utcfromtimestamp(epoch - 14400).strftime('%Y-%m-%d:%H-%M')
+    assert expected_stamp in player.plays[0][0]
+
+
+def test_catchup_xtream_stamp_uses_server_timezone_january_no_dst():
+    # 2026-01-17T12:00:00Z -> America/Toronto is EST (-5h) in January.
+    epoch = 1768651200
+    catchup = {'start': epoch, 'end': epoch + 3600, 'now': epoch + 4000}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(
+            _catchup_xtream_snapshot(server_timezone='America/Toronto'), catchup,
+        )
+
+    session.start()
+
+    from datetime import datetime
+    expected_stamp = datetime.utcfromtimestamp(epoch - 18000).strftime('%Y-%m-%d:%H-%M')
+    assert expected_stamp in player.plays[0][0]
+
+
+def test_catchup_m3u_default_no_source_xc_shaped_uses_server_timezone():
+    epoch = 1789646400  # September -> Toronto -4h
+    catchup = {'start': epoch, 'end': epoch + 3600, 'now': epoch + 4000}
+    snapshot = _catchup_m3u_snapshot(
+        stream_url='https://xc.example/live/u/p/1.ts',
+        server_timezone='America/Toronto',
+    )
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(snapshot, catchup)
+
+    session.start()
+
+    from datetime import datetime
+    expected_stamp = datetime.utcfromtimestamp(epoch - 14400).strftime('%Y-%m-%d:%H-%M')
+    url = player.plays[0][0]
+    assert '/timeshift/' in url
+    assert expected_stamp in url
 
 
 def test_live_catchup_none_behaviour_unchanged():
@@ -621,6 +690,7 @@ def test_load_snapshot_reads_channel_and_provider(tmp_path):
         assert snapshot['xtream_host'] == 'http://panel.example'
         assert snapshot['provider_name'] == 'P1'
         assert snapshot['catchup_url_form'] == 'path'
+        assert snapshot['server_timezone'] is None
     finally:
         conn.close()
 

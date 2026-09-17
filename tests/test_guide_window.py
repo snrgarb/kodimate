@@ -17,11 +17,12 @@ def _provider(conn, name="P1"):
     ).lastrowid
 
 
-def _channel(conn, provider_id, channel_key, name, position, epg_channel_id=None):
+def _channel(conn, provider_id, channel_key, name, position, epg_channel_id=None,
+             stream_url='http://x/live/u/p/1.ts'):
     cursor = conn.execute(
         "INSERT INTO channel (provider_id, channel_key, name, normalised_name, stream_url, "
-        "position, epg_channel_id) VALUES (?, ?, ?, ?, 'http://x', ?, ?)",
-        (provider_id, channel_key, name, name.lower(), position, epg_channel_id),
+        "position, epg_channel_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (provider_id, channel_key, name, name.lower(), stream_url, position, epg_channel_id),
     )
     return cursor.lastrowid
 
@@ -779,6 +780,56 @@ def test_unplayable_past_cell_has_no_glyph_and_is_greyed(tmp_path):
 
         past_label = window._pool[0][0][1]
         assert past_label.getLabel() == '[COLOR FF808080]Past Show[/COLOR]'
+    finally:
+        conn.close()
+
+
+def test_unsupported_m3u_url_past_cell_is_greyed_despite_catchup_days(tmp_path):
+    # default mode, no catchup-source, non-XC live URL: the Channel's mode
+    # cannot produce a Catch-up URL at all, so it must be treated as
+    # unplayable even though catchup_days is set (issue #39).
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1",
+                        stream_url='http://cdn.example/a.m3u8')
+        conn.execute("UPDATE channel SET catchup_days = 3 WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        t0 = window._viewport_start
+        now_snapshot = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(now_snapshot), "Past Show")
+        _programme(conn, eid, "x1", guide.format_iso(now_snapshot),
+                   guide.format_iso(t0 + timedelta(hours=2)), "Current Show")
+        window._load_programmes()
+        window._cursor_time = now_snapshot
+        window._relayout()
+
+        past_label = window._pool[0][0][1]
+        assert past_label.getLabel() == '[COLOR FF808080]Past Show[/COLOR]'
+    finally:
+        conn.close()
+
+
+def test_unsupported_m3u_url_past_cell_dialog_is_info_only(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1",
+                        stream_url='http://cdn.example/a.m3u8')
+        conn.execute("UPDATE channel SET catchup_days = 3 WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+        t0 = window._viewport_start
+        now_snapshot = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(now_snapshot), "Past Show")
+        window._load_programmes()
+        window._cursor_time = t0
+        window._relayout()
+
+        window.onClick(CHANNEL_LIST_ID)
+
+        assert dialog_cls.opened_with['actions'] == []
     finally:
         conn.close()
 

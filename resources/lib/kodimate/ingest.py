@@ -385,11 +385,12 @@ def refresh_xtream_provider(conn, provider_id, account, categories, streams, now
 
         conn.execute(
             "UPDATE provider SET account_expires_at = ?, max_connections = ?, "
-            "allowed_output_formats = ? WHERE id = ?",
+            "allowed_output_formats = ?, server_timezone = ? WHERE id = ?",
             (
                 account.get('account_expires_at'), account.get('max_connections'),
                 json.dumps(account['allowed_output_formats'])
                 if account.get('allowed_output_formats') is not None else None,
+                account.get('server_timezone'),
                 provider_id,
             ),
         )

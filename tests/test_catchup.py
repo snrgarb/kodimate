@@ -20,6 +20,14 @@ def test_effective_window_days_none_at_both_levels():
     assert catchup.effective_window_days(None, None) is None
 
 
+def test_effective_window_days_none_when_url_not_supported():
+    assert catchup.effective_window_days(3, 5, url_supported=False) is None
+
+
+def test_effective_window_days_url_supported_defaults_true():
+    assert catchup.effective_window_days(3, 5) == 3
+
+
 def test_cell_state_future():
     now = datetime(2026, 1, 5, 12, 0)
     start = now + timedelta(hours=1)

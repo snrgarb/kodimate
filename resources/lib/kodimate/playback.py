@@ -15,6 +15,7 @@ import threading
 
 from . import fetch
 from . import log as log_module
+from . import tz
 from . import urls
 
 START_TIMEOUT_SECONDS = 30
@@ -37,7 +38,7 @@ def load_snapshot(conn, provider_id, channel_key):
         "p.allowed_output_formats, p.max_connections, c.id, c.logo_url, "
         "p.name, c.catchup_mode, c.catchup_source, c.catchup_correction_hours, "
         "p.catchup_correction_hours, p.catchup_url_form, "
-        "COALESCE(c.catchup_days, p.catchup_days_default) "
+        "COALESCE(c.catchup_days, p.catchup_days_default), p.server_timezone "
         "FROM channel c "
         "JOIN provider p ON p.id = c.provider_id "
         "LEFT JOIN channel_override o "
@@ -74,6 +75,7 @@ def load_snapshot(conn, provider_id, channel_key):
         'provider_catchup_correction_hours': row[21],
         'catchup_url_form': row[22],
         'catchup_days': row[23],
+        'server_timezone': row[24],
     }
 
 
@@ -340,6 +342,12 @@ class PlaybackSession(object):
                 attempt_number, phase, form if form else '-'
             )
         )
+        if self._current_url is None:
+            # Catch-up only: the Channel's mode cannot produce a URL at all
+            # (e.g. M3U `default` mode, no catchup-source, non-XC live URL).
+            # Not retryable, so fail the Attempt outright without playing.
+            self._fail('catchup_unavailable')
+            return
         self.player.play(self._current_url, self._current_headers)
         self._arm_start_timer()
         self.on_state(self.state, None)
@@ -374,9 +382,11 @@ class PlaybackSession(object):
     def _catchup_url_and_headers(self, form):
         snapshot = self.snapshot
         start, end, now = self._catchup_times()
+        offset = tz.zone_offset_seconds(snapshot.get('server_timezone'), start)
         if snapshot['kind'] == 'xtream':
             start_local = urls.xtream_local_start(
-                start, 0, {'catchup_correction_hours': snapshot.get('provider_catchup_correction_hours')},
+                start, offset,
+                {'catchup_correction_hours': snapshot.get('provider_catchup_correction_hours')},
             )
             duration_seconds = max(0, min(end, now) - start)
             minutes = max(1, duration_seconds // 60)
@@ -393,7 +403,10 @@ class PlaybackSession(object):
             )
             url = urls.m3u_catchup_url(
                 snapshot, corrected_start, min(end, now), now, self.catchup.get('catchup_id'),
+                local_offset_seconds=offset,
             )
+        if url is None:
+            return None, None
         headers = dict(snapshot.get('headers') or {})
         if 'User-Agent' not in headers and snapshot.get('user_agent'):
             headers['User-Agent'] = snapshot['user_agent']

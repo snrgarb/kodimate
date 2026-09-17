@@ -158,8 +158,10 @@ class GuideWindow(BaseWindow):
 
     def _window_days_for_channel(self, channel_index):
         if 0 <= channel_index < len(self._channel_rows):
+            row = self._channel_rows[channel_index]
             return catchup.effective_window_days(
-                self._channel_rows[channel_index].get('catchup_days'), None
+                row.get('catchup_days'), None,
+                url_supported=row.get('catchup_supported', True),
             )
         return None
 

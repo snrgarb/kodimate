@@ -102,6 +102,56 @@ def test_catchup_days_falls_back_to_provider_default(tmp_path):
         conn.close()
 
 
+def test_catchup_supported_true_for_xtream_provider(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        cursor = conn.execute(
+            "INSERT INTO provider (kind, name, enabled) VALUES ('xtream', 'X1', 1)"
+        )
+        pid = cursor.lastrowid
+        conn.execute(
+            "INSERT INTO channel (provider_id, channel_key, name, normalised_name, stream_url, "
+            "position) VALUES (?, 'a', 'Chan', 'chan', 'http://x/live/u/p/1.ts', 0)",
+            (pid,),
+        )
+        rows = channels.list_channels(conn)
+        assert rows[0]['catchup_supported'] is True
+    finally:
+        conn.close()
+
+
+def test_catchup_supported_false_for_m3u_default_mode_non_xc_url(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        conn.execute(
+            "INSERT INTO channel (provider_id, channel_key, name, normalised_name, stream_url, "
+            "position, catchup_mode) VALUES (?, 'a', 'Chan', 'chan', 'http://cdn.example/a.m3u8', "
+            "0, 'default')",
+            (pid,),
+        )
+        rows = channels.list_channels(conn)
+        assert rows[0]['catchup_supported'] is False
+    finally:
+        conn.close()
+
+
+def test_catchup_supported_true_for_m3u_default_mode_xc_shaped_url(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        conn.execute(
+            "INSERT INTO channel (provider_id, channel_key, name, normalised_name, stream_url, "
+            "position, catchup_mode) VALUES (?, 'a', 'Chan', 'chan', "
+            "'https://xc.example/live/u/p/1.ts', 0, 'default')",
+            (pid,),
+        )
+        rows = channels.list_channels(conn)
+        assert rows[0]['catchup_supported'] is True
+    finally:
+        conn.close()
+
+
 def test_stale_channel_excluded(tmp_path):
     conn = _conn(tmp_path)
     try:
