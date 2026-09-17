@@ -70,10 +70,22 @@ class Control(object):
         self._label = ''
         self._width = 0
         self._visible = True
+        self._x = 0
+        self._y = 0
 
     def reset(self):
         self._items = []
         self._selected = 0
+
+    def setPosition(self, x, y):
+        self._x = x
+        self._y = y
+
+    def getX(self):
+        return self._x
+
+    def getY(self):
+        return self._y
 
     def setLabel(self, label):
         self._label = label

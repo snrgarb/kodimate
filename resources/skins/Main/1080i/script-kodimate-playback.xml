@@ -117,6 +117,14 @@
                 <texture>white.png</texture>
                 <colordiffuse>ff3a6ea5</colordiffuse>
             </control>
+            <control type="image" id="705">
+                <posx>930</posx>
+                <posy>72</posy>
+                <width>20</width>
+                <height>20</height>
+                <texture>progress-knob.png</texture>
+                <colordiffuse>ffffffff</colordiffuse>
+            </control>
             <control type="label">
                 <posx>940</posx>
                 <posy>96</posy>

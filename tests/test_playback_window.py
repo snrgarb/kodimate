@@ -309,6 +309,25 @@ def test_tick_updates_progress_fill_width(tmp_path):
     window._tick()
 
     assert window.getControl(704).getWidth() == 300  # 50% of PROGRESS_WIDTH(600)
+    assert window.getControl(705).getX() == 1230  # 940 + 300 - 10
+    assert window.getControl(705).getY() == 72
+
+
+def test_tick_updates_progress_while_bar_hidden(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel(conn, channel_key='a')
+    eid = _epg_source(conn, provider_id)
+    _programme(conn, eid, 'a', '2026-01-01T11:00:00Z', '2026-01-01T12:00:00Z', 'Now Show')
+    now = FakeNow(datetime(2026, 1, 1, 11, 30))
+    window = _window(conn, snapshot, now_fn=now)
+    window.onInit()
+    window.session.on_av_started()
+    window._hide_bar()
+    assert window.getProperty('bar_visible') == '0'
+
+    window._tick()
+
+    assert window.getControl(704).getWidth() == 300  # 50% of PROGRESS_WIDTH(600)
 
 
 # -- Groups/Channels overlay --------------------------------------------
@@ -851,6 +870,8 @@ def test_catchup_bar_width_reflects_player_time_once_playing(tmp_path):
     window._tick()
 
     assert window.getControl(704).getWidth() == 150  # 25% of PROGRESS_WIDTH(600)
+    assert window.getControl(705).getX() == 1080  # 940 + 150 - 10
+    assert window.getControl(705).getY() == 72
 
 
 def test_catchup_tick_updates_width_as_player_time_advances(tmp_path):

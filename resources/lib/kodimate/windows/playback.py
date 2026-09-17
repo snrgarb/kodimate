@@ -46,6 +46,10 @@ CHANNELS_LIST_ID = 201
 PROGRESS_TRACK_ID = 703
 PROGRESS_FILL_ID = 704
 PROGRESS_WIDTH = 600
+PROGRESS_KNOB_ID = 705
+PROGRESS_X = 940
+PROGRESS_KNOB_Y = 72
+PROGRESS_KNOB_SIZE = 20
 
 _DEFAULT_OSD_HIDE_SECONDS = 3
 _DEFAULT_NUMBER_COMMIT_DELAY = 1.5
@@ -270,8 +274,15 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         fraction = osd.catchup_progress_fraction(
             self.catchup['start'], self.catchup['end'], offset_seconds, player_seconds,
         )
+        self._set_progress(fraction)
+
+    def _set_progress(self, fraction):
         try:
             self.getControl(PROGRESS_FILL_ID).setWidth(int(PROGRESS_WIDTH * fraction))
+            self.getControl(PROGRESS_KNOB_ID).setPosition(
+                PROGRESS_X + int(PROGRESS_WIDTH * fraction) - PROGRESS_KNOB_SIZE // 2,
+                PROGRESS_KNOB_Y,
+            )
         except Exception:
             pass
 
@@ -313,10 +324,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self.setProperty('now_times', '')
             fraction = 0.0
         self.setProperty('next_title', next_prog['title'] if next_prog is not None else '')
-        try:
-            self.getControl(PROGRESS_FILL_ID).setWidth(int(PROGRESS_WIDTH * fraction))
-        except Exception:
-            pass
+        self._set_progress(fraction)
         return now_prog
 
     def _show_bar(self, arm_hide):
@@ -353,7 +361,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         if self._stop_event is not None and self._stop_event.is_set():
             return
         try:
-            if not self._playing or self.getProperty('bar_visible') != '1':
+            if not self._playing:
                 return
             if self.catchup:
                 self._apply_catchup_bar()
