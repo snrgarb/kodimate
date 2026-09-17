@@ -17,8 +17,6 @@ from .programme_info import ProgrammeInfoDialog
 
 CHANNEL_LIST_ID = 500
 
-CATCHUP_GLYPH = u'« '
-
 _STR_NO_INFO = 32083
 
 _LEFT_COL_WIDTH = 300
@@ -177,9 +175,11 @@ class GuideWindow(BaseWindow):
         control = self.getControl(CHANNEL_LIST_ID)
         control.reset()
         items = []
-        for row in self._channel_rows:
+        for index, row in enumerate(self._channel_rows):
             item = xbmcgui.ListItem(label=row['name'])
             item.setProperty('number', str(row['number']))
+            window_days = self._window_days_for_channel(index)
+            item.setProperty('catchup', '1' if window_days else '0')
             items.append(item)
         control.addItems(items)
         if items:
@@ -331,8 +331,6 @@ class GuideWindow(BaseWindow):
         return catchup.cell_state(cell['start'], cell['end'], window_days, now)
 
     def _cell_title(self, cell, state):
-        if state == 'past_playable':
-            return CATCHUP_GLYPH + cell['title']
         return cell['title']
 
     def _label_color_for(self, cell, state, is_cursor):

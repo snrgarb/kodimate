@@ -736,7 +736,7 @@ def test_in_viewport_cursor_move_does_not_touch_animations(tmp_path):
 
 # -- catch-up glyph/greying (issue #28) ------------------------------------
 
-def test_playable_past_cell_shows_glyph_and_is_not_greyed(tmp_path):
+def test_playable_past_cell_has_no_glyph_and_is_not_greyed(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -754,9 +754,23 @@ def test_playable_past_cell_shows_glyph_and_is_not_greyed(tmp_path):
         window._relayout()
 
         past_label = window._pool[0][0][1]
-        assert past_label.getLabel() == (
-            '[COLOR FFCCCCCC]' + win_guide.CATCHUP_GLYPH + 'Past Show[/COLOR]'
-        )
+        assert past_label.getLabel() == '[COLOR FFCCCCCC]Past Show[/COLOR]'
+    finally:
+        conn.close()
+
+
+def test_channel_list_item_catchup_property_reflects_catchup_days(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        _channel(conn, pid, "b", "Beta", 1, epg_channel_id="x2")
+        conn.execute("UPDATE channel SET catchup_days = 3 WHERE id = ?", (cid,))
+        window = _window(conn)
+
+        items = window.getControl(CHANNEL_LIST_ID)._items
+        assert items[0].getProperty('catchup') == '1'
+        assert items[1].getProperty('catchup') == '0'
     finally:
         conn.close()
 

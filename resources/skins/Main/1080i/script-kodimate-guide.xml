@@ -84,12 +84,22 @@
                 <control type="label">
                     <posx>12</posx>
                     <posy>0</posy>
-                    <width>288</width>
+                    <width>246</width>
                     <height>98</height>
                     <label>$INFO[ListItem.Property(number)] $INFO[ListItem.Label]</label>
                     <textcolor>ffcccccc</textcolor>
                     <align>left</align>
                     <aligny>center</aligny>
+                </control>
+                <control type="image">
+                    <posx>264</posx>
+                    <posy>37</posy>
+                    <width>24</width>
+                    <height>24</height>
+                    <texture>catchup.png</texture>
+                    <aspectratio>keep</aspectratio>
+                    <colordiffuse>ffcccccc</colordiffuse>
+                    <visible>String.IsEqual(ListItem.Property(catchup),1)</visible>
                 </control>
             </itemlayout>
             <focusedlayout width="300" height="98">
@@ -104,12 +114,22 @@
                 <control type="label">
                     <posx>12</posx>
                     <posy>0</posy>
-                    <width>288</width>
+                    <width>246</width>
                     <height>98</height>
                     <label>$INFO[ListItem.Property(number)] $INFO[ListItem.Label]</label>
                     <textcolor>ffffffff</textcolor>
                     <align>left</align>
                     <aligny>center</aligny>
+                </control>
+                <control type="image">
+                    <posx>264</posx>
+                    <posy>37</posy>
+                    <width>24</width>
+                    <height>24</height>
+                    <texture>catchup.png</texture>
+                    <aspectratio>keep</aspectratio>
+                    <colordiffuse>ffffffff</colordiffuse>
+                    <visible>String.IsEqual(ListItem.Property(catchup),1)</visible>
                 </control>
             </focusedlayout>
         </control>
