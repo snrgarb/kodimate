@@ -1425,7 +1425,10 @@ def test_right_from_rail_returns_to_panel_when_open(tmp_path):
         conn.close()
 
 
-def test_opening_groups_drawer_does_not_move_grid_cells(tmp_path):
+def test_opening_groups_drawer_clips_and_dims_cells_behind_it(tmp_path):
+    # Cells under the open Groups drawer (x < 610) must not render at full
+    # brightness on top of it: they're clipped to the drawer's right edge
+    # and dimmed, and restored when the drawer closes.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -1439,17 +1442,25 @@ def test_opening_groups_drawer_does_not_move_grid_cells(tmp_path):
         window._relayout()
         cell_image, _cell_label, _cell_desc = window._pool[0][0]
         x_before = cell_image.getX()
+        width_before = cell_image.getWidth()
+        color_before = cell_image._color_diffuse
+        assert x_before == 450
 
-        window._open_panel()
-        window._relayout()
+        window._open_panel()  # already re-relayouts internally
 
         cell_image, _cell_label, _cell_desc = window._pool[0][0]
-        assert cell_image.getX() == x_before
+        assert cell_image.getX() == 610
+        assert cell_image.getWidth() == width_before - 160
+        assert cell_image._color_diffuse == guide.dim_color(color_before, 0.45)
         assert window.getProperty('panel_open') == '1'
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
 
+        cell_image, _cell_label, _cell_desc = window._pool[0][0]
         assert window.getProperty('panel_open') == ''
+        assert cell_image.getX() == x_before
+        assert cell_image.getWidth() == width_before
+        assert cell_image._color_diffuse == color_before
     finally:
         conn.close()
 
@@ -2580,6 +2591,42 @@ def test_skin_hint_bar_property_appears_in_skin():
     with open(_SKIN_XML) as f:
         xml_text = f.read()
     assert 'Window.Property(hint_bar)' in xml_text
+
+
+def test_hint_bar_slot_properties_after_init(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        addon = xbmcaddon.Addon()
+        assert window.getProperty('hint1_icon') == 'OK'
+        assert window.getProperty('hint1_key') == ''
+        assert window.getProperty('hint1_verb') == addon.getLocalizedString(guide.STR_HINT_WATCH)
+        assert window.getProperty('hint5_key') == addon.getLocalizedString(guide.STR_HINT_LONG_PRESS)
+    finally:
+        conn.close()
+
+
+def test_hint_bar_slot4_cleared_in_grid_zone(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        window._handle_right()
+        assert window.getProperty('hint4_key') == ''
+        assert window.getProperty('hint4_icon') == ''
+    finally:
+        conn.close()
+
+
+def test_skin_hint_slot_properties_appear_in_skin():
+    with open(_SKIN_XML) as f:
+        xml_text = f.read()
+    for n in range(1, 6):
+        for suffix in ('icon', 'key', 'verb'):
+            assert 'Window.Property(hint%d_%s)' % (n, suffix) in xml_text
 
 
 def test_info_on_column_row_opens_dialog_for_current_programme(tmp_path):

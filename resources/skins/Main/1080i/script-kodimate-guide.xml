@@ -622,7 +622,9 @@
             <posx>150</posx>
             <posy>280</posy>
             <width>300</width>
-            <height>740</height>
+            <!-- 7 rows * 98px row height (row budget: 1080 - 220 strip -
+                 60 header - 60 hint bar, see _VISIBLE_ROWS in guide.py). -->
+            <height>686</height>
             <onleft>500</onleft>
             <onright>500</onright>
             <onup>500</onup>
@@ -729,31 +731,187 @@
             <posx>448</posx>
             <posy>280</posy>
             <width>2</width>
-            <height>740</height>
+            <height>686</height>
             <texture>white.png</texture>
             <colordiffuse>ff3a3a3a</colordiffuse>
         </control>
 
+        <!-- Remote-hint bar (issue #56): sits directly under the last
+             channel row (966..1080), a pill-icon + key + verb per slot. -->
         <control type="group">
             <visible>!String.IsEmpty(Window.Property(hint_bar)) + !String.IsEqual(Window.Property(panel_open),1)</visible>
             <control type="image">
                 <posx>150</posx>
-                <posy>1020</posy>
+                <posy>966</posy>
                 <width>1770</width>
-                <height>60</height>
+                <height>114</height>
                 <texture>white.png</texture>
                 <colordiffuse>ff181818</colordiffuse>
             </control>
-            <control type="label">
-                <posx>174</posx>
-                <posy>1020</posy>
-                <width>1746</width>
-                <height>60</height>
-                <label>$INFO[Window.Property(hint_bar)]</label>
-                <font>font12</font>
-                <align>left</align>
-                <aligny>center</aligny>
-                <textcolor>ffaaaaaa</textcolor>
+            <control type="group">
+                <visible>!String.IsEmpty(Window.Property(hint1_icon))</visible>
+                <control type="image">
+                    <posx>170</posx>
+                    <posy>999</posy>
+                    <width>48</width>
+                    <height>48</height>
+                    <texture>circle.png</texture>
+                    <colordiffuse>ff3a3a3a</colordiffuse>
+                </control>
+                <control type="label">
+                    <posx>170</posx>
+                    <posy>999</posy>
+                    <width>48</width>
+                    <height>48</height>
+                    <label>$INFO[Window.Property(hint1_icon)]</label>
+                    <font>font12</font>
+                    <align>center</align>
+                    <aligny>center</aligny>
+                    <textcolor>ffffffff</textcolor>
+                </control>
+                <control type="label">
+                    <posx>234</posx>
+                    <posy>966</posy>
+                    <width>300</width>
+                    <height>114</height>
+                    <label>[B]$INFO[Window.Property(hint1_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint1_verb)][/COLOR]</label>
+                    <font>font13</font>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                    <textcolor>ffffffff</textcolor>
+                </control>
+            </control>
+            <control type="group">
+                <visible>!String.IsEmpty(Window.Property(hint2_icon))</visible>
+                <control type="image">
+                    <posx>515</posx>
+                    <posy>999</posy>
+                    <width>48</width>
+                    <height>48</height>
+                    <texture>circle.png</texture>
+                    <colordiffuse>ff3a3a3a</colordiffuse>
+                </control>
+                <control type="label">
+                    <posx>515</posx>
+                    <posy>999</posy>
+                    <width>48</width>
+                    <height>48</height>
+                    <label>$INFO[Window.Property(hint2_icon)]</label>
+                    <font>font12</font>
+                    <align>center</align>
+                    <aligny>center</aligny>
+                    <textcolor>ffffffff</textcolor>
+                </control>
+                <control type="label">
+                    <posx>579</posx>
+                    <posy>966</posy>
+                    <width>300</width>
+                    <height>114</height>
+                    <label>[B]$INFO[Window.Property(hint2_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint2_verb)][/COLOR]</label>
+                    <font>font13</font>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                    <textcolor>ffffffff</textcolor>
+                </control>
+            </control>
+            <control type="group">
+                <visible>!String.IsEmpty(Window.Property(hint3_icon))</visible>
+                <control type="image">
+                    <posx>860</posx>
+                    <posy>999</posy>
+                    <width>48</width>
+                    <height>48</height>
+                    <texture>circle.png</texture>
+                    <colordiffuse>ff3a3a3a</colordiffuse>
+                </control>
+                <control type="label">
+                    <posx>860</posx>
+                    <posy>999</posy>
+                    <width>48</width>
+                    <height>48</height>
+                    <label>$INFO[Window.Property(hint3_icon)]</label>
+                    <font>font12</font>
+                    <align>center</align>
+                    <aligny>center</aligny>
+                    <textcolor>ffffffff</textcolor>
+                </control>
+                <control type="label">
+                    <posx>924</posx>
+                    <posy>966</posy>
+                    <width>300</width>
+                    <height>114</height>
+                    <label>[B]$INFO[Window.Property(hint3_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint3_verb)][/COLOR]</label>
+                    <font>font13</font>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                    <textcolor>ffffffff</textcolor>
+                </control>
+            </control>
+            <control type="group">
+                <visible>!String.IsEmpty(Window.Property(hint4_icon))</visible>
+                <control type="image">
+                    <posx>1205</posx>
+                    <posy>999</posy>
+                    <width>48</width>
+                    <height>48</height>
+                    <texture>circle.png</texture>
+                    <colordiffuse>ff3a3a3a</colordiffuse>
+                </control>
+                <control type="label">
+                    <posx>1205</posx>
+                    <posy>999</posy>
+                    <width>48</width>
+                    <height>48</height>
+                    <label>$INFO[Window.Property(hint4_icon)]</label>
+                    <font>font12</font>
+                    <align>center</align>
+                    <aligny>center</aligny>
+                    <textcolor>ffffffff</textcolor>
+                </control>
+                <control type="label">
+                    <posx>1269</posx>
+                    <posy>966</posy>
+                    <width>300</width>
+                    <height>114</height>
+                    <label>[B]$INFO[Window.Property(hint4_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint4_verb)][/COLOR]</label>
+                    <font>font13</font>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                    <textcolor>ffffffff</textcolor>
+                </control>
+            </control>
+            <control type="group">
+                <visible>!String.IsEmpty(Window.Property(hint5_icon))</visible>
+                <control type="image">
+                    <posx>1550</posx>
+                    <posy>999</posy>
+                    <width>48</width>
+                    <height>48</height>
+                    <texture>circle.png</texture>
+                    <colordiffuse>ff3a3a3a</colordiffuse>
+                </control>
+                <control type="label">
+                    <posx>1550</posx>
+                    <posy>999</posy>
+                    <width>48</width>
+                    <height>48</height>
+                    <label>$INFO[Window.Property(hint5_icon)]</label>
+                    <font>font12</font>
+                    <align>center</align>
+                    <aligny>center</aligny>
+                    <textcolor>ffffffff</textcolor>
+                </control>
+                <control type="label">
+                    <posx>1614</posx>
+                    <posy>966</posy>
+                    <width>300</width>
+                    <height>114</height>
+                    <label>[B]$INFO[Window.Property(hint5_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint5_verb)][/COLOR]</label>
+                    <font>font13</font>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                    <textcolor>ffffffff</textcolor>
+                </control>
             </control>
         </control>
 

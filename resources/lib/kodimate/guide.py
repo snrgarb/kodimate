@@ -407,6 +407,20 @@ def visible_rows(available_height, row_height):
     return max(1, int(available_height // row_height))
 
 
+def _clamp_byte(value):
+    return max(0, min(255, value))
+
+
+def dim_color(argb_hex, factor):
+    """`argb_hex` (an "AARRGGBB" string) with its R/G/B channels scaled by
+    `factor` and clamped to 0-255; alpha is kept as-is."""
+    alpha = argb_hex[0:2]
+    r = _clamp_byte(int(round(int(argb_hex[2:4], 16) * factor)))
+    g = _clamp_byte(int(round(int(argb_hex[4:6], 16) * factor)))
+    b = _clamp_byte(int(round(int(argb_hex[6:8], 16) * factor)))
+    return '%s%02X%02X%02X' % (alpha, r, g, b)
+
+
 # String ids for the remote-hint bar's verb fragments (issue #56); kept as
 # constants here so hint_text stays a pure function of `get_string`.
 STR_HINT_WATCH = 32131
@@ -418,28 +432,38 @@ STR_HINT_LONG_PRESS = 32136
 STR_HINT_OPEN = 32137
 
 
-def hint_text(zone, get_string):
-    """Remote-hint bar text for the given focus zone; each fragment names
-    only what that zone's keys actually do (empty for 'panel', which hides
-    the bar while the Groups drawer is open)."""
+def hint_slots(zone, get_string):
+    """Remote-hint bar slots for the given focus zone: up to five dicts of
+    {'icon', 'key', 'verb'}, one per key this zone's Left/Right/OK/Info/
+    long-press actually does (empty list for 'panel', which hides the bar
+    while the Groups drawer is open)."""
     if zone == 'column':
-        fragments = [
-            u'OK %s' % get_string(STR_HINT_WATCH),
-            u'← %s' % get_string(STR_HINT_GROUPS),
-            u'→ %s' % get_string(STR_HINT_TIME),
-            u'Info %s' % get_string(STR_HINT_DETAILS),
-            u'%s %s' % (get_string(STR_HINT_LONG_PRESS), get_string(STR_HINT_FAVOURITE)),
+        return [
+            {'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_WATCH)},
+            {'icon': u'←', 'key': u'', 'verb': get_string(STR_HINT_GROUPS)},
+            {'icon': u'→', 'key': u'', 'verb': get_string(STR_HINT_TIME)},
+            {'icon': u'i', 'key': u'Info', 'verb': get_string(STR_HINT_DETAILS)},
+            {'icon': u'★', 'key': get_string(STR_HINT_LONG_PRESS), 'verb': get_string(STR_HINT_FAVOURITE)},
         ]
-    elif zone == 'grid':
-        fragments = [
-            u'OK %s' % get_string(STR_HINT_WATCH),
-            u'←→ %s' % get_string(STR_HINT_TIME),
-            u'Info %s' % get_string(STR_HINT_DETAILS),
+    if zone == 'grid':
+        return [
+            {'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_WATCH)},
+            {'icon': u'↔', 'key': u'', 'verb': get_string(STR_HINT_TIME)},
+            {'icon': u'i', 'key': u'Info', 'verb': get_string(STR_HINT_DETAILS)},
         ]
-    elif zone == 'rail':
-        fragments = [u'OK %s' % get_string(STR_HINT_OPEN)]
-    else:
-        return u''
+    if zone == 'rail':
+        return [{'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_OPEN)}]
+    return []
+
+
+def hint_text(zone, get_string):
+    """Remote-hint bar text for the given focus zone, built from
+    hint_slots: each slot renders as "<key> <verb>", or "<icon> <verb>"
+    when the slot has no key (an arrow-only hint), joined with ' · '."""
+    fragments = [
+        u'%s %s' % (slot['key'] or slot['icon'], slot['verb'])
+        for slot in hint_slots(zone, get_string)
+    ]
     return u' · '.join(fragments)
 
 

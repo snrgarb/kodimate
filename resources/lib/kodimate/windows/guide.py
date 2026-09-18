@@ -34,6 +34,7 @@ _GRID_X = _RAIL_WIDTH + _LEFT_COL_WIDTH
 _STRIP_HEIGHT = 220
 _HEADER_HEIGHT = 60
 _HINT_BAR_HEIGHT = 60
+_HINT_SLOT_COUNT = 5
 _ROW_HEIGHT = 98
 _GRID_WIDTH = 1920 - _GRID_X
 _POOL_COLS = 28  # real EPG data can pack ~24 short programmes into a 3h window
@@ -70,6 +71,12 @@ _DESC_CURSOR_TEXT_COLOR = 'FFE0E0E0'
 _DESC_PAST_TEXT_COLOR = 'FF606060'
 
 _TITLE_HEIGHT = 40
+
+# The Groups drawer (skin posx 150, width 460) sits above the grid while
+# open; grid cells that would otherwise render under it are clipped to its
+# right edge and dimmed rather than drawn at full brightness on top of it.
+_DRAWER_RIGHT_EDGE = 150 + 460
+_DRAWER_DIM_FACTOR = 0.45
 
 # Real Kodi's xbmcgui module does not export these action-id constants (only
 # xbmcgui.ACTION_MOVE_LEFT/RIGHT/UP/DOWN, ACTION_NAV_BACK, ACTION_PREVIOUS_MENU
@@ -173,7 +180,15 @@ class GuideWindow(BaseWindow):
         else:
             self.setFocusId(CHANNEL_LIST_ID)
         addon = xbmcaddon.Addon()
-        self.setProperty('hint_bar', guide.hint_text(self._zone, addon.getLocalizedString))
+        get_string = addon.getLocalizedString
+        self.setProperty('hint_bar', guide.hint_text(self._zone, get_string))
+        slots = guide.hint_slots(self._zone, get_string)
+        for i in range(_HINT_SLOT_COUNT):
+            slot = slots[i] if i < len(slots) else {'icon': '', 'key': '', 'verb': ''}
+            n = i + 1
+            self.setProperty('hint%d_icon' % n, slot['icon'])
+            self.setProperty('hint%d_key' % n, slot['key'])
+            self.setProperty('hint%d_verb' % n, slot['verb'])
 
     def _on_generation_change(self, generation):
         with self._lock:
@@ -321,6 +336,7 @@ class GuideWindow(BaseWindow):
             with self._lock:
                 self._close_panel()
                 self._zone = 'column'
+                self._relayout()
             self._apply_zone()
             return
         self.close()
@@ -340,6 +356,7 @@ class GuideWindow(BaseWindow):
                 with self._lock:
                     self._close_panel()
                     self._zone = 'column'
+                    self._relayout()
                 self._apply_zone()
             return
         next_zone, _ = guide.zone_transition(self._zone, 'right', self._panel_open)
@@ -586,6 +603,7 @@ class GuideWindow(BaseWindow):
             self._panel_open = True
             self.setProperty('panel_open', '1')
             self._zone = 'panel'
+            self._relayout()
         self._apply_zone()
 
     def _close_panel(self):
@@ -676,9 +694,11 @@ class GuideWindow(BaseWindow):
         minutes_from_view = (now - self._viewport_start).total_seconds() / 60.0
         px_per_min = _GRID_WIDTH / float(guide.VISIBLE_HOURS * 60)
         visible = 0 <= minutes_from_view <= guide.VISIBLE_HOURS * 60
+        x = int(_GRID_X + minutes_from_view * px_per_min) if visible else None
+        if visible and self._panel_open and x < _DRAWER_RIGHT_EDGE:
+            visible = False
         self.now_line.setVisible(visible)
         if visible:
-            x = int(_GRID_X + minutes_from_view * px_per_min)
             self.now_line.setPosition(x, _STRIP_HEIGHT + _HEADER_HEIGHT)
             self.getControl(_NOW_BADGE_IMAGE_ID).setPosition(x - _NOW_BADGE_WIDTH // 2, _NOW_BADGE_Y)
             self.getControl(_NOW_BADGE_LABEL_ID).setPosition(x - _NOW_BADGE_WIDTH // 2, _NOW_BADGE_Y)
@@ -837,12 +857,14 @@ class GuideWindow(BaseWindow):
                         is_cursor = cell is cursor_cell
                         state = self._state_for_cell(cell, window_days, now)
                         image, label, desc_label = row_pool[col]
-                        self._set_cell((image, label, desc_label), cell, y, is_cursor, state)
-                        to_show.append((image, label, desc_label))
+                        cell_visible = self._set_cell((image, label, desc_label), cell, y, is_cursor, state)
+                        if cell_visible:
+                            to_show.append((image, label, desc_label))
                         progress_image = row_progress[col]
                         if cell['progress'] is not None:
-                            self._set_cell_progress(progress_image, cell, y)
-                            to_show_progress.append(progress_image)
+                            progress_visible = self._set_cell_progress(progress_image, cell, y)
+                            if cell_visible and progress_visible:
+                                to_show_progress.append(progress_image)
                         cells.append(dict(cell, pool_index=col))
                 self._row_cells.append(cells)
 
@@ -881,12 +903,23 @@ class GuideWindow(BaseWindow):
         image, label, desc_label = pool_entry
         text_color = self._label_color_for(cell, state, is_cursor)
         desc_color = self._desc_color_for(cell, state, is_cursor)
-        image.setPosition(cell['x'] + _GRID_X, y)
-        image.setWidth(max(1, cell['width'] - 2))
+        cell_color = _CURSOR_CELL_COLOR if is_cursor else _CELL_COLOR
+        x = cell['x'] + _GRID_X
+        width = max(1, cell['width'] - 2)
+        if self._panel_open:
+            clipped = _clip_for_drawer(x, width)
+            if clipped is None:
+                return False
+            x, width = clipped
+            cell_color = guide.dim_color(cell_color, _DRAWER_DIM_FACTOR)
+            text_color = guide.dim_color(text_color, _DRAWER_DIM_FACTOR)
+            desc_color = guide.dim_color(desc_color, _DRAWER_DIM_FACTOR)
+        image.setPosition(x, y)
+        image.setWidth(width)
         image.setHeight(_ROW_HEIGHT - 2)
-        image.setColorDiffuse(_CURSOR_CELL_COLOR if is_cursor else _CELL_COLOR)
-        label_x = cell['x'] + _GRID_X + 8
-        label_width = max(1, cell['width'] - 16)
+        image.setColorDiffuse(cell_color)
+        label_x = x + 8
+        label_width = max(1, width - 16)
         label.setPosition(label_x, y)
         label.setWidth(label_width)
         label.setHeight(_TITLE_HEIGHT)
@@ -895,11 +928,19 @@ class GuideWindow(BaseWindow):
         desc_label.setWidth(label_width)
         desc_label.setHeight(_ROW_HEIGHT - _TITLE_HEIGHT)
         desc_label.setLabel(_colored(cell['description'], desc_color) if cell['description'] else '')
+        return True
 
     def _set_cell_progress(self, progress_image, cell, y):
         width = max(1, int((cell['width'] - 2) * cell['progress']))
-        progress_image.setPosition(cell['x'] + _GRID_X, y + _ROW_HEIGHT - 2 - _PROGRESS_HEIGHT)
+        x = cell['x'] + _GRID_X
+        if self._panel_open:
+            clipped = _clip_for_drawer(x, width)
+            if clipped is None:
+                return False
+            x, width = clipped
+        progress_image.setPosition(x, y + _ROW_HEIGHT - 2 - _PROGRESS_HEIGHT)
         progress_image.setWidth(width)
+        return True
 
     # -- cursor --------------------------------------------------------
 
@@ -1053,6 +1094,17 @@ class GuideWindow(BaseWindow):
             _colored(new_cell['description'], _DESC_CURSOR_TEXT_COLOR) if new_cell['description'] else ''
         )
         return True
+
+
+def _clip_for_drawer(x, width):
+    """(x, width) clipped to the region right of the open Groups drawer, or
+    None when the span is entirely hidden behind it."""
+    right = x + width
+    if right <= _DRAWER_RIGHT_EDGE:
+        return None
+    if x < _DRAWER_RIGHT_EDGE:
+        return _DRAWER_RIGHT_EDGE, right - _DRAWER_RIGHT_EDGE
+    return x, width
 
 
 def _abs_path(addon_path, relpath):

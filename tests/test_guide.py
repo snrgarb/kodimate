@@ -756,7 +756,9 @@ def test_hint_text_column_zone():
 
 
 def test_hint_text_grid_zone():
-    assert guide.hint_text('grid', str) == u'OK 32131 · ←→ 32133 · Info 32134'
+    # The grid's Left/Right hint is one bidirectional glyph (↔), not the
+    # column zone's two separate arrows -- updated for issue #56 follow-up.
+    assert guide.hint_text('grid', str) == u'OK 32131 · ↔ 32133 · Info 32134'
 
 
 def test_hint_text_rail_zone():
@@ -765,3 +767,35 @@ def test_hint_text_rail_zone():
 
 def test_hint_text_panel_zone_is_empty():
     assert guide.hint_text('panel', str) == ''
+
+
+def test_hint_slots_column():
+    slots = guide.hint_slots('column', str)
+    assert slots == [
+        {'icon': u'OK', 'key': u'', 'verb': '32131'},
+        {'icon': u'←', 'key': u'', 'verb': '32132'},
+        {'icon': u'→', 'key': u'', 'verb': '32133'},
+        {'icon': u'i', 'key': u'Info', 'verb': '32134'},
+        {'icon': u'★', 'key': '32136', 'verb': '32135'},
+    ]
+
+
+def test_hint_slots_grid():
+    slots = guide.hint_slots('grid', str)
+    assert slots == [
+        {'icon': u'OK', 'key': u'', 'verb': '32131'},
+        {'icon': u'↔', 'key': u'', 'verb': '32133'},
+        {'icon': u'i', 'key': u'Info', 'verb': '32134'},
+    ]
+
+
+def test_hint_slots_panel_zone_is_empty():
+    assert guide.hint_slots('panel', str) == []
+
+
+def test_dim_color_scales_rgb_keeps_alpha():
+    assert guide.dim_color('FF2A2A2A', 0.5) == 'FF151515'
+
+
+def test_dim_color_clamps_at_255():
+    assert guide.dim_color('FFFFFFFF', 2.0) == 'FFFFFFFF'
