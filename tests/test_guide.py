@@ -389,3 +389,25 @@ def test_zone_transition_unknown_zone_raises():
 def test_zone_transition_unknown_action_raises():
     with pytest.raises(ValueError):
         guide.zone_transition('rail', 'up', False)
+
+
+# -- back_target (issue #46 follow-up) --------------------------------------
+
+def test_back_target_grid_moves_to_column():
+    assert guide.back_target('grid', False) == 'column'
+    assert guide.back_target('grid', True) == 'column'
+
+
+@pytest.mark.parametrize('zone', ['column', 'rail', 'panel'])
+def test_back_target_closes_when_panel_not_open(zone):
+    assert guide.back_target(zone, False) == 'close'
+
+
+@pytest.mark.parametrize('zone', ['column', 'rail', 'panel'])
+def test_back_target_closes_panel_when_panel_open(zone):
+    assert guide.back_target(zone, True) == 'close_panel'
+
+
+def test_back_target_unknown_zone_raises():
+    with pytest.raises(ValueError):
+        guide.back_target('bogus', False)

@@ -169,12 +169,11 @@ def test_left_right_move_cursor_between_programmes(tmp_path):
 
 
 def test_left_from_leftmost_cell_scrolls_viewport_one_slot(tmp_path):
-    # Superseded by issue #46: Left from a row's first cell now moves focus
-    # into the channel column instead of scrolling the viewport (see
-    # test_left_from_first_cell_in_row_moves_to_column_not_time_scroll).
-    # The underlying scroll-at-edge behaviour of _move_cursor_horizontal
-    # itself is unchanged and still used by Right, so it is exercised here
-    # directly rather than through onAction.
+    # Bug fix: Left/Right must always move (scrolling the viewport by one
+    # slot at the cell edge) rather than doing nothing just because there
+    # happens to be no earlier programme in the data. (issue #46 follow-up:
+    # Left in the grid zone always moves the cursor/scrolls time -- the
+    # grid<->column edge is Back, not Left; see test_back_from_grid_moves_to_column.)
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -186,9 +185,11 @@ def test_left_from_leftmost_cell_scrolls_viewport_one_slot(tmp_path):
                    guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
         window._load_programmes()
         window._relayout()
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # column -> grid, cell 0
 
-        window._move_cursor_horizontal(-1)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
 
+        assert window._zone == 'grid'
         assert window._viewport_start == viewport_start - timedelta(minutes=30)
         assert window._cursor_time == window._viewport_start
     finally:
@@ -260,8 +261,6 @@ def test_down_over_long_past_starting_programme_does_not_move_viewport(tmp_path)
 def test_left_onto_several_hour_programme_scrolls_one_slot(tmp_path):
     # Regression for bug 2: Left onto an off-screen multi-hour programme
     # must scroll by one 30-minute slot, not snap to the programme's start.
-    # Exercised directly on _move_cursor_horizontal (see the note on
-    # test_left_from_leftmost_cell_scrolls_viewport_one_slot).
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -275,8 +274,9 @@ def test_left_onto_several_hour_programme_scrolls_one_slot(tmp_path):
                    "Current")
         window._load_programmes()
         window._relayout()
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # column -> grid, cell 0
 
-        window._move_cursor_horizontal(-1)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
 
         assert window._viewport_start == t0 - timedelta(minutes=30)
         assert window._cursor_time == window._viewport_start
@@ -553,9 +553,6 @@ def test_right_on_empty_row_scrolls_viewport_and_lands_on_right_edge_filler(tmp_
 
 
 def test_left_on_empty_row_scrolls_viewport_back_one_slot(tmp_path):
-    # An empty row is a single filler cell, i.e. always at index 0, so this
-    # is now reached via _move_cursor_horizontal directly rather than
-    # onAction (see the note on test_left_from_leftmost_cell_scrolls_viewport_one_slot).
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -564,8 +561,9 @@ def test_left_on_empty_row_scrolls_viewport_back_one_slot(tmp_path):
         t0 = window._viewport_start
         window._load_programmes()
         window._relayout()
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # column -> grid, on the row's only cell
 
-        window._move_cursor_horizontal(-1)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
 
         assert window._viewport_start == t0 - timedelta(minutes=30)
         assert window._cursor_time == window._viewport_start
@@ -625,6 +623,7 @@ def test_left_at_retention_floor_off_screen_target_is_a_no_op(tmp_path):
             ]
         }
         window._load_programmes = lambda: None  # keep the seeded data
+        window._zone = 'grid'
         window._relayout()
 
         load_calls = []
@@ -697,9 +696,7 @@ def test_horizontal_viewport_jump_is_instant_and_clips_edge_cell(tmp_path):
     # User feedback: horizontal scrolling (Left/Right) must be instant, no
     # slide or fade animation. A programme starting before the new
     # viewport must also clip to the grid's left edge (x=0) rather than
-    # spill off-screen. The cursor is on the row's only visible cell, so
-    # this is exercised directly on _move_cursor_horizontal (see the note
-    # on test_left_from_leftmost_cell_scrolls_viewport_one_slot).
+    # spill off-screen.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -713,8 +710,9 @@ def test_horizontal_viewport_jump_is_instant_and_clips_edge_cell(tmp_path):
                    "Current")
         window._load_programmes()
         window._relayout()
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # column -> grid, cell 0
 
-        window._move_cursor_horizontal(-1)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
 
         assert window._viewport_start == t0 - timedelta(minutes=30)
         edge_cell = window._row_cells[0][0]
@@ -1492,7 +1490,7 @@ def test_no_cell_highlighted_while_in_column_zone(tmp_path):
         conn.close()
 
 
-def test_left_from_first_cell_in_row_moves_to_column_not_time_scroll(tmp_path):
+def test_back_from_grid_moves_to_column_without_closing(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -1504,12 +1502,37 @@ def test_left_from_first_cell_in_row_moves_to_column_not_time_scroll(tmp_path):
                    guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
         window._load_programmes()
         window._relayout()
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # enter grid, first cell
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # column -> grid, cell 0
+        closed = []
+        window.close = lambda: closed.append(True)
 
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
 
         assert window._zone == 'column'
-        assert window._viewport_start == viewport_start
+        assert closed == []
+        assert window.getFocusId() == CHANNEL_LIST_ID
+        cell = window._row_cells[0][0]
+        image, _label, _desc = window._pool[0][cell['pool_index']]
+        assert image._color_diffuse != 'FF3A6EA5'
+    finally:
+        conn.close()
+
+
+def test_back_from_column_closes_window(tmp_path):
+    # Same assertion as test_back_closes_window, phrased for the zone the
+    # Back/close mapping is keyed on (see guide.back_target).
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        assert window._zone == 'column'
+        closed = []
+        window.close = lambda: closed.append(True)
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
+
+        assert closed == [True]
     finally:
         conn.close()
 
@@ -1570,6 +1593,32 @@ def test_ok_on_column_row_plays_live_with_channel_snapshot(tmp_path):
         assert playback_cls.opened_with is not None
         assert playback_cls.opened_with['snapshot']['channel_key'] == 'a'
         assert dialog_cls.opened_with is None
+    finally:
+        conn.close()
+
+
+def test_focus_reasserted_after_playback_closes_with_no_focused_control(tmp_path):
+    # Focus robustness (real-Kodi regression): if the modal that closed
+    # left no control focused (e.g. PlaybackWindow closing itself after a
+    # stream failure without Kodi re-running onInit), the Guide must still
+    # come back with a focused control.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+
+        class _NoFocusPlayback(object):
+            @classmethod
+            def open(cls, **kwargs):
+                window._focus_id = 0
+                return cls()
+
+        window.playback_cls = _NoFocusPlayback
+
+        window.onClick(CHANNEL_LIST_ID)
+
+        assert window.getFocusId() == CHANNEL_LIST_ID
     finally:
         conn.close()
 

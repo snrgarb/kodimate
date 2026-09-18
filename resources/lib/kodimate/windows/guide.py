@@ -199,7 +199,7 @@ class GuideWindow(BaseWindow):
     def onAction(self, action):
         action_id = action.getId()
         if action_id in (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU):
-            self.close()
+            self._handle_back()
             return
         if action_id == xbmcgui.ACTION_CONTEXT_MENU:
             self._open_group_picker()
@@ -230,19 +230,24 @@ class GuideWindow(BaseWindow):
 
     def _handle_left(self):
         if self._zone == 'grid':
-            focused_row = self._focused_row_index()
-            row_cells = self._row_cells[focused_row] if 0 <= focused_row < len(self._row_cells) else []
-            current_cell = self._find_cell(focused_row, self._cursor_time)
-            if current_cell is not None and row_cells and row_cells.index(current_cell) == 0:
-                self._zone, _ = guide.zone_transition('grid', 'left', self._panel_open)
-                self._relayout()
-            else:
-                self._move_cursor_horizontal(-1)
+            self._move_cursor_horizontal(-1)
             return
         next_zone, _ = guide.zone_transition(self._zone, 'left', self._panel_open)
         if next_zone != self._zone:
             self._zone = next_zone
             self._apply_zone()
+
+    def _handle_back(self):
+        target = guide.back_target(self._zone, self._panel_open)
+        if target == 'column':
+            self._zone = 'column'
+            self._relayout()
+            return
+        if target == 'close_panel':
+            # The Groups panel isn't wired up yet (future ticket); nothing
+            # else currently maps to this target.
+            return
+        self.close()
 
     def _handle_right(self):
         if self._zone == 'grid':
@@ -271,6 +276,7 @@ class GuideWindow(BaseWindow):
             refreshed = self._exit_modal()
         if not refreshed:
             self._relayout()
+        self._apply_zone()
 
     def _open_catchup(self):
         self._enter_modal()
@@ -278,6 +284,7 @@ class GuideWindow(BaseWindow):
             self.catchup_cls.open(conn=self.conn)
         finally:
             self._exit_modal()
+        self._apply_zone()
 
     def _open_settings(self):
         self._enter_modal()
@@ -287,12 +294,15 @@ class GuideWindow(BaseWindow):
             refreshed = self._exit_modal()
         if not refreshed:
             self._relayout()
+        self._apply_zone()
 
     def onClick(self, control_id):
         if control_id == RAIL_CATCHUP_ID:
+            self._rail_focus_id = control_id
             self._open_catchup()
             return
         if control_id == RAIL_SETTINGS_ID:
+            self._rail_focus_id = control_id
             self._open_settings()
             return
         if control_id != CHANNEL_LIST_ID:
@@ -344,6 +354,7 @@ class GuideWindow(BaseWindow):
             refreshed = self._exit_modal()
         if not refreshed:
             self._relayout()
+        self._apply_zone()
 
     def _window_days_for_channel(self, channel_index):
         if 0 <= channel_index < len(self._channel_rows):
@@ -391,6 +402,7 @@ class GuideWindow(BaseWindow):
             choice = xbmcgui.Dialog().select(addon.getLocalizedString(_STR_SELECT_GROUP), labels)
         finally:
             self._exit_modal()
+        self._apply_zone()
         if choice is None or choice < 0:
             return
         with self._lock:

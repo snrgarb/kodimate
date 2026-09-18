@@ -255,3 +255,15 @@ def zone_transition(zone, action, panel_open):
     if zone not in ZONES or action not in ('left', 'right'):
         raise ValueError("invalid zone/action: %r/%r" % (zone, action))
     return _ZONE_TRANSITIONS[(zone, action, panel_open)]
+
+
+def back_target(zone, panel_open):
+    """Back's next state: 'column' (from 'grid', un-highlighting the
+    cursor without closing), 'close_panel' (the Groups panel is open --
+    closes just the panel; wired up by a future ticket), or 'close' (close
+    the window)."""
+    if zone not in ZONES:
+        raise ValueError("invalid zone: %r" % (zone,))
+    if zone == 'grid':
+        return 'column'
+    return 'close_panel' if panel_open else 'close'
