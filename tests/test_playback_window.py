@@ -1676,6 +1676,20 @@ def test_back_on_bare_video_bar_hidden_in_catchup_closes_and_stops(tmp_path):
     assert window.player.stop_calls >= 1
 
 
+def test_action_stop_aborts_and_closes(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    stops_before = window.player.stop_calls
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_STOP))
+
+    assert window.player.stop_calls > stops_before
+    assert window._stop_event.is_set()
+
+
 # -- OSD transport controls: seek stepping, pause/resume, behind-live -------
 
 def test_bar_shown_defaults_focus_to_seek_row(tmp_path):
@@ -2140,24 +2154,6 @@ def test_commit_seek_dropped_when_not_playing(tmp_path):
 
     assert window.player.seek_calls == []
     assert window.getProperty('seek_step') == ''
-
-
-def test_pause_closes_native_seekbar_osd(tmp_path):
-    conn = _conn(tmp_path)
-    _, snapshot = _setup_channel(conn)
-    window = _window(conn, snapshot)
-    window.onInit()
-    window.session.on_av_started()
-    xbmc.executebuiltin_calls[:] = []
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-
-    assert 'Dialog.Close(seekbar,true)' in xbmc.executebuiltin_calls
-
-    xbmc.executebuiltin_calls[:] = []
-    window._tick()
-
-    assert 'Dialog.Close(seekbar,true)' in xbmc.executebuiltin_calls
 
 
 def test_pause_toggles_player_and_property(tmp_path):

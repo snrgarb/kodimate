@@ -11,3 +11,7 @@ Live streams are MPEG-TS or HLS from Xtream or M3U Providers, and Catch-up is a 
 ## Consequences
 
 A local timeshift proxy and stream failover are out of scope. Seeking and pause/resume stay native inside the player's own buffer; a target beyond the buffer is served by rebuilding a fresh Catch-up URL at that position rather than a local proxy. Stream failure detection relies on `onPlayBackError`/`onAVStarted` callbacks and timeouts (Playback Session state machine). Reconnect Attempts re-issue the same URL.
+
+## Amended 2026-09-18
+
+The player renders inside the addon's own `WindowXML` (`PlaybackWindow`) via a fullscreen `videowindow` control, played windowed (`xbmc.Player.play(..., windowed=True)`), instead of switching Kodi to its `fullscreenvideo` window. This keeps Kodi's own player OSD dialogs (DialogSeekBar, the pause OSD) from ever appearing over our OSD, since they are only auto-shown while `fullscreenvideo` is the active window. Known caveat: on some platforms a hardware-accelerated video path can ignore the `videowindow` control's rectangle and always render fullscreen regardless of its configured size/position; harmless here since our control is already sized to the full screen.

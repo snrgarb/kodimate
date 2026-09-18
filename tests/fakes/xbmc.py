@@ -41,7 +41,7 @@ class Player(object):
         pass
 
     def play(self, item='', listitem=None, windowed=False, startpos=-1):
-        play_calls.append((item, listitem))
+        play_calls.append((item, listitem, windowed))
 
     def stop(self):
         pass

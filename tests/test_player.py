@@ -24,3 +24,12 @@ def test_play_does_not_set_mime_type_when_not_given():
     listitem = xbmc.play_calls[-1][1]
     assert not hasattr(listitem, '_mime_type')
     assert not hasattr(listitem, '_content_lookup')
+
+
+def test_play_is_windowed_so_kodi_does_not_switch_to_fullscreenvideo():
+    xbmc.play_calls[:] = []
+    p = player.KodimatePlayer()
+
+    p.play('http://edge.example/1.ts')
+
+    assert xbmc.play_calls[-1][2] is True

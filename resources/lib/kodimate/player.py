@@ -35,7 +35,11 @@ class KodimatePlayer(xbmc.Player):
         if mime_type:
             item.setMimeType(mime_type)
             item.setContentLookup(False)
-        super(KodimatePlayer, self).play(target, item)
+        # windowed=True: the video renders into our own WindowXML's
+        # videowindow control rather than switching Kodi to its
+        # fullscreenvideo window, so none of Kodi's own player OSD dialogs
+        # (DialogSeekBar, the pause OSD) ever appear over our OSD.
+        super(KodimatePlayer, self).play(target, item, windowed=True)
 
     def onAVStarted(self):
         if self._session is not None:

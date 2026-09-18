@@ -38,8 +38,6 @@ _REASON_STRINGS = {
     'connection_limit': _STR_CONNECTION_LIMIT,
 }
 
-_ACTIVATE_FULLSCREEN_SLEEP_MS = 300
-
 _ALIVE_STATES = ('connecting', 'reconnecting', 'playing')
 _CONNECTING_STATES = ('connecting', 'reconnecting')
 
@@ -80,7 +78,7 @@ def _epoch(dt):
     return calendar.timegm(dt.utctimetuple())
 
 
-class PlaybackWindow(xbmcgui.WindowXMLDialog):
+class PlaybackWindow(xbmcgui.WindowXML):
     xmlFile = 'script-kodimate-playback.xml'
     theme = 'Main'
     res = '1080i'
@@ -142,10 +140,11 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self.osd_position = self._addon_setting_string('osd_position', 'top')
         if self.osd_position != 'bottom':
             self.osd_position = 'top'
-        # Set before doModal() draws the first frame: WindowXMLDialog
-        # honours setProperty() called here, so the spinner and channel
-        # labels are already correct on frame one instead of appearing a
-        # beat later once onInit() runs.
+        # Set before doModal() draws the first frame: a Window's property
+        # store is independent of Dialog vs XML window type, so WindowXML
+        # honours setProperty() called here exactly like WindowXMLDialog
+        # did -- the spinner and channel labels are already correct on
+        # frame one instead of appearing a beat later once onInit() runs.
         self.setProperty('state', 'connecting')
         self.setProperty('status_text', xbmcaddon.Addon().getLocalizedString(_STR_CONNECTING))
         self.setProperty('bar_visible', '1')
@@ -306,8 +305,6 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         )
         self.player.attach(self)
         self.session.start()
-        xbmc.sleep(_ACTIVATE_FULLSCREEN_SLEEP_MS)
-        xbmc.executebuiltin('ActivateWindow(fullscreenvideo)')
 
     # -- player callbacks (issue #30): the window is attached to the
     # player (not the session directly) so it can intercept a Catch-up
@@ -983,11 +980,6 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 except Exception:
                     pass
                 self.setProperty('paused', '1')
-                # Best-effort: Kodi has no "pause without showing its own
-                # seek-bar OSD" action, so close the dialog it just opened;
-                # _tick() repeats this every second while paused in case it
-                # reappears (e.g. a stray input event re-triggers it).
-                xbmc.executebuiltin('Dialog.Close(seekbar,true)')
                 self._show_bar(arm_hide=False)
                 return
             behind_now = self._behind_at_pause + (
@@ -1132,8 +1124,6 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         try:
             if not self._playing:
                 return
-            if self._paused:
-                xbmc.executebuiltin('Dialog.Close(seekbar,true)')
             self._update_stream_info()
             if self._stopped():
                 return
@@ -1351,6 +1341,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
 
             if action_id == xbmcgui.ACTION_SELECT_ITEM:
                 self._on_ok()
+                return
+
+            if action_id == xbmcgui.ACTION_STOP:
+                self._abort_and_close()
                 return
 
             # Remote/keyboard player transport, honoured regardless of focus.
