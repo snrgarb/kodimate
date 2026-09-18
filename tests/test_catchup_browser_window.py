@@ -243,6 +243,107 @@ def test_changing_left_selection_rerenders_right_pane_on_focus(tmp_path):
         conn.close()
 
 
+def test_focus_entering_programme_list_skips_header_to_first_programme(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1", catchup_days=3)
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(now - timedelta(hours=1)),
+                   guide.format_iso(now - timedelta(minutes=30)), "Today Show")
+
+        window = _window(conn)
+        control = window.getControl(PROGRAMME_LIST_ID)
+        control.selectItem(0)  # native focus lands on the "Today" header
+        window.setFocusId(PROGRAMME_LIST_ID)
+
+        window.onFocus(PROGRAMME_LIST_ID)
+
+        assert control.getSelectedPosition() == 1
+        assert control.getListItem(1).getLabel() == 'Today Show'
+    finally:
+        conn.close()
+
+
+def test_down_from_last_programme_of_day_skips_header_to_next_days_first_programme(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1", catchup_days=3)
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        today_start = now - timedelta(hours=1)
+        yesterday_start = now - timedelta(days=1, hours=1)
+        _programme(conn, eid, "x1", guide.format_iso(today_start),
+                   guide.format_iso(today_start + timedelta(minutes=30)), "Today Show")
+        _programme(conn, eid, "x1", guide.format_iso(yesterday_start),
+                   guide.format_iso(yesterday_start + timedelta(minutes=30)), "Yesterday Show")
+
+        window = _window(conn)
+        control = window.getControl(PROGRAMME_LIST_ID)
+        # Positions: 0 header "Today", 1 "Today Show", 2 header "Yesterday", 3 "Yesterday Show"
+        control.selectItem(2)  # native Down already moved onto the "Yesterday" header
+        window.setFocusId(PROGRAMME_LIST_ID)
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
+
+        assert control.getSelectedPosition() == 3
+        assert control.getListItem(3).getLabel() == 'Yesterday Show'
+    finally:
+        conn.close()
+
+
+def test_up_onto_header_skips_to_previous_days_last_programme(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1", catchup_days=3)
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        today_start = now - timedelta(hours=1)
+        yesterday_start = now - timedelta(days=1, hours=1)
+        _programme(conn, eid, "x1", guide.format_iso(today_start),
+                   guide.format_iso(today_start + timedelta(minutes=30)), "Today Show")
+        _programme(conn, eid, "x1", guide.format_iso(yesterday_start),
+                   guide.format_iso(yesterday_start + timedelta(minutes=30)), "Yesterday Show")
+
+        window = _window(conn)
+        control = window.getControl(PROGRAMME_LIST_ID)
+        control.selectItem(2)  # native Up already moved onto the "Yesterday" header
+        window.setFocusId(PROGRAMME_LIST_ID)
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+
+        assert control.getSelectedPosition() == 1
+        assert control.getListItem(1).getLabel() == 'Today Show'
+    finally:
+        conn.close()
+
+
+def test_up_on_first_programme_stays_on_first_programme(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1", catchup_days=3)
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(now - timedelta(hours=1)),
+                   guide.format_iso(now - timedelta(minutes=30)), "Today Show")
+
+        window = _window(conn)
+        control = window.getControl(PROGRAMME_LIST_ID)
+        control.selectItem(0)  # native Up already moved onto the top "Today" header
+        window.setFocusId(PROGRAMME_LIST_ID)
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+
+        assert control.getSelectedPosition() == 1
+        assert control.getListItem(1).getLabel() == 'Today Show'
+    finally:
+        conn.close()
+
+
 def test_ok_on_header_is_a_no_op(tmp_path):
     conn = _conn(tmp_path)
     try:

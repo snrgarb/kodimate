@@ -113,16 +113,39 @@ class CatchupBrowserWindow(BaseWindow):
             return
         if self.getFocusId() == CHANNEL_LIST_ID:
             self._maybe_render_for_channel_move()
+            return
+        if self.getFocusId() == PROGRAMME_LIST_ID and action_id in (
+                xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN):
+            self._skip_header_row(-1 if action_id == xbmcgui.ACTION_MOVE_UP else 1)
 
     def onFocus(self, control_id):
         if control_id == CHANNEL_LIST_ID:
             self._maybe_render_for_channel_move()
+        elif control_id == PROGRAMME_LIST_ID:
+            self._skip_header_row(1)
 
     def _maybe_render_for_channel_move(self):
         position = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
         if position != self._last_channel_position:
             self._last_channel_position = position
             self._render_programmes()
+
+    def _skip_header_row(self, direction):
+        """Header rows never hold focus: called after 201 gains focus or a
+        Up/Down move lands on one, this steps in `direction` to the next
+        programme row, falling back to the row after (the first programme
+        of the top day) when `direction` runs off the top of the list."""
+        control = self.getControl(PROGRAMME_LIST_ID)
+        position = control.getSelectedPosition()
+        if not (0 <= position < len(self._right_entries)):
+            return
+        if self._right_entries[position]['type'] != 'header':
+            return
+        target = position + direction
+        if not (0 <= target < len(self._right_entries)):
+            target = position + 1
+        if 0 <= target < len(self._right_entries):
+            control.selectItem(target)
 
     def onClick(self, control_id):
         if control_id != PROGRAMME_LIST_ID:
