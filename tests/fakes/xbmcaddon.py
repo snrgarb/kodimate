@@ -1,4 +1,5 @@
 _settings = {}
+open_settings_calls = []
 
 
 class _LocalizedString(str):
@@ -47,3 +48,6 @@ class Addon(object):
 
     def getLocalizedString(self, string_id):
         return _LocalizedString("String {0}".format(string_id))
+
+    def openSettings(self):
+        open_settings_calls.append(True)

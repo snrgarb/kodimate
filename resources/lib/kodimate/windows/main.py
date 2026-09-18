@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import xbmcaddon
 import xbmcgui
 
 from .base import BaseWindow
@@ -9,6 +10,7 @@ from .guide import GuideWindow
 CHANNELS_BUTTON_ID = 201
 GUIDE_BUTTON_ID = 202
 CATCHUP_BUTTON_ID = 203
+SETTINGS_BUTTON_ID = 204
 
 
 class MainWindow(BaseWindow):
@@ -25,3 +27,5 @@ class MainWindow(BaseWindow):
             GuideWindow.open(conn=self.conn)
         elif control_id == CATCHUP_BUTTON_ID:
             CatchupBrowserWindow.open(conn=self.conn)
+        elif control_id == SETTINGS_BUTTON_ID:
+            xbmcaddon.Addon().openSettings()
