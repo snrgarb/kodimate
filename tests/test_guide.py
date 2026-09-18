@@ -627,3 +627,117 @@ def test_date_label_other_day():
     now = datetime(2026, 9, 18, 10, 0)
     at_time = datetime(2026, 9, 17, 18, 0)
     assert guide.date_label(at_time, now, today_label='Today', tz=timezone.utc) == 'Thu, 17 Sep'
+
+
+# -- cell_layout progress / header_now_slot (issue #55) ----------------------
+
+def test_cell_layout_progress_none_when_now_not_given():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((12, 0), (13, 0), 'Show A')]
+    cells = guide.cell_layout(programmes, viewport_start, grid_width=1800, no_info_title='No information')
+    assert cells[0]['progress'] is None
+
+
+def test_cell_layout_progress_for_current_cell():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((12, 0), (13, 0), 'Show A')]
+    now = datetime(2026, 1, 1, 12, 15)
+    cells = guide.cell_layout(
+        programmes, viewport_start, grid_width=1800, no_info_title='No information', now=now,
+    )
+    assert cells[0]['progress'] == 0.25
+
+
+def test_cell_layout_progress_none_for_past_and_future_cells():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [
+        _p((12, 0), (12, 30), 'Past show'),
+        _p((12, 30), (13, 0), 'Now show'),
+        _p((13, 0), (13, 30), 'Future show'),
+    ]
+    now = datetime(2026, 1, 1, 12, 45)
+    cells = guide.cell_layout(
+        programmes, viewport_start, grid_width=1800, no_info_title='No information', now=now,
+    )
+    assert cells[0]['progress'] is None
+    assert cells[1]['progress'] == 0.5
+    assert cells[2]['progress'] is None
+
+
+def test_cell_layout_filler_progress_always_none():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    now = datetime(2026, 1, 1, 12, 15)
+    cells = guide.cell_layout(
+        [], viewport_start, grid_width=1800, no_info_title='No information', now=now,
+    )
+    assert cells[0]['filler'] is True
+    assert cells[0]['progress'] is None
+
+
+def test_cell_layout_progress_recomputed_when_truncated_by_later_programme():
+    # A (12:00-13:00) is truncated to 12:00-12:30 by later-starting B
+    # (12:30-12:45). now=12:40 falls in B, not in A's truncated span, so
+    # A's progress must be None (not the fraction computed against its
+    # original, untruncated end) and B's progress is 2/3.
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((12, 0), (13, 0), 'A'), _p((12, 30), (12, 45), 'B')]
+    now = datetime(2026, 1, 1, 12, 40)
+    cells = guide.cell_layout(
+        programmes, viewport_start, grid_width=1800, no_info_title='No information', now=now,
+    )
+    assert cells[0]['title'] == 'A'
+    assert cells[0]['end'] == datetime(2026, 1, 1, 12, 30)
+    assert cells[0]['progress'] is None
+    assert cells[1]['title'] == 'B'
+    assert cells[1]['progress'] == 2.0 / 3.0
+
+
+def test_cell_layout_progress_for_now_inside_truncated_span():
+    # Mirror case: now falls inside A's truncated (not original) span, so
+    # A gets progress against 12:00-12:30, and B (not yet reached) is None.
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((12, 0), (13, 0), 'A'), _p((12, 30), (12, 45), 'B')]
+    now = datetime(2026, 1, 1, 12, 15)
+    cells = guide.cell_layout(
+        programmes, viewport_start, grid_width=1800, no_info_title='No information', now=now,
+    )
+    assert cells[0]['title'] == 'A'
+    assert cells[0]['progress'] == 0.5
+    assert cells[1]['title'] == 'B'
+    assert cells[1]['progress'] is None
+
+
+def test_cell_layout_progress_clipped_at_viewport_start():
+    # Programme starts before the viewport (11:00), so its visible span is
+    # clipped to 12:00-13:00. Progress must be the fraction of that visible
+    # span (0.5 at 12:30), not of the programme's unclipped 11:00-13:00
+    # span (which would be 0.75) -- otherwise the progress bar overshoots
+    # the now-line.
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((11, 0), (13, 0), 'A')]
+    now = datetime(2026, 1, 1, 12, 30)
+    cells = guide.cell_layout(
+        programmes, viewport_start, grid_width=1800, no_info_title='No information', now=now,
+    )
+    assert cells[0]['title'] == 'A'
+    assert cells[0]['progress'] == 0.5
+
+
+def test_header_now_slot_in_first_slot():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    assert guide.header_now_slot(viewport_start, datetime(2026, 1, 1, 12, 10)) == 0
+
+
+def test_header_now_slot_in_later_slot():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    assert guide.header_now_slot(viewport_start, datetime(2026, 1, 1, 13, 45)) == 3
+
+
+def test_header_now_slot_at_viewport_end_is_none():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    assert guide.header_now_slot(viewport_start, datetime(2026, 1, 1, 15, 0)) is None
+
+
+def test_header_now_slot_before_viewport_is_none():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    assert guide.header_now_slot(viewport_start, datetime(2026, 1, 1, 11, 59)) is None

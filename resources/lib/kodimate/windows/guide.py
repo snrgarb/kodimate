@@ -11,7 +11,7 @@ import xbmc
 import xbmcaddon
 import xbmcgui
 
-from .. import catchup, channels, guide, ipc, log, osd, playback, providers
+from .. import autoplay, catchup, channels, guide, ipc, log, osd, playback, providers
 from .base import BaseWindow
 from .catchup_browser import CatchupBrowserWindow
 from .playback import PlaybackWindow
@@ -47,7 +47,17 @@ _STRIP_PROGRESS_WIDTH = 300  # matches the skin's row-3 progress track width
 _HEADER_SLOTS = 6  # 3 hours in 30-minute slots
 _SLOT_MINUTES = 30
 
+_NOW_BADGE_IMAGE_ID = 516
+_NOW_BADGE_LABEL_ID = 517
+_NOW_BADGE_WIDTH = 80
+_NOW_BADGE_Y = 250
+
 _NOW_LINE_RELPATH = 'resources/skins/Main/media/white.png'
+
+_CELL_COLOR = 'FF2A2A2A'
+_CURSOR_CELL_COLOR = 'FF3A6EA5'
+_PROGRESS_COLOR = 'FF3A6EA5'
+_PROGRESS_HEIGHT = 4
 
 _TEXT_COLOR = 'FFCCCCCC'
 _CURSOR_TEXT_COLOR = 'FFFFFFFF'
@@ -530,12 +540,16 @@ class GuideWindow(BaseWindow):
     def _populate_channel_list(self):
         control = self.getControl(CHANNEL_LIST_ID)
         control.reset()
+        playing_key = autoplay.last_channel_key_pair(self.conn)
         items = []
         for index, row in enumerate(self._channel_rows):
             item = xbmcgui.ListItem(label=row['name'])
             item.setProperty('number', str(row['number']))
             window_days = self._window_days_for_channel(index)
             item.setProperty('catchup', '1' if window_days else '0')
+            item.setProperty(
+                'playing', '1' if (row['provider_id'], row['channel_key']) == playing_key else '0'
+            )
             items.append(item)
         control.addItems(items)
         if items:
@@ -544,25 +558,34 @@ class GuideWindow(BaseWindow):
 
     def _build_pool(self):
         self._pool = []
+        self._progress_pool = []
         added = []
         for _row in range(_VISIBLE_ROWS):
             row_pool = []
+            row_progress = []
             for _col in range(_POOL_COLS):
                 image = xbmcgui.ControlImage(0, 0, 1, _ROW_HEIGHT - 2, self._tex_cell)
-                image.setColorDiffuse('FF202020')
+                image.setColorDiffuse(_CELL_COLOR)
+                progress = xbmcgui.ControlImage(0, 0, 1, _PROGRESS_HEIGHT, self._tex_cell)
+                progress.setColorDiffuse(_PROGRESS_COLOR)
                 label = xbmcgui.ControlLabel(0, 0, 1, _TITLE_HEIGHT, '')
                 desc_label = xbmcgui.ControlLabel(0, 0, 1, _ROW_HEIGHT - _TITLE_HEIGHT, '', font='font12')
                 added.append(image)
+                added.append(progress)
                 added.append(label)
                 added.append(desc_label)
                 row_pool.append((image, label, desc_label))
+                row_progress.append(progress)
             self._pool.append(row_pool)
+            self._progress_pool.append(row_progress)
         self.addControls(added)
-        for row_pool in self._pool:
+        for row_pool, row_progress in zip(self._pool, self._progress_pool):
             for image, label, desc_label in row_pool:
                 image.setVisible(False)
                 label.setVisible(False)
                 desc_label.setVisible(False)
+            for progress in row_progress:
+                progress.setVisible(False)
 
     def _create_now_line(self):
         # Created last so draw order (which follows control creation
@@ -584,12 +607,20 @@ class GuideWindow(BaseWindow):
         if visible:
             x = int(_GRID_X + minutes_from_view * px_per_min)
             self.now_line.setPosition(x, _STRIP_HEIGHT + _HEADER_HEIGHT)
+            self.getControl(_NOW_BADGE_IMAGE_ID).setPosition(x - _NOW_BADGE_WIDTH // 2, _NOW_BADGE_Y)
+            self.getControl(_NOW_BADGE_LABEL_ID).setPosition(x - _NOW_BADGE_WIDTH // 2, _NOW_BADGE_Y)
 
     def _update_header(self):
+        now = datetime.utcnow()
         for i in range(_HEADER_SLOTS):
             t = self._viewport_start + timedelta(minutes=i * _SLOT_MINUTES)
             local_t = guide.utc_to_local(t, self._tz)
             self.setProperty('guide_header%d' % i, local_t.strftime('%H:%M'))
+        slot = guide.header_now_slot(self._viewport_start, now)
+        self.setProperty('guide_header_now', str(slot) if slot is not None else '')
+        self.setProperty(
+            'guide_now_label', guide.utc_to_local(now, self._tz).strftime('%H:%M') if slot is not None else ''
+        )
 
     def _update_strip(self):
         addon = xbmcaddon.Addon()
@@ -691,11 +722,13 @@ class GuideWindow(BaseWindow):
         animation is attached (the native channel list at id 500 handles
         its own scroll)."""
         with self._lock:
-            for row_pool in self._pool:
+            for row_pool, row_progress in zip(self._pool, self._progress_pool):
                 for image, label, desc_label in row_pool:
                     image.setVisible(False)
                     label.setVisible(False)
                     desc_label.setVisible(False)
+                for progress in row_progress:
+                    progress.setVisible(False)
 
             selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
             self._top_row = guide.compute_top_row(self._top_row, selected, visible_rows=_VISIBLE_ROWS)
@@ -705,6 +738,7 @@ class GuideWindow(BaseWindow):
             self._update_header()
             self._row_cells = []
             to_show = []
+            to_show_progress = []
 
             for row in range(_VISIBLE_ROWS):
                 channel_index = self._top_row + row
@@ -712,11 +746,12 @@ class GuideWindow(BaseWindow):
                 if channel_index < len(self._channel_rows):
                     programmes = self._channel_programmes(channel_index)
                     layout_cells = guide.cell_layout(
-                        programmes, self._viewport_start, _GRID_WIDTH, self._no_info_title
+                        programmes, self._viewport_start, _GRID_WIDTH, self._no_info_title, now=now,
                     )
                     window_days = self._window_days_for_channel(channel_index)
                     y = _STRIP_HEIGHT + _HEADER_HEIGHT + row * _ROW_HEIGHT
                     row_pool = self._pool[row]
+                    row_progress = self._progress_pool[row]
                     cursor_cell = guide.resolve_cursor(layout_cells, self._cursor_time) \
                         if row == focused_row and self._zone == 'grid' else None
                     for col, cell in enumerate(layout_cells):
@@ -731,6 +766,10 @@ class GuideWindow(BaseWindow):
                         image, label, desc_label = row_pool[col]
                         self._set_cell((image, label, desc_label), cell, y, is_cursor, state)
                         to_show.append((image, label, desc_label))
+                        progress_image = row_progress[col]
+                        if cell['progress'] is not None:
+                            self._set_cell_progress(progress_image, cell, y)
+                            to_show_progress.append(progress_image)
                         cells.append(dict(cell, pool_index=col))
                 self._row_cells.append(cells)
 
@@ -738,6 +777,8 @@ class GuideWindow(BaseWindow):
                 image.setVisible(True)
                 label.setVisible(True)
                 desc_label.setVisible(True)
+            for progress_image in to_show_progress:
+                progress_image.setVisible(True)
             self._update_now_line()
             self._update_strip()
 
@@ -770,7 +811,7 @@ class GuideWindow(BaseWindow):
         image.setPosition(cell['x'] + _GRID_X, y)
         image.setWidth(max(1, cell['width'] - 2))
         image.setHeight(_ROW_HEIGHT - 2)
-        image.setColorDiffuse('FF3A6EA5' if is_cursor else 'FF202020')
+        image.setColorDiffuse(_CURSOR_CELL_COLOR if is_cursor else _CELL_COLOR)
         label_x = cell['x'] + _GRID_X + 8
         label_width = max(1, cell['width'] - 16)
         label.setPosition(label_x, y)
@@ -781,6 +822,11 @@ class GuideWindow(BaseWindow):
         desc_label.setWidth(label_width)
         desc_label.setHeight(_ROW_HEIGHT - _TITLE_HEIGHT)
         desc_label.setLabel(_colored(cell['description'], desc_color) if cell['description'] else '')
+
+    def _set_cell_progress(self, progress_image, cell, y):
+        width = max(1, int((cell['width'] - 2) * cell['progress']))
+        progress_image.setPosition(cell['x'] + _GRID_X, y + _ROW_HEIGHT - 2 - _PROGRESS_HEIGHT)
+        progress_image.setWidth(width)
 
     # -- cursor --------------------------------------------------------
 
@@ -863,14 +909,14 @@ class GuideWindow(BaseWindow):
         old_state = self._state_for_cell(old_cell, window_days, now)
         new_state = self._state_for_cell(new_cell, window_days, now)
         old_pool = self._pool[row][old_cell['pool_index']]
-        old_pool[0].setColorDiffuse('FF202020')
+        old_pool[0].setColorDiffuse(_CELL_COLOR)
         old_pool[1].setLabel(_colored(
             self._cell_title(old_cell, old_state), self._label_color_for(old_cell, old_state, False)
         ))
         old_desc_color = self._desc_color_for(old_cell, old_state, False)
         old_pool[2].setLabel(_colored(old_cell['description'], old_desc_color) if old_cell['description'] else '')
         new_pool = self._pool[row][new_cell['pool_index']]
-        new_pool[0].setColorDiffuse('FF3A6EA5')
+        new_pool[0].setColorDiffuse(_CURSOR_CELL_COLOR)
         new_pool[1].setLabel(_colored(self._cell_title(new_cell, new_state), _CURSOR_TEXT_COLOR))
         new_pool[2].setLabel(
             _colored(new_cell['description'], _DESC_CURSOR_TEXT_COLOR) if new_cell['description'] else ''
@@ -919,7 +965,7 @@ class GuideWindow(BaseWindow):
             old_window_days = self._window_days_for_channel(self._top_row + old_row)
             old_state = self._state_for_cell(old_cell, old_window_days, now)
             old_pool = self._pool[old_row][old_cell['pool_index']]
-            old_pool[0].setColorDiffuse('FF202020')
+            old_pool[0].setColorDiffuse(_CELL_COLOR)
             old_pool[1].setLabel(_colored(
                 self._cell_title(old_cell, old_state), self._label_color_for(old_cell, old_state, False)
             ))
@@ -928,7 +974,7 @@ class GuideWindow(BaseWindow):
                 _colored(old_cell['description'], old_desc_color) if old_cell['description'] else ''
             )
         new_pool = self._pool[new_row][new_cell['pool_index']]
-        new_pool[0].setColorDiffuse('FF3A6EA5')
+        new_pool[0].setColorDiffuse(_CURSOR_CELL_COLOR)
         new_pool[1].setLabel(_colored(self._cell_title(new_cell, new_state), _CURSOR_TEXT_COLOR))
         new_pool[2].setLabel(
             _colored(new_cell['description'], _DESC_CURSOR_TEXT_COLOR) if new_cell['description'] else ''

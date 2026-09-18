@@ -23,6 +23,20 @@ def remember_last_channel(conn, provider_id, channel_key):
     return db.execute_with_retry(conn, _do)
 
 
+def last_channel_key_pair(conn):
+    """(provider_id, channel_key) most recently remembered via
+    remember_last_channel, or None if nothing has been remembered."""
+    row = conn.execute(
+        "SELECT value FROM meta WHERE key = ?", (_KEY_PROVIDER_ID,)
+    ).fetchone()
+    channel_row = conn.execute(
+        "SELECT value FROM meta WHERE key = ?", (_KEY_CHANNEL_KEY,)
+    ).fetchone()
+    if row is None or channel_row is None:
+        return None
+    return int(row[0]), channel_row[0]
+
+
 def resolve_autoplay_channel(conn):
     """(provider_id, channel_key) to autoplay on startup, or None if there
     is nothing listable. The remembered last channel is used only while it

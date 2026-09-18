@@ -59,7 +59,7 @@ def viewport_end(viewport_start):
     return viewport_start + timedelta(hours=VISIBLE_HOURS)
 
 
-def cell_layout(programmes, viewport_start, grid_width, no_info_title):
+def cell_layout(programmes, viewport_start, grid_width, no_info_title, now=None):
     """Cells for one channel row's programmes, clipped to the 3-hour
     viewport starting at viewport_start and positioned proportionally to
     duration across grid_width pixels. Every gap in the viewport -- before
@@ -72,7 +72,9 @@ def cell_layout(programmes, viewport_start, grid_width, no_info_title):
     overlap, the later-starting one takes precedence (matching Kodi's own
     EPG behaviour) and the earlier real cell is truncated -- or dropped
     entirely if that would leave it empty or sub-pixel -- to this
-    programme's start."""
+    programme's start. 'progress' is the fraction of the cell's *visible*
+    (viewport- and truncation-clipped) span that has elapsed at `now`, so
+    the progress bar always ends exactly at the now-line."""
     end = viewport_end(viewport_start)
     px_per_min = grid_width / float(VISIBLE_HOURS * 60)
 
@@ -81,11 +83,17 @@ def cell_layout(programmes, viewport_start, grid_width, no_info_title):
         width = max(1, (seg_end - seg_start).total_seconds() / 60.0 * px_per_min)
         return int(round(x)), int(round(width))
 
+    def _progress(seg_start, seg_end):
+        if now is None or not (seg_start <= now < seg_end):
+            return None
+        total = (seg_end - seg_start).total_seconds()
+        return (now - seg_start).total_seconds() / total
+
     def _filler(seg_start, seg_end):
         x, width = _rect(seg_start, seg_end)
         return {
             'start': seg_start, 'end': seg_end, 'title': no_info_title,
-            'description': '', 'x': x, 'width': width, 'filler': True,
+            'description': '', 'x': x, 'width': width, 'filler': True, 'progress': None,
         }
 
     cells = []
@@ -104,6 +112,7 @@ def cell_layout(programmes, viewport_start, grid_width, no_info_title):
             else:
                 prev['end'] = seg_start
                 prev['x'], prev['width'] = _rect(prev_seg_start, seg_start)
+                prev['progress'] = _progress(prev_seg_start, seg_start)
             cursor = seg_start
         if seg_start > cursor:
             cells.append(_filler(cursor, seg_start))
@@ -116,12 +125,24 @@ def cell_layout(programmes, viewport_start, grid_width, no_info_title):
             'x': x,
             'width': width,
             'filler': False,
+            'progress': _progress(seg_start, seg_end),
         })
         cursor = seg_end
         prev_seg_start = seg_start
     if cursor < end:
         cells.append(_filler(cursor, end))
     return cells
+
+
+def header_now_slot(viewport_start, now):
+    """Header slot index (0..5, 30-minute slots) containing now within the
+    3-hour viewport starting at viewport_start, or None when now is
+    outside the viewport."""
+    end = viewport_end(viewport_start)
+    if now < viewport_start or now >= end:
+        return None
+    minutes = (now - viewport_start).total_seconds() / 60.0
+    return int(minutes // 30)
 
 
 def resolve_cursor(cells, axis_time):

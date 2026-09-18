@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from kodimate import db, guide
+from kodimate import autoplay, db, guide
 from kodimate.windows import guide as win_guide
 from kodimate.windows.guide import GuideWindow, CHANNEL_LIST_ID
 import xbmc
@@ -2372,5 +2372,128 @@ def test_strip_property_names_appear_in_skin():
     ):
         assert prop in xml_text
     assert 'System.Time' in xml_text
+
+
+# -- EPG grid polish (issue #55) ---------------------------------------------
+
+def test_progress_bar_visible_only_for_cell_spanning_now(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        now = datetime.utcnow()
+        # Anchor the viewport comfortably ahead of `now` so the "Past show"
+        # segment can't be squeezed to nothing by real-clock/30-min-boundary
+        # timing luck.
+        viewport_start = guide.round_down_30_local(now - timedelta(hours=1), window._tz)
+        window._viewport_start = viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start),
+                   guide.format_iso(now - timedelta(minutes=10)), "Past show")
+        _programme(conn, eid, "x1", guide.format_iso(now - timedelta(minutes=10)),
+                   guide.format_iso(now + timedelta(minutes=10)), "Now show")
+        _programme(conn, eid, "x1", guide.format_iso(now + timedelta(minutes=10)),
+                   guide.format_iso(viewport_start + timedelta(hours=3)), "Future show")
+        window._load_programmes()
+        window._relayout()
+
+        cells = window._row_cells[0]
+        assert [c['title'] for c in cells] == ['Past show', 'Now show', 'Future show']
+        past_cell, now_cell, future_cell = cells
+        assert window._progress_pool[0][past_cell['pool_index']].isVisible() is False
+        assert window._progress_pool[0][future_cell['pool_index']].isVisible() is False
+        progress_image = window._progress_pool[0][now_cell['pool_index']]
+        assert progress_image.isVisible() is True
+        cell_image = window._pool[0][now_cell['pool_index']][0]
+        assert 0 < progress_image.getWidth() < cell_image.getWidth()
+    finally:
+        conn.close()
+
+
+def test_progress_bar_hidden_for_no_information_filler_cell(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        cells = window._row_cells[0]
+        assert cells[0]['filler'] is True
+        progress_image = window._progress_pool[0][cells[0]['pool_index']]
+        assert progress_image.isVisible() is False
+    finally:
+        conn.close()
+
+
+def test_header_now_slot_and_label_set_when_now_in_viewport(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        now = datetime.utcnow()
+        expected_slot = guide.header_now_slot(window._viewport_start, now)
+        assert window.getProperty('guide_header_now') == str(expected_slot)
+        assert window.getProperty('guide_now_label') == guide.utc_to_local(now, window._tz).strftime('%H:%M')
+    finally:
+        conn.close()
+
+
+def test_header_now_slot_and_label_empty_when_viewport_jumped_away(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        window._skip_viewport(guide.SKIP_HOURS)
+        assert window.getProperty('guide_header_now') == ''
+        assert window.getProperty('guide_now_label') == ''
+    finally:
+        conn.close()
+
+
+def test_playing_property_set_only_on_matching_channel_row(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        _channel(conn, pid, "b", "Beta", 1)
+        autoplay.remember_last_channel(conn, pid, "b")
+        window = _window(conn)
+        control = window.getControl(CHANNEL_LIST_ID)
+        assert control.getListItem(0).getProperty('playing') == '0'
+        assert control.getListItem(1).getProperty('playing') == '1'
+    finally:
+        conn.close()
+
+
+def test_playing_property_survives_generation_refresh(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        _channel(conn, pid, "b", "Beta", 1)
+        autoplay.remember_last_channel(conn, pid, "b")
+        window = _window(conn)
+
+        _bump_generation(2)
+        _notify_refreshed(window)
+
+        control = window.getControl(CHANNEL_LIST_ID)
+        assert control.getListItem(1).getProperty('playing') == '1'
+    finally:
+        conn.close()
+
+
+def test_playing_property_all_zero_when_no_last_channel_stored(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        control = window.getControl(CHANNEL_LIST_ID)
+        assert control.getListItem(0).getProperty('playing') == '0'
+    finally:
+        conn.close()
 
 

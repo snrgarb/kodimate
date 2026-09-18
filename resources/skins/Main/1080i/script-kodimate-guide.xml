@@ -431,61 +431,161 @@
             <posx>450</posx>
             <posy>220</posy>
             <width>245</width>
-            <height>60</height>
+            <height>36</height>
             <label>$INFO[Window.Property(guide_header0)]</label>
             <align>center</align>
             <aligny>center</aligny>
             <textcolor>ffaaaaaa</textcolor>
+            <visible>!String.IsEqual(Window.Property(guide_header_now),0)</visible>
+        </control>
+        <control type="label">
+            <posx>450</posx>
+            <posy>220</posy>
+            <width>245</width>
+            <height>36</height>
+            <label>$INFO[Window.Property(guide_header0)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font13</font>
+            <textcolor>ffffffff</textcolor>
+            <visible>String.IsEqual(Window.Property(guide_header_now),0)</visible>
         </control>
         <control type="label" id="511">
             <posx>695</posx>
             <posy>220</posy>
             <width>245</width>
-            <height>60</height>
+            <height>36</height>
             <label>$INFO[Window.Property(guide_header1)]</label>
             <align>center</align>
             <aligny>center</aligny>
             <textcolor>ffaaaaaa</textcolor>
+            <visible>!String.IsEqual(Window.Property(guide_header_now),1)</visible>
+        </control>
+        <control type="label">
+            <posx>695</posx>
+            <posy>220</posy>
+            <width>245</width>
+            <height>36</height>
+            <label>$INFO[Window.Property(guide_header1)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font13</font>
+            <textcolor>ffffffff</textcolor>
+            <visible>String.IsEqual(Window.Property(guide_header_now),1)</visible>
         </control>
         <control type="label" id="512">
             <posx>940</posx>
             <posy>220</posy>
             <width>245</width>
-            <height>60</height>
+            <height>36</height>
             <label>$INFO[Window.Property(guide_header2)]</label>
             <align>center</align>
             <aligny>center</aligny>
             <textcolor>ffaaaaaa</textcolor>
+            <visible>!String.IsEqual(Window.Property(guide_header_now),2)</visible>
+        </control>
+        <control type="label">
+            <posx>940</posx>
+            <posy>220</posy>
+            <width>245</width>
+            <height>36</height>
+            <label>$INFO[Window.Property(guide_header2)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font13</font>
+            <textcolor>ffffffff</textcolor>
+            <visible>String.IsEqual(Window.Property(guide_header_now),2)</visible>
         </control>
         <control type="label" id="513">
             <posx>1185</posx>
             <posy>220</posy>
             <width>245</width>
-            <height>60</height>
+            <height>36</height>
             <label>$INFO[Window.Property(guide_header3)]</label>
             <align>center</align>
             <aligny>center</aligny>
             <textcolor>ffaaaaaa</textcolor>
+            <visible>!String.IsEqual(Window.Property(guide_header_now),3)</visible>
+        </control>
+        <control type="label">
+            <posx>1185</posx>
+            <posy>220</posy>
+            <width>245</width>
+            <height>36</height>
+            <label>$INFO[Window.Property(guide_header3)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font13</font>
+            <textcolor>ffffffff</textcolor>
+            <visible>String.IsEqual(Window.Property(guide_header_now),3)</visible>
         </control>
         <control type="label" id="514">
             <posx>1430</posx>
             <posy>220</posy>
             <width>245</width>
-            <height>60</height>
+            <height>36</height>
             <label>$INFO[Window.Property(guide_header4)]</label>
             <align>center</align>
             <aligny>center</aligny>
             <textcolor>ffaaaaaa</textcolor>
+            <visible>!String.IsEqual(Window.Property(guide_header_now),4)</visible>
+        </control>
+        <control type="label">
+            <posx>1430</posx>
+            <posy>220</posy>
+            <width>245</width>
+            <height>36</height>
+            <label>$INFO[Window.Property(guide_header4)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font13</font>
+            <textcolor>ffffffff</textcolor>
+            <visible>String.IsEqual(Window.Property(guide_header_now),4)</visible>
         </control>
         <control type="label" id="515">
             <posx>1675</posx>
             <posy>220</posy>
             <width>245</width>
-            <height>60</height>
+            <height>36</height>
             <label>$INFO[Window.Property(guide_header5)]</label>
             <align>center</align>
             <aligny>center</aligny>
             <textcolor>ffaaaaaa</textcolor>
+            <visible>!String.IsEqual(Window.Property(guide_header_now),5)</visible>
+        </control>
+        <control type="label">
+            <posx>1675</posx>
+            <posy>220</posy>
+            <width>245</width>
+            <height>36</height>
+            <label>$INFO[Window.Property(guide_header5)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font13</font>
+            <textcolor>ffffffff</textcolor>
+            <visible>String.IsEqual(Window.Property(guide_header_now),5)</visible>
+        </control>
+
+        <control type="image" id="516">
+            <posx>0</posx>
+            <posy>250</posy>
+            <width>80</width>
+            <height>28</height>
+            <texture>white.png</texture>
+            <colordiffuse>ffff3333</colordiffuse>
+            <visible>!String.IsEmpty(Window.Property(guide_now_label))</visible>
+        </control>
+        <control type="label" id="517">
+            <posx>0</posx>
+            <posy>250</posy>
+            <width>80</width>
+            <height>28</height>
+            <label>$INFO[Window.Property(guide_now_label)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font12</font>
+            <textcolor>ffffffff</textcolor>
+            <visible>!String.IsEmpty(Window.Property(guide_now_label))</visible>
         </control>
 
         <control type="list" id="500">
@@ -500,6 +600,15 @@
             <onback>9000</onback>
             <scrolltime>0</scrolltime>
             <itemlayout width="300" height="98">
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>4</width>
+                    <height>98</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ff3a6ea5</colordiffuse>
+                    <visible>String.IsEqual(ListItem.Property(playing),1)</visible>
+                </control>
                 <control type="label">
                     <posx>12</posx>
                     <posy>0</posy>
@@ -529,6 +638,15 @@
                     <height>96</height>
                     <texture>white.png</texture>
                     <colordiffuse>ff3a6ea5</colordiffuse>
+                </control>
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>4</width>
+                    <height>98</height>
+                    <texture>white.png</texture>
+                    <colordiffuse>ffffffff</colordiffuse>
+                    <visible>String.IsEqual(ListItem.Property(playing),1)</visible>
                 </control>
                 <control type="label">
                     <posx>12</posx>
