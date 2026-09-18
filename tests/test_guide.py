@@ -268,15 +268,96 @@ def test_clamp_viewport_floor_and_ceiling():
     assert guide.clamp_viewport(now, now, None) == now
 
 
-def test_filter_options_all_favourites_then_groups_in_order():
-    groups = [{'id': 5, 'provider_id': 1, 'name': 'Sport'}, {'id': 9, 'provider_id': 1, 'name': 'News'}]
-    options = guide.filter_options(groups, 'All channels', 'Favourites')
-    assert options == [
-        {'label': 'All channels', 'group_id': None, 'favourites': False, 'provider_id': None},
-        {'label': 'Favourites', 'group_id': None, 'favourites': True, 'provider_id': None},
-        {'label': 'Sport', 'group_id': 5, 'favourites': False, 'provider_id': 1},
-        {'label': 'News', 'group_id': 9, 'favourites': False, 'provider_id': 1},
+def test_panel_rows_orders_all_favourites_then_provider_sections():
+    providers = [{'id': 1, 'name': 'Provider A'}, {'id': 2, 'name': 'Provider B'}]
+    groups = [
+        {'id': 5, 'provider_id': 1, 'name': 'Sport'},
+        {'id': 9, 'provider_id': 1, 'name': 'News'},
+        {'id': 7, 'provider_id': 2, 'name': 'Movies'},
     ]
+    rows = guide.panel_rows(providers, groups, set(), 'All channels', 'Favourites')
+    assert [(r['kind'], r['label']) for r in rows] == [
+        ('all', 'All channels'),
+        ('favourites', 'Favourites'),
+        ('provider', 'Provider A'),
+        ('group', 'Sport'),
+        ('group', 'News'),
+        ('provider', 'Provider B'),
+        ('group', 'Movies'),
+    ]
+
+
+def test_panel_rows_single_provider_keeps_header():
+    providers = [{'id': 1, 'name': 'Provider A'}]
+    groups = [{'id': 5, 'provider_id': 1, 'name': 'Sport'}]
+    rows = guide.panel_rows(providers, groups, set(), 'All channels', 'Favourites')
+    assert [(r['kind'], r['label']) for r in rows] == [
+        ('all', 'All channels'),
+        ('favourites', 'Favourites'),
+        ('provider', 'Provider A'),
+        ('group', 'Sport'),
+    ]
+
+
+def test_panel_rows_provider_with_no_groups_keeps_header():
+    providers = [{'id': 1, 'name': 'Provider A'}]
+    rows = guide.panel_rows(providers, [], set(), 'All channels', 'Favourites')
+    assert [(r['kind'], r['label']) for r in rows] == [
+        ('all', 'All channels'),
+        ('favourites', 'Favourites'),
+        ('provider', 'Provider A'),
+    ]
+
+
+def test_panel_rows_collapsed_provider_hides_only_its_groups():
+    providers = [{'id': 1, 'name': 'Provider A'}, {'id': 2, 'name': 'Provider B'}]
+    groups = [
+        {'id': 5, 'provider_id': 1, 'name': 'Sport'},
+        {'id': 7, 'provider_id': 2, 'name': 'Movies'},
+    ]
+    rows = guide.panel_rows(providers, groups, {1}, 'All channels', 'Favourites')
+    assert [(r['kind'], r['label']) for r in rows] == [
+        ('all', 'All channels'),
+        ('favourites', 'Favourites'),
+        ('provider', 'Provider A'),
+        ('provider', 'Provider B'),
+        ('group', 'Movies'),
+    ]
+    header = rows[2]
+    assert header['collapsed'] is True
+
+
+def test_panel_rows_skips_disabled_provider():
+    providers = [{'id': 1, 'name': 'Provider A', 'enabled': 1}, {'id': 2, 'name': 'Provider B', 'enabled': 0}]
+    groups = [{'id': 5, 'provider_id': 2, 'name': 'Movies'}]
+    rows = guide.panel_rows(providers, groups, set(), 'All channels', 'Favourites')
+    assert [r['label'] for r in rows] == ['All channels', 'Favourites', 'Provider A']
+
+
+def test_picked_filter_maps_rows_to_filter_state():
+    assert guide.picked_filter({'kind': 'all'}) == {'provider_id': None, 'group_id': None, 'favourites': False}
+    assert guide.picked_filter({'kind': 'favourites'}) == {
+        'provider_id': None, 'group_id': None, 'favourites': True,
+    }
+    assert guide.picked_filter({'kind': 'group', 'provider_id': 1, 'group_id': 5}) == {
+        'provider_id': 1, 'group_id': 5, 'favourites': False,
+    }
+    assert guide.picked_filter({'kind': 'provider', 'provider_id': 1}) is None
+
+
+def test_panel_selected_index_finds_matching_row():
+    providers = [{'id': 1, 'name': 'Provider A'}]
+    groups = [{'id': 5, 'provider_id': 1, 'name': 'Sport'}]
+    rows = guide.panel_rows(providers, groups, set(), 'All channels', 'Favourites')
+    assert guide.panel_selected_index(rows, None, None, False) == 0
+    assert guide.panel_selected_index(rows, None, None, True) == 1
+    assert guide.panel_selected_index(rows, 1, 5, False) == 3
+
+
+def test_panel_selected_index_defaults_to_zero_when_no_match():
+    providers = [{'id': 1, 'name': 'Provider A'}]
+    rows = guide.panel_rows(providers, [], set(), 'All channels', 'Favourites')
+    assert guide.panel_selected_index(rows, 1, None, False) == 0
 
 
 def test_filter_label_for_all_favourites_and_group():
@@ -359,7 +440,7 @@ def test_zone_transition_panel_right(panel_open):
 
 
 @pytest.mark.parametrize('panel_open, expected', [
-    (False, ('rail', None)),
+    (False, ('panel', 'open')),
     (True, ('panel', None)),
 ])
 def test_zone_transition_column_left(panel_open, expected):

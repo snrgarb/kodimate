@@ -184,19 +184,61 @@ def viewport_changed(prev_top_row, new_top_row, prev_viewport_start, new_viewpor
     return prev_top_row != new_top_row or prev_viewport_start != new_viewport_start
 
 
-def filter_options(groups, all_label, favourites_label):
-    """Channel filter choices for the group picker: All channels,
-    Favourites, then one per group in the given order."""
-    options = [
-        {'label': all_label, 'group_id': None, 'favourites': False, 'provider_id': None},
-        {'label': favourites_label, 'group_id': None, 'favourites': True, 'provider_id': None},
+def panel_rows(providers, groups, collapsed, all_label, favourites_label):
+    """Rows for the Groups panel: All channels, Favourites, then one
+    section per provider (a header row, followed by that provider's
+    groups unless the header's provider_id is in `collapsed`). A
+    provider with no groups still gets a header row; disabled providers
+    (an 'enabled' key present and falsy) are skipped entirely."""
+    rows = [
+        {'kind': 'all', 'label': all_label, 'provider_id': None, 'group_id': None, 'collapsed': False},
+        {'kind': 'favourites', 'label': favourites_label, 'provider_id': None, 'group_id': None,
+         'collapsed': False},
     ]
-    options.extend(
-        {'label': group['name'], 'group_id': group['id'], 'favourites': False,
-         'provider_id': group['provider_id']}
-        for group in groups
-    )
-    return options
+    for provider in providers:
+        if not provider.get('enabled', True):
+            continue
+        provider_id = provider['id']
+        provider_collapsed = provider_id in collapsed
+        rows.append({
+            'kind': 'provider', 'label': provider['name'], 'provider_id': provider_id,
+            'group_id': None, 'collapsed': provider_collapsed,
+        })
+        if provider_collapsed:
+            continue
+        rows.extend(
+            {'kind': 'group', 'label': group['name'], 'provider_id': group['provider_id'],
+             'group_id': group['id'], 'collapsed': False}
+            for group in groups if group['provider_id'] == provider_id
+        )
+    return rows
+
+
+def picked_filter(row):
+    """Filter state {'provider_id','group_id','favourites'} for a picked
+    panel row, or None for a 'provider' header (not a filter)."""
+    if row['kind'] == 'all':
+        return {'provider_id': None, 'group_id': None, 'favourites': False}
+    if row['kind'] == 'favourites':
+        return {'provider_id': None, 'group_id': None, 'favourites': True}
+    if row['kind'] == 'group':
+        return {'provider_id': row['provider_id'], 'group_id': row['group_id'], 'favourites': False}
+    return None
+
+
+def panel_selected_index(rows, provider_id, group_id, favourites):
+    """Index of the panel row matching the current filter, else 0."""
+    for index, row in enumerate(rows):
+        if favourites:
+            if row['kind'] == 'favourites':
+                return index
+        elif group_id is not None:
+            if row['kind'] == 'group' and row['group_id'] == group_id:
+                return index
+        elif provider_id is None:
+            if row['kind'] == 'all':
+                return index
+    return 0
 
 
 def filter_label(group_id, favourites, groups, all_label, favourites_label,
@@ -238,7 +280,7 @@ _ZONE_TRANSITIONS = {
     ('panel', 'left', True): ('rail', None),
     ('panel', 'right', False): ('column', 'close'),
     ('panel', 'right', True): ('column', 'close'),
-    ('column', 'left', False): ('rail', None),
+    ('column', 'left', False): ('panel', 'open'),
     ('column', 'left', True): ('panel', None),
     ('column', 'right', False): ('grid', None),
     ('column', 'right', True): ('grid', None),
@@ -260,8 +302,7 @@ def zone_transition(zone, action, panel_open):
 def back_target(zone, panel_open):
     """Back's next state: 'column' (from 'grid', un-highlighting the
     cursor without closing), 'close_panel' (the Groups panel is open --
-    closes just the panel; wired up by a future ticket), or 'close' (close
-    the window)."""
+    closes just the panel), or 'close' (close the window)."""
     if zone not in ZONES:
         raise ValueError("invalid zone: %r" % (zone,))
     if zone == 'grid':

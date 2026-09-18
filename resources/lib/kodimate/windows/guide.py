@@ -19,11 +19,12 @@ from .programme_info import ProgrammeInfoDialog
 from .rail import RAIL_LIVETV_ID, RAIL_CATCHUP_ID, RAIL_SETTINGS_ID  # noqa: F401 (re-exported)
 
 CHANNEL_LIST_ID = 500
+PANEL_LIST_ID = 520
 
 _STR_NO_INFO = 32083
 _STR_ALL_CHANNELS = 32038
 _STR_FAVOURITES = 32039
-_STR_SELECT_GROUP = 32118
+_STR_GROUPS = 32125
 
 _RAIL_WIDTH = 120
 _LEFT_COL_WIDTH = 300
@@ -95,7 +96,11 @@ class GuideWindow(BaseWindow):
         self._provider_id = self.provider_id
         self._zone = 'column'
         self._panel_open = False
+        self._collapsed = set()
+        self._panel_rows = []
         self._rail_focus_id = RAIL_LIVETV_ID
+        self.setProperty('panel_open', '')
+        self.setProperty('panel_heading', addon.getLocalizedString(_STR_GROUPS))
 
         self._channel_rows = self._query_rows()
         self._top_row = 0
@@ -135,6 +140,8 @@ class GuideWindow(BaseWindow):
     def _apply_zone(self):
         if self._zone == 'rail':
             self.setFocusId(self._rail_focus_id)
+        elif self._zone == 'panel':
+            self.setFocusId(PANEL_LIST_ID)
         else:
             self.setFocusId(CHANNEL_LIST_ID)
 
@@ -160,6 +167,18 @@ class GuideWindow(BaseWindow):
                 return True
         return False
 
+    def _filter_still_valid(self):
+        if self._group_id is not None:
+            groups = channels.list_groups(self.conn)
+            return any(group['id'] == self._group_id for group in groups)
+        if self._provider_id is not None:
+            provider_rows = providers.list_providers(self.conn)
+            return any(
+                provider['id'] == self._provider_id and provider.get('enabled', True)
+                for provider in provider_rows
+            )
+        return True
+
     def _refresh_in_place(self):
         control = self.getControl(CHANNEL_LIST_ID)
         selected = control.getSelectedPosition()
@@ -167,27 +186,45 @@ class GuideWindow(BaseWindow):
         old_row = self._channel_rows[selected] if 0 <= selected < len(self._channel_rows) else None
         old_key = (old_row['provider_id'], old_row['channel_key']) if old_row else None
 
+        fell_back = not self._filter_still_valid()
+        if fell_back:
+            self._group_id = None
+            self._provider_id = None
+            self._favourites = False
+
         self._channel_rows = self._query_rows()
         self._populate_channel_list()
 
-        new_index = 0
-        if old_key is not None:
-            for index, row in enumerate(self._channel_rows):
-                if (row['provider_id'], row['channel_key']) == old_key:
-                    new_index = index
-                    break
-            else:
-                new_index = min(selected, len(self._channel_rows) - 1) if self._channel_rows else 0
+        if fell_back:
+            new_index = 0
+            self._top_row = 0
+        else:
+            new_index = 0
+            if old_key is not None:
+                for index, row in enumerate(self._channel_rows):
+                    if (row['provider_id'], row['channel_key']) == old_key:
+                        new_index = index
+                        break
+                else:
+                    new_index = min(selected, len(self._channel_rows) - 1) if self._channel_rows else 0
+
+            top_row = new_index - old_offset
+            max_top = max(0, len(self._channel_rows) - guide.VISIBLE_ROWS)
+            self._top_row = max(0, min(top_row, max_top))
 
         if self._channel_rows:
             control.selectItem(new_index)
-        top_row = new_index - old_offset
-        max_top = max(0, len(self._channel_rows) - guide.VISIBLE_ROWS)
-        self._top_row = max(0, min(top_row, max_top))
         self._last_selected = new_index
 
+        self._update_filter_header()
         self._load_programmes()
         self._relayout()
+        if self._panel_open:
+            if fell_back:
+                self._render_panel()
+            else:
+                selected_panel = self.getControl(PANEL_LIST_ID).getSelectedPosition()
+                self._render_panel(keep_index=selected_panel)
 
     def close(self):
         with self._lock:
@@ -201,9 +238,6 @@ class GuideWindow(BaseWindow):
         if action_id in (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU):
             self._handle_back()
             return
-        if action_id == xbmcgui.ACTION_CONTEXT_MENU:
-            self._open_group_picker()
-            return
         if action_id == xbmcgui.ACTION_MOVE_LEFT:
             self._handle_left()
             return
@@ -211,11 +245,11 @@ class GuideWindow(BaseWindow):
             self._handle_right()
             return
         if action_id in (xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN):
-            if self._zone != 'rail':
+            if self._zone not in ('rail', 'panel'):
                 self._handle_vertical_move()
             return
         if action_id in (_ACTION_PAGE_UP, _ACTION_PAGE_DOWN):
-            if self._zone != 'rail':
+            if self._zone not in ('rail', 'panel'):
                 self._handle_vertical_move()
             return
         if action_id == _ACTION_NEXT_ITEM:
@@ -232,7 +266,10 @@ class GuideWindow(BaseWindow):
         if self._zone == 'grid':
             self._move_cursor_horizontal(-1)
             return
-        next_zone, _ = guide.zone_transition(self._zone, 'left', self._panel_open)
+        next_zone, panel_change = guide.zone_transition(self._zone, 'left', self._panel_open)
+        if panel_change == 'open':
+            self._open_panel()
+            return
         if next_zone != self._zone:
             self._zone = next_zone
             self._apply_zone()
@@ -244,8 +281,10 @@ class GuideWindow(BaseWindow):
             self._relayout()
             return
         if target == 'close_panel':
-            # The Groups panel isn't wired up yet (future ticket); nothing
-            # else currently maps to this target.
+            with self._lock:
+                self._close_panel()
+                self._zone = 'column'
+            self._apply_zone()
             return
         self.close()
 
@@ -255,6 +294,17 @@ class GuideWindow(BaseWindow):
             return
         if self._zone == 'rail':
             self._rail_focus_id = self.getFocusId()
+        if self._zone == 'panel':
+            row = self._selected_panel_row()
+            filter_state = guide.picked_filter(row) if row is not None else None
+            if filter_state is not None:
+                self._apply_filter(filter_state)
+            else:
+                with self._lock:
+                    self._close_panel()
+                    self._zone = 'column'
+                self._apply_zone()
+            return
         next_zone, _ = guide.zone_transition(self._zone, 'right', self._panel_open)
         self._zone = next_zone
         self._apply_zone()
@@ -304,6 +354,21 @@ class GuideWindow(BaseWindow):
         if control_id == RAIL_SETTINGS_ID:
             self._rail_focus_id = control_id
             self._open_settings()
+            return
+        if control_id == PANEL_LIST_ID:
+            row = self._selected_panel_row()
+            if row is None:
+                return
+            if row['kind'] == 'provider':
+                selected = self.getControl(PANEL_LIST_ID).getSelectedPosition()
+                if row['provider_id'] in self._collapsed:
+                    self._collapsed.discard(row['provider_id'])
+                else:
+                    self._collapsed.add(row['provider_id'])
+                self._render_panel(keep_index=selected)
+                self.setFocusId(PANEL_LIST_ID)
+                return
+            self._apply_filter(guide.picked_filter(row))
             return
         if control_id != CHANNEL_LIST_ID:
             return
@@ -390,33 +455,67 @@ class GuideWindow(BaseWindow):
         )
         self.setProperty('guide_filter', label)
 
-    def _open_group_picker(self):
+    def _selected_panel_row(self):
+        position = self.getControl(PANEL_LIST_ID).getSelectedPosition()
+        if 0 <= position < len(self._panel_rows):
+            return self._panel_rows[position]
+        return None
+
+    def _render_panel(self, keep_index=None):
         addon = xbmcaddon.Addon()
+        provider_rows = providers.list_providers(self.conn)
         groups = channels.list_groups(self.conn)
-        options = guide.filter_options(
-            groups, addon.getLocalizedString(_STR_ALL_CHANNELS), addon.getLocalizedString(_STR_FAVOURITES)
+        self._panel_rows = guide.panel_rows(
+            provider_rows, groups, self._collapsed,
+            addon.getLocalizedString(_STR_ALL_CHANNELS), addon.getLocalizedString(_STR_FAVOURITES),
         )
-        labels = [option['label'] for option in options]
-        self._enter_modal()
-        try:
-            choice = xbmcgui.Dialog().select(addon.getLocalizedString(_STR_SELECT_GROUP), labels)
-        finally:
-            self._exit_modal()
-        self._apply_zone()
-        if choice is None or choice < 0:
-            return
+        selected_index = guide.panel_selected_index(
+            self._panel_rows, self._provider_id, self._group_id, self._favourites,
+        )
+        control = self.getControl(PANEL_LIST_ID)
+        control.reset()
+        items = []
+        for row in self._panel_rows:
+            item = xbmcgui.ListItem(label=row['label'])
+            item.setProperty('kind', row['kind'])
+            item.setProperty('collapsed', '1' if row['collapsed'] else '0')
+            item.setProperty('active', '1' if guide.picked_filter(row) == {
+                'provider_id': self._provider_id, 'group_id': self._group_id, 'favourites': self._favourites,
+            } else '0')
+            items.append(item)
+        control.addItems(items)
+        if items:
+            index = selected_index if keep_index is None else min(keep_index, len(items) - 1)
+            control.selectItem(index)
+
+    def _open_panel(self):
         with self._lock:
-            selected = options[choice]
-            self._group_id = selected['group_id']
-            self._favourites = selected['favourites']
-            self._provider_id = selected['provider_id']
+            self._render_panel()
+            self._panel_open = True
+            self.setProperty('panel_open', '1')
+            self._zone = 'panel'
+        self._apply_zone()
+
+    def _close_panel(self):
+        with self._lock:
+            self._panel_open = False
+            self.setProperty('panel_open', '')
+
+    def _apply_filter(self, filter_state):
+        with self._lock:
+            self._group_id = filter_state['group_id']
+            self._favourites = filter_state['favourites']
+            self._provider_id = filter_state['provider_id']
             self._channel_rows = self._query_rows()
             self._populate_channel_list()
             self._top_row = 0
             self._last_selected = 0
             self._update_filter_header()
             self._load_programmes()
+            self._close_panel()
+            self._zone = 'column'
             self._relayout()
+        self._apply_zone()
 
     def _populate_channel_list(self):
         control = self.getControl(CHANNEL_LIST_ID)
