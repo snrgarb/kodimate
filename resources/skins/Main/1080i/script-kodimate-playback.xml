@@ -27,7 +27,7 @@
                 <posx>0</posx>
                 <posy>0</posy>
                 <width>1920</width>
-                <height>200</height>
+                <height>300</height>
                 <texture>white.png</texture>
                 <colordiffuse>cc0a0a10</colordiffuse>
             </control>
@@ -176,6 +176,50 @@
                         <label>$ADDON[script.kodimate 32094]</label>
                     </control>
                 </control>
+                <control type="group">
+                    <width>130</width>
+                    <height>32</height>
+                    <visible>!String.IsEqual(Window.Property(catchup),1) + !String.IsEqual(Window.Property(behind_live),1)</visible>
+                    <control type="image">
+                        <posy>4</posy>
+                        <width>130</width>
+                        <height>32</height>
+                        <texture>white.png</texture>
+                        <colordiffuse>ffd32f2f</colordiffuse>
+                    </control>
+                    <control type="label">
+                        <posy>4</posy>
+                        <width>130</width>
+                        <height>32</height>
+                        <font>font12</font>
+                        <align>center</align>
+                        <aligny>center</aligny>
+                        <textcolor>ffffffff</textcolor>
+                        <label>$ADDON[script.kodimate 32117]</label>
+                    </control>
+                </control>
+                <control type="group">
+                    <width>130</width>
+                    <height>32</height>
+                    <visible>!String.IsEqual(Window.Property(catchup),1) + String.IsEqual(Window.Property(behind_live),1)</visible>
+                    <control type="image">
+                        <posy>4</posy>
+                        <width>130</width>
+                        <height>32</height>
+                        <texture>white.png</texture>
+                        <colordiffuse>ff3a6ea5</colordiffuse>
+                    </control>
+                    <control type="label">
+                        <posy>4</posy>
+                        <width>130</width>
+                        <height>32</height>
+                        <font>font12</font>
+                        <align>center</align>
+                        <aligny>center</aligny>
+                        <textcolor>ffffffff</textcolor>
+                        <label>$INFO[Window.Property(behind_text)]</label>
+                    </control>
+                </control>
                 <control type="label">
                     <width>760</width>
                     <height>40</height>
@@ -184,6 +228,19 @@
                     <aligny>center</aligny>
                     <label>$INFO[Window.Property(now_title)]</label>
                 </control>
+            </control>
+            <control type="button" id="710">
+                <posx>940</posx>
+                <posy>30</posy>
+                <width>900</width>
+                <height>40</height>
+                <onup>710</onup>
+                <ondown>710</ondown>
+                <onleft>710</onleft>
+                <onright>710</onright>
+                <texturefocus colordiffuse="4dffffff">white.png</texturefocus>
+                <texturenofocus colordiffuse="00ffffff">white.png</texturenofocus>
+                <label></label>
             </control>
             <control type="image" id="703">
                 <posx>940</posx>
@@ -209,6 +266,28 @@
                 <texture>white.png</texture>
                 <colordiffuse>ffffffff</colordiffuse>
             </control>
+            <control type="image">
+                <posx>934</posx>
+                <posy>74</posy>
+                <width>612</width>
+                <height>16</height>
+                <texture>white.png</texture>
+                <colordiffuse>334a90d9</colordiffuse>
+                <visible>Control.HasFocus(711)</visible>
+            </control>
+            <control type="button" id="711">
+                <posx>940</posx>
+                <posy>70</posy>
+                <width>600</width>
+                <height>26</height>
+                <onup>711</onup>
+                <ondown>711</ondown>
+                <onleft>711</onleft>
+                <onright>711</onright>
+                <texturefocus colordiffuse="00ffffff">white.png</texturefocus>
+                <texturenofocus colordiffuse="00ffffff">white.png</texturenofocus>
+                <label></label>
+            </control>
             <control type="label">
                 <posx>940</posx>
                 <posy>96</posy>
@@ -217,6 +296,17 @@
                 <font>font12</font>
                 <textcolor>ffaaaaaa</textcolor>
                 <label>$INFO[Window.Property(now_times)]</label>
+            </control>
+            <control type="label">
+                <posx>1550</posx>
+                <posy>96</posy>
+                <width>200</width>
+                <height>30</height>
+                <font>font12</font>
+                <align>right</align>
+                <textcolor>ffffffff</textcolor>
+                <label>$INFO[Window.Property(seek_step)]</label>
+                <visible>!String.IsEmpty(Window.Property(seek_step))</visible>
             </control>
             <control type="label">
                 <posx>940</posx>
@@ -246,6 +336,100 @@
                 <font>font12</font>
                 <textcolor>ffcccccc</textcolor>
                 <label>$INFO[Window.Property(status_text)]</label>
+            </control>
+            <control type="grouplist">
+                <posx>940</posx>
+                <posy>216</posy>
+                <width>500</width>
+                <height>60</height>
+                <orientation>horizontal</orientation>
+                <itemgap>12</itemgap>
+                <control type="button" id="712">
+                    <width>60</width>
+                    <height>60</height>
+                    <onup>712</onup>
+                    <ondown>712</ondown>
+                    <onleft>712</onleft>
+                    <texturefocus colordiffuse="4dffffff">white.png</texturefocus>
+                    <texturenofocus colordiffuse="00ffffff">white.png</texturenofocus>
+                    <label></label>
+                    <control type="image">
+                        <posx>6</posx>
+                        <posy>6</posy>
+                        <width>48</width>
+                        <height>48</height>
+                        <texture>rewind.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="713">
+                    <width>60</width>
+                    <height>60</height>
+                    <onup>713</onup>
+                    <ondown>713</ondown>
+                    <texturefocus colordiffuse="4dffffff">white.png</texturefocus>
+                    <texturenofocus colordiffuse="00ffffff">white.png</texturenofocus>
+                    <label></label>
+                    <control type="image">
+                        <posx>6</posx>
+                        <posy>6</posy>
+                        <width>48</width>
+                        <height>48</height>
+                        <texture>play.png</texture>
+                        <visible>String.IsEqual(Window.Property(paused),1)</visible>
+                    </control>
+                    <control type="image">
+                        <posx>6</posx>
+                        <posy>6</posy>
+                        <width>48</width>
+                        <height>48</height>
+                        <texture>pause.png</texture>
+                        <visible>!String.IsEqual(Window.Property(paused),1)</visible>
+                    </control>
+                </control>
+                <control type="button" id="714">
+                    <width>60</width>
+                    <height>60</height>
+                    <onup>714</onup>
+                    <ondown>714</ondown>
+                    <texturefocus colordiffuse="4dffffff">white.png</texturefocus>
+                    <texturenofocus colordiffuse="00ffffff">white.png</texturenofocus>
+                    <label></label>
+                    <control type="image">
+                        <posx>6</posx>
+                        <posy>6</posy>
+                        <width>48</width>
+                        <height>48</height>
+                        <texture>fastforward.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="715">
+                    <width>220</width>
+                    <height>60</height>
+                    <onup>715</onup>
+                    <ondown>715</ondown>
+                    <onright>715</onright>
+                    <visible>String.IsEqual(Window.Property(behind_live),1)</visible>
+                    <texturefocus colordiffuse="4dffffff">white.png</texturefocus>
+                    <texturenofocus colordiffuse="00ffffff">white.png</texturenofocus>
+                    <label></label>
+                    <control type="image">
+                        <posx>6</posx>
+                        <posy>6</posy>
+                        <width>48</width>
+                        <height>48</height>
+                        <texture>backtolive.png</texture>
+                    </control>
+                    <control type="label">
+                        <posx>60</posx>
+                        <posy>0</posy>
+                        <width>160</width>
+                        <height>60</height>
+                        <font>font12</font>
+                        <aligny>center</aligny>
+                        <textcolor>ffffffff</textcolor>
+                        <label>$ADDON[script.kodimate 32118]</label>
+                    </control>
+                </control>
             </control>
         </control>
 

@@ -120,6 +120,13 @@ def format_position(position_seconds, duration_seconds):
     return u'%s / %s' % (_format_hms(position_seconds), _format_hms(duration_seconds))
 
 
+def format_behind(seconds):
+    """'-MM:SS' for how far behind live a position is (never negative)."""
+    seconds = max(0, int(seconds))
+    minutes, secs = divmod(seconds, 60)
+    return u'-%02d:%02d' % (minutes, secs)
+
+
 def back_layer(list_open, bar_visible):
     """Which layer a Back press should act on."""
     if list_open:

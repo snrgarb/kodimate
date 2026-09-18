@@ -10,4 +10,4 @@ Live streams are MPEG-TS or HLS from Xtream or M3U Providers, and Catch-up is a 
 
 ## Consequences
 
-Live pause/timeshift buffering and stream failover are out of scope. Catch-up seeking is native player seek only; a position beyond the buffer needs a fresh URL (deferred). Stream failure detection relies on `onPlayBackError`/`onAVStarted` callbacks and timeouts (Playback Session state machine). Reconnect Attempts re-issue the same URL.
+A local timeshift proxy and stream failover are out of scope. Seeking and pause/resume stay native inside the player's own buffer; a target beyond the buffer is served by rebuilding a fresh Catch-up URL at that position rather than a local proxy. Stream failure detection relies on `onPlayBackError`/`onAVStarted` callbacks and timeouts (Playback Session state machine). Reconnect Attempts re-issue the same URL.

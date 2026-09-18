@@ -16,7 +16,7 @@ import xbmc
 import xbmcaddon
 import xbmcgui
 
-from .. import autoplay, catchup, channels, guide, ipc, log, osd, playback, urls
+from .. import autoplay, catchup, channels, guide, ipc, log, osd, playback, seek, urls
 from .. import player as player_module
 from .. import providers
 from . import programme_info
@@ -52,9 +52,17 @@ PROGRESS_KNOB_ID = 705
 PROGRESS_X = 940
 PROGRESS_KNOB_Y = 78
 PROGRESS_KNOB_SIZE = 8
+PROGRAMME_ROW_ID = 710
+SEEK_ROW_ID = 711
+BTN_REWIND_ID = 712
+BTN_PLAYPAUSE_ID = 713
+BTN_FASTFORWARD_ID = 714
+BTN_LIVE_ID = 715
+_BUTTON_ROW_IDS = (BTN_REWIND_ID, BTN_PLAYPAUSE_ID, BTN_FASTFORWARD_ID, BTN_LIVE_ID)
 
 _DEFAULT_OSD_HIDE_SECONDS = 3
 _DEFAULT_NUMBER_COMMIT_DELAY = 1.5
+_BEHIND_LIVE_TOLERANCE_SECONDS = 1
 
 # Wide enough to step (Left/Right) back through a Catch-up window.
 _PROGRAMME_WINDOW_BEFORE = timedelta(days=7)
@@ -85,6 +93,8 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
     osd_hide_seconds = None
     osd_position = None
     number_commit_delay = None
+    seek_steps = None
+    seek_delay_ms = None
     now_fn = None
     session = None
     catchup = None
@@ -118,6 +128,11 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self._upnext_session_stopped = False
         self._awaiting_upnext_stop_target = _NO_UPNEXT_TARGET
         self._lock = threading.RLock()
+        self._paused = False
+        self._paused_at = None
+        self._behind_at_pause = 0
+        self._seek_timer = None
+        self._seek_stepper = None
         if self.osd_position is None:
             self.osd_position = self._addon_setting_string('osd_position', 'top')
         if self.osd_position != 'bottom':
@@ -136,6 +151,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self.setProperty('upnext', '0')
         self.setProperty('upnext_title', '')
         self.setProperty('upnext_seconds', '')
+        self.setProperty('paused', '0')
+        self.setProperty('seek_step', '')
+        self.setProperty('behind_live', '0')
+        self.setProperty('behind_text', '')
         if self.snapshot is not None:
             self.setProperty('channel_name', self.snapshot['name'])
             self.setProperty('channel_number', str(self.snapshot['number']))
@@ -173,6 +192,13 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             )
         if self.now_fn is None:
             self.now_fn = datetime.utcnow
+        if self.seek_steps is None or self.seek_delay_ms is None:
+            steps, delay_ms = seek.read_seek_settings(xbmc.executeJSONRPC)
+            if self.seek_steps is None:
+                self.seek_steps = steps
+            if self.seek_delay_ms is None:
+                self.seek_delay_ms = delay_ms
+        self._seek_stepper = seek.SeekStepper(self.seek_steps)
 
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._progress_loop)
@@ -266,6 +292,8 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             )
         self._load_channel_info()
         self._show_bar(arm_hide=False)
+        if not self._list_open:
+            self.setFocusId(SEEK_ROW_ID)
         self.session = playback.PlaybackSession(
             self.snapshot, self.player, self.probe, self.scheduler, self.clock,
             self.persist_learned_form, self._on_state,
@@ -337,6 +365,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         consistent, visible 'stopped' state -- never a dangling session with
         stale 'Connecting...' properties. Used by every abort path: zap,
         digit entry, Back with the list open, and Back leaving playback."""
+        self._reset_transient_playback_state()
         if self.session is not None and self.getProperty('state') in _ALIVE_STATES:
             self.session.abort()
             self.player.detach(self.session)
@@ -344,6 +373,15 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self.setProperty('state', 'stopped')
             self.setProperty('status_text', '')
             self._show_bar(arm_hide=False)
+
+    def _reset_transient_playback_state(self):
+        self._paused = False
+        self._paused_at = None
+        self.setProperty('paused', '0')
+        self._cancel_seek_timer()
+        if self._seek_stepper is not None:
+            self._seek_stepper.reset()
+        self.setProperty('seek_step', '')
 
     def _on_state(self, state, reason):
         # Called from player callback threads: only setProperty/timer calls
@@ -389,8 +427,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self._load_programmes()
         if self.catchup:
             self._apply_catchup_bar()
+            self._update_behind_live()
             return
         self._apply_now_next(self.now_fn())
+        self._update_behind_live()
 
     def _apply_catchup_bar(self):
         self.setProperty('now_title', self.catchup.get('title') or '')
@@ -533,7 +573,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         supported = True if snapshot['kind'] != 'm3u' else urls.m3u_catchup_supported(snapshot)
         return catchup.effective_window_days(snapshot.get('catchup_days'), None, url_supported=supported)
 
-    def _catchup_dict_for(self, programme, now):
+    def _catchup_dict_for(self, programme, now, offset=0):
         return {
             'start': _epoch(programme['start']),
             'end': _epoch(programme['end']),
@@ -542,7 +582,14 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             'title': programme.get('title') or '',
             'start_dt': programme['start'],
             'end_dt': programme['end'],
+            'offset': offset,
         }
+
+    def _programme_containing(self, epoch_seconds):
+        for programme in self._programmes:
+            if _epoch(programme['start']) <= epoch_seconds < _epoch(programme['end']):
+                return programme
+        return None
 
     def _start_catchup_for(self, programme):
         with self._lock:
@@ -634,6 +681,220 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         except Exception:
             return 0
 
+    def _player_total_seconds(self):
+        if not self._playing:
+            return 0
+        try:
+            return self.player.getTotalTime()
+        except Exception:
+            return 0
+
+    # -- seek stepping / behind-live / pause (issue: OSD transport controls) --
+
+    def _behind_live_seconds(self):
+        if self.catchup:
+            offset_seconds = self.session.catchup_offset_seconds if self.session is not None else 0
+            position = self.catchup['start'] + offset_seconds + self._player_time_seconds()
+            return max(0, _epoch(self.now_fn()) - position)
+        total = self._player_total_seconds()
+        if total <= 0:
+            return 0
+        return max(0, total - self._player_time_seconds())
+
+    def _update_behind_live(self):
+        if self.catchup is not None:
+            self.setProperty('behind_live', '1')
+            self.setProperty('behind_text', '')
+            return
+        behind = self._behind_live_seconds()
+        if behind > _BEHIND_LIVE_TOLERANCE_SECONDS:
+            self.setProperty('behind_live', '1')
+            self.setProperty('behind_text', osd.format_behind(behind))
+        else:
+            self.setProperty('behind_live', '0')
+            self.setProperty('behind_text', '')
+
+    def _cancel_seek_timer(self):
+        if self._seek_timer is not None:
+            self._seek_timer.cancel()
+            self._seek_timer = None
+
+    def _seek_press(self, direction):
+        with self._lock:
+            if self._list_open:
+                return
+            step = self._seek_stepper.press(direction)
+            self._arm_seek(step)
+
+    def _seek_big(self, direction):
+        with self._lock:
+            if self._list_open:
+                return
+            step = self._seek_stepper.press_largest(direction)
+            self._arm_seek(step)
+
+    def _arm_seek(self, step):
+        self._show_bar(arm_hide=not self._paused)
+        self._cancel_seek_timer()
+        if step == 0:
+            self.setProperty('seek_step', '')
+            return
+        self.setProperty('seek_step', seek.format_step(step))
+        self._seek_timer = self.scheduler(self.seek_delay_ms / 1000.0, self._commit_seek)
+
+    def _commit_seek(self):
+        with self._lock:
+            self._cancel_seek_timer()
+            step = self._seek_stepper.pending
+            self._seek_stepper.reset()
+            self.setProperty('seek_step', '')
+            if step == 0:
+                return
+            self._apply_seek(step)
+
+    def _apply_seek(self, step):
+        behind = self._behind_live_seconds()
+        now = _epoch(self.now_fn())
+        target = min(now, now - behind + step)
+        if target >= now - _BEHIND_LIVE_TOLERANCE_SECONDS:
+            self._go_live_if_needed()
+            return
+        time_seconds = self._player_time_seconds()
+        total_seconds = self._player_total_seconds()
+        if total_seconds > 0 and 0 <= time_seconds + step <= total_seconds:
+            try:
+                self.player.seekTime(time_seconds + step)
+            except Exception:
+                pass
+            self._update_behind_live()
+            return
+        self._rebuild_for_target(target)
+
+    def _go_live_if_needed(self):
+        if self.catchup is not None or self._behind_live_seconds() > _BEHIND_LIVE_TOLERANCE_SECONDS:
+            self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
+
+    def _rebuild_at_target(self, target_epoch, unavailable):
+        """Find the programme covering `target_epoch` and either go live
+        (it's airing now), start a Catch-up session there (`target_epoch -
+        programme start` as the initial offset), or call `unavailable()`
+        when no playable programme covers it. Shared by a seek/big-step
+        commit that lands outside the player's buffer and a resume past the
+        buffer after a pause."""
+        self._load_programmes()
+        programme = self._programme_containing(target_epoch)
+        window_days = self._catchup_window_days()
+        now = self.now_fn()
+        state = catchup.cell_state(
+            programme['start'], programme['end'], window_days, now
+        ) if programme is not None else None
+        if programme is None or state not in ('live', 'past_playable'):
+            unavailable()
+            return
+        if state == 'live':
+            self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
+            return
+        offset = target_epoch - _epoch(programme['start'])
+        self._abort_current_session()
+        self.catchup = self._catchup_dict_for(programme, now, offset=offset)
+        self._start_new_session()
+
+    def _rebuild_for_target(self, target_epoch):
+        def unavailable():
+            addon = xbmcaddon.Addon()
+            self.notify('Kodimate', addon.getLocalizedString(_STR_CATCHUP_UNAVAILABLE)
+                        % self.snapshot['provider_name'])
+        self._rebuild_at_target(target_epoch, unavailable)
+
+    def _toggle_pause(self):
+        with self._lock:
+            if not self._playing or self._list_open:
+                return
+            if not self._paused:
+                # A pending seek would otherwise commit later against a
+                # since-paused player; cancel it so pausing always leaves a
+                # clean, non-pending seek state (self._paused itself is
+                # untouched by a *later* seek commit -- seekTime() on a
+                # paused player stays paused, and a rebuild goes through
+                # _abort_current_session, which clears pause state anyway).
+                self._cancel_seek_timer()
+                self._seek_stepper.reset()
+                self.setProperty('seek_step', '')
+                self._paused = True
+                self._paused_at = self.now_fn()
+                self._behind_at_pause = self._behind_live_seconds()
+                try:
+                    self.player.pause()
+                except Exception:
+                    pass
+                self.setProperty('paused', '1')
+                self._show_bar(arm_hide=False)
+                return
+            behind_now = self._behind_at_pause + (
+                _epoch(self.now_fn()) - _epoch(self._paused_at)
+            )
+            total_seconds = self._player_total_seconds()
+            self._paused = False
+            self._paused_at = None
+            self.setProperty('paused', '0')
+            if self.catchup is not None or (total_seconds > 0 and behind_now <= total_seconds):
+                try:
+                    self.player.pause()
+                except Exception:
+                    pass
+                self._update_behind_live()
+                self._show_bar(arm_hide=True)
+                return
+            self._resume_beyond_buffer(behind_now)
+
+    def _resume_beyond_buffer(self, behind_now):
+        target_epoch = _epoch(self.now_fn()) - behind_now
+
+        def unavailable():
+            self._go_live_if_needed()
+            self._show_bar(arm_hide=True)
+        self._rebuild_at_target(target_epoch, unavailable)
+
+    # -- OSD focus row navigation --------------------------------------
+
+    def _on_horizontal(self, direction):
+        focus = self.getFocusId()
+        if focus == PROGRAMME_ROW_ID:
+            self._on_step(direction)
+        elif focus in _BUTTON_ROW_IDS:
+            self._move_button_focus(direction)
+        else:
+            self._seek_press(direction)
+
+    def _visible_button_row_ids(self):
+        if self.getProperty('behind_live') == '1':
+            return _BUTTON_ROW_IDS
+        return tuple(i for i in _BUTTON_ROW_IDS if i != BTN_LIVE_ID)
+
+    def _move_button_focus(self, direction):
+        ids = self._visible_button_row_ids()
+        focus = self.getFocusId()
+        if focus not in ids:
+            ids = _BUTTON_ROW_IDS
+        index = ids.index(focus)
+        new_index = min(max(index + direction, 0), len(ids) - 1)
+        self.setFocusId(ids[new_index])
+
+    def _on_vertical(self, direction):
+        focus = self.getFocusId()
+        if focus == PROGRAMME_ROW_ID and direction > 0:
+            self.setFocusId(SEEK_ROW_ID)
+            return
+        if focus == SEEK_ROW_ID:
+            self.setFocusId(PROGRAMME_ROW_ID if direction < 0 else BTN_PLAYPAUSE_ID)
+            return
+        if focus in _BUTTON_ROW_IDS and direction < 0:
+            self.setFocusId(SEEK_ROW_ID)
+            return
+        if self._upnext:
+            self._cancel_upnext()
+        self._open_list()
+
     def _load_programmes(self):
         self._programmes = []
         channel_id = self.snapshot.get('id') if self.snapshot else None
@@ -678,9 +939,12 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         # the other is a lock-order deadlock. setProperty and the timer
         # cancel/arm here are cheap; callers that need atomicity already
         # hold self._lock themselves (an RLock), so nothing is lost.
+        was_hidden = self.getProperty('bar_visible') != '1'
         self.setProperty('bar_visible', '1')
+        if was_hidden and not self._list_open:
+            self.setFocusId(SEEK_ROW_ID)
         self._cancel_hide_timer()
-        if arm_hide:
+        if arm_hide and not self._paused:
             self._hide_timer = self.scheduler(self.osd_hide_seconds, self._hide_bar)
 
     def _hide_bar(self):
@@ -713,6 +977,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 return
             if self.catchup:
                 self._apply_catchup_bar()
+                self._update_behind_live()
                 if not self._upnext and self._catchup_reached_end():
                     self._playing = False
                     self._begin_upnext(session_already_stopped=False)
@@ -724,6 +989,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             if self._stopped():
                 return
             self._apply_now_next(now)
+            self._update_behind_live()
         except Exception as exc:
             log.debug('Playback OSD tick failed: {0}'.format(exc))
 
@@ -845,6 +1111,14 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 channel_key = item.getProperty('channel_key')
                 self._close_list()
                 self._zap(provider_id, channel_key)
+            elif control_id == BTN_REWIND_ID:
+                self._seek_press(-1)
+            elif control_id == BTN_PLAYPAUSE_ID:
+                self._toggle_pause()
+            elif control_id == BTN_FASTFORWARD_ID:
+                self._seek_press(1)
+            elif control_id == BTN_LIVE_ID:
+                self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
 
     # -- number entry --------------------------------------------------
 
@@ -894,6 +1168,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
 
     # -- input -----------------------------------------------------------
 
+    _PAUSE_ACTION_IDS = (
+        xbmcgui.ACTION_PAUSE, xbmcgui.ACTION_PLAYER_PLAY, xbmcgui.ACTION_PLAYER_PLAYPAUSE,
+    )
+
     def onAction(self, action):
         with self._lock:
             action_id = action.getId()
@@ -911,6 +1189,23 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 self._on_ok()
                 return
 
+            # Remote/keyboard player transport, honoured regardless of focus.
+            if action_id in self._PAUSE_ACTION_IDS:
+                self._toggle_pause()
+                return
+            if action_id in (xbmcgui.ACTION_STEP_BACK, xbmcgui.ACTION_PLAYER_REWIND):
+                self._seek_press(-1)
+                return
+            if action_id in (xbmcgui.ACTION_STEP_FORWARD, xbmcgui.ACTION_PLAYER_FORWARD):
+                self._seek_press(1)
+                return
+            if action_id == xbmcgui.ACTION_BIG_STEP_BACK:
+                self._seek_big(-1)
+                return
+            if action_id == xbmcgui.ACTION_BIG_STEP_FORWARD:
+                self._seek_big(1)
+                return
+
             if self._list_open:
                 if self.getFocusId() == GROUPS_LIST_ID:
                     position = self.getControl(GROUPS_LIST_ID).getSelectedPosition()
@@ -919,14 +1214,21 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                         self._render_channels_list()
                 return
 
+            if self.getProperty('bar_visible') != '1':
+                if action_id in (
+                    xbmcgui.ACTION_MOVE_LEFT, xbmcgui.ACTION_MOVE_RIGHT,
+                    xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN,
+                ):
+                    self._show_bar(arm_hide=(self.getProperty('state') == 'playing'))
+                return
+
             if action_id in (xbmcgui.ACTION_MOVE_LEFT, xbmcgui.ACTION_MOVE_RIGHT):
-                self._on_step(-1 if action_id == xbmcgui.ACTION_MOVE_LEFT else 1)
+                self._on_horizontal(-1 if action_id == xbmcgui.ACTION_MOVE_LEFT else 1)
                 return
 
             if action_id in (xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN):
-                if self._upnext:
-                    self._cancel_upnext()
-                self._open_list()
+                self._on_vertical(-1 if action_id == xbmcgui.ACTION_MOVE_UP else 1)
+                return
 
     def _on_ok(self):
         if self._upnext:
@@ -1006,6 +1308,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self._cancel_hide_timer()
         self._cancel_digit_timer()
         self._cancel_step_timer()
+        self._cancel_seek_timer()
         self._cancel_upnext_timer()
         self._cancel_upnext_fallback_timer()
         super(PlaybackWindow, self).close()

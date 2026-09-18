@@ -77,6 +77,9 @@ _Avoid_: Archive, timeshift (except when referring to Provider-side terminology)
 **Catch-up Window**:
 The number of days back a Channel supports Catch-up. Set per-Channel; if absent, falls back to the Provider's default. An Xtream Provider's `tv_archive=0` means no Catch-up regardless of any duration value. A Channel value always beats the Provider default. There is no user-configurable cap.
 
+**Behind live**:
+A live Playback Session's position lagging real time, whether inside the player's own buffer (native seek/pause) or via Catch-up. A seek or pause-resume that lands beyond the buffer rebuilds a Catch-up URL at the target position.
+
 **Start Over**:
 Playing the currently airing Programme from its beginning via Catch-up. A special case of Catch-up, not a separate feature.
 _Avoid_: restart, replay

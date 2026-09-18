@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
 from kodimate import autoplay, channels, db, playback
 from kodimate.windows.playback import (
     PlaybackWindow, GROUPS_LIST_ID, CHANNELS_LIST_ID, PROGRESS_FILL_ID,
+    PROGRAMME_ROW_ID, SEEK_ROW_ID, BTN_REWIND_ID, BTN_PLAYPAUSE_ID,
+    BTN_FASTFORWARD_ID, BTN_LIVE_ID,
 )
 import xbmc
 import xbmcgui
@@ -35,6 +37,9 @@ class FakePlayer(object):
         self.detached = None
         self.time = 0
         self.time_raises = False
+        self.total_time = 0
+        self.seek_calls = []
+        self.pause_calls = 0
 
     def play(self, url, headers, mime_type=None):
         self.plays.append((url, headers))
@@ -46,6 +51,16 @@ class FakePlayer(object):
         if self.time_raises:
             raise RuntimeError('no time')
         return self.time
+
+    def getTotalTime(self):
+        return self.total_time
+
+    def seekTime(self, seconds):
+        self.seek_calls.append(seconds)
+        self.time = seconds
+
+    def pause(self):
+        self.pause_calls += 1
 
     def attach(self, session):
         self.attached = session
@@ -181,6 +196,8 @@ def _window(conn, snapshot, probe_results=None, **overrides):
         player=FakePlayer(), probe=probe, scheduler=FakeScheduler(),
         clock=FakeClock(), persist_learned_form=lambda *a: None,
         osd_hide_seconds=3, number_commit_delay=1.5,
+        seek_steps=[-600, -300, -180, -60, -30, -10, 10, 30, 60, 180, 300, 600],
+        seek_delay_ms=750,
     )
     kwargs.update(overrides)
     window = PlaybackWindow(
@@ -382,6 +399,7 @@ def test_up_down_opens_overlay_without_touching_stream(tmp_path):
     window.onInit()
     plays_before = len(window.player.plays)
     stops_before = window.player.stop_calls
+    window.setFocusId(BTN_PLAYPAUSE_ID)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
 
@@ -397,6 +415,7 @@ def test_ok_on_channel_row_zaps_and_closes_list(tmp_path):
     _channel(conn, provider_id, 'b', name='Bravo', position=1)
     window = _window(conn, snapshot)
     window.onInit()
+    window.setFocusId(PROGRAMME_ROW_ID)
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
     channels_control = window.getControl(201)
     target_position = next(
@@ -417,6 +436,7 @@ def test_click_on_channels_list_ignored_when_list_closed(tmp_path):
     _channel(conn, provider_id, 'b', name='Bravo', position=1)
     window = _window(conn, snapshot)
     window.onInit()
+    window.setFocusId(PROGRAMME_ROW_ID)
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
     channels_control = window.getControl(201)
     target_position = next(
@@ -444,6 +464,7 @@ def test_click_on_channels_list_ignored_when_list_closed_during_catchup(tmp_path
                'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None}
     window = _window(conn, snapshot, catchup=catchup)
     window.onInit()
+    window.setFocusId(PROGRAMME_ROW_ID)
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
     channels_control = window.getControl(201)
     target_position = next(
@@ -467,6 +488,7 @@ def test_overlay_channel_row_gets_now_title_property(tmp_path):
     now = datetime(2026, 1, 1, 11, 30)
     window = _window(conn, snapshot, now_fn=FakeNow(now))
     window.onInit()
+    window.setFocusId(PROGRAMME_ROW_ID)
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
     channels_control = window.getControl(201)
     alpha = next(
@@ -481,6 +503,7 @@ def test_overlay_channel_row_now_title_empty_when_no_current_programme(tmp_path)
     _channel(conn, provider_id, 'b', name='Bravo', position=1)
     window = _window(conn, snapshot, now_fn=FakeNow(datetime(2026, 1, 1, 11, 30)))
     window.onInit()
+    window.setFocusId(PROGRAMME_ROW_ID)
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
     channels_control = window.getControl(201)
     bravo = next(
@@ -590,6 +613,7 @@ def test_back_closes_list_before_bar(tmp_path):
     window = _window(conn, snapshot)
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(BTN_PLAYPAUSE_ID)
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
     assert window.getProperty('list_visible') == '1'
 
@@ -670,6 +694,7 @@ def test_back_during_connecting_and_list_open_aborts_before_closing(tmp_path):
     _, snapshot = _setup_channel(conn)
     window = _window(conn, snapshot)
     window.onInit()
+    window.setFocusId(BTN_PLAYPAUSE_ID)
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
     assert window.getProperty('list_visible') == '1'
     stops_before = window.player.stop_calls
@@ -1217,6 +1242,7 @@ def test_left_right_do_not_open_list(tmp_path):
     window = _window(conn, snapshot, now_fn=FakeNow(now))
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
@@ -1232,6 +1258,7 @@ def test_up_down_still_open_list_in_playback(tmp_path):
     window = _window(conn, snapshot, now_fn=FakeNow(now))
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
 
@@ -1245,6 +1272,7 @@ def test_step_left_updates_osd_immediately_without_stream_change(tmp_path):
     window = _window(conn, snapshot, now_fn=FakeNow(now))
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
     plays_before = len(window.player.plays)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
@@ -1260,6 +1288,7 @@ def test_step_commits_after_debounce_with_exactly_one_play(tmp_path):
     window = _window(conn, snapshot, now_fn=FakeNow(now))
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
     plays_before = len(window.player.plays)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
@@ -1277,6 +1306,7 @@ def test_rapid_left_presses_commit_only_once(tmp_path):
     window = _window(conn, snapshot, now_fn=FakeNow(now))
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
     plays_before = len(window.player.plays)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
@@ -1301,6 +1331,7 @@ def test_step_clamps_at_earliest_loaded_programme(tmp_path):
     window = _window(conn, snapshot, now_fn=FakeNow(now))
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
 
@@ -1315,6 +1346,7 @@ def test_back_cancels_pending_step_and_restores_osd(tmp_path):
     window = _window(conn, snapshot, now_fn=FakeNow(now))
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
     plays_before = len(window.player.plays)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
@@ -1341,6 +1373,7 @@ def test_step_to_now_while_in_catchup_goes_live(tmp_path):
     window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
     assert window.getProperty('catchup') == '1'
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
@@ -1421,6 +1454,7 @@ def test_ok_on_bar_visible_cancels_pending_step(tmp_path):
     window = _window(conn, snapshot, now_fn=FakeNow(now), dialog_cls=_Dialog)
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_SELECT_ITEM))
@@ -1582,6 +1616,7 @@ def test_up_down_during_upnext_cancels_countdown_and_opens_list(tmp_path):
     window.session.on_av_started()
     window.player.time = 3600
     window._tick()
+    window.setFocusId(PROGRAMME_ROW_ID)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
 
@@ -1622,3 +1657,467 @@ def test_back_on_bare_video_bar_hidden_in_catchup_closes_and_stops(tmp_path):
 
     assert window._stop_event.is_set()
     assert window.player.stop_calls >= 1
+
+
+# -- OSD transport controls: seek stepping, pause/resume, behind-live -------
+
+def test_bar_shown_defaults_focus_to_seek_row(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+
+    assert window.getFocusId() == SEEK_ROW_ID
+
+
+def test_programme_row_up_opens_list(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.setFocusId(PROGRAMME_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+
+    assert window.getProperty('list_visible') == '1'
+
+
+def test_programme_row_down_moves_focus_to_seek_row(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.setFocusId(PROGRAMME_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
+
+    assert window.getFocusId() == SEEK_ROW_ID
+    assert window.getProperty('list_visible') == '0'
+
+
+def test_seek_row_up_moves_focus_to_programme_row(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.setFocusId(SEEK_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+
+    assert window.getFocusId() == PROGRAMME_ROW_ID
+    assert window.getProperty('list_visible') == '0'
+
+
+def test_seek_row_down_moves_focus_to_playpause_button(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.setFocusId(SEEK_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
+
+    assert window.getFocusId() == BTN_PLAYPAUSE_ID
+    assert window.getProperty('list_visible') == '0'
+
+
+def test_seek_left_in_buffer_calls_seektime_natively(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+    window.setFocusId(SEEK_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    assert window.getProperty('seek_step') == '-10s'
+
+    window.scheduler.advance(0.75)
+
+    assert window.player.seek_calls == [40]
+    assert window.getProperty('seek_step') == ''
+    assert window.catchup is None
+
+
+def test_seek_outside_buffer_rebuilds_catchup_session(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)  # Show3 12:00-13:00 airing
+    window = _window(
+        conn, snapshot, now_fn=FakeNow(now),
+        seek_steps=[-3600, -1800, -600, 600, 1800, 3600],
+    )
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+    window.setFocusId(SEEK_ROW_ID)
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_BIG_STEP_BACK))
+    window.scheduler.advance(0.75)
+
+    assert window.catchup is not None
+    assert window.catchup['title'] == 'Show2'
+    assert window.catchup['offset'] > 0
+    assert len(window.player.plays) == plays_before + 1
+
+
+def test_pause_cancels_pending_seek(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+    window.setFocusId(SEEK_ROW_ID)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    assert window.getProperty('seek_step') == '-10s'
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+
+    assert window.getProperty('seek_step') == ''
+    assert window._seek_timer is None
+    window.scheduler.advance(0.75)
+    assert window.player.seek_calls == []
+
+
+def test_seek_committed_while_paused_in_buffer_stays_paused(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    assert window.getProperty('paused') == '1'
+    window.setFocusId(SEEK_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(0.75)
+
+    assert window.player.seek_calls == [40]
+    assert window.getProperty('paused') == '1'
+
+
+def test_seek_committed_while_paused_beyond_buffer_clears_paused(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)  # Show3 12:00-13:00 airing
+    window = _window(
+        conn, snapshot, now_fn=FakeNow(now),
+        seek_steps=[-3600, -1800, -600, 600, 1800, 3600],
+    )
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    assert window.getProperty('paused') == '1'
+    window.setFocusId(SEEK_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_BIG_STEP_BACK))
+    window.scheduler.advance(0.75)
+
+    assert window.catchup is not None
+    assert window.catchup['title'] == 'Show2'
+    assert window.getProperty('paused') == '0'
+
+
+def test_seek_forward_past_live_edge_goes_live(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    start_dt = datetime(2026, 1, 1, 11, 0)
+    end_dt = datetime(2026, 1, 1, 12, 0)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
+        'title': 'Show2', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+    }
+    window = _window(
+        conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict,
+        seek_steps=[-6000, 6000],
+    )
+    window.onInit()
+    window.session.on_av_started()
+    window.setFocusId(SEEK_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_BIG_STEP_FORWARD))
+    window.scheduler.advance(0.75)
+
+    assert window.catchup is None
+    assert window.getProperty('catchup') == '0'
+
+
+def test_pause_toggles_player_and_property(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+
+    assert window.getProperty('paused') == '1'
+    assert window.player.pause_calls == 1
+    assert window.getProperty('bar_visible') == '1'
+
+
+def test_resume_within_buffer_is_native_toggle(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    now = FakeNow(datetime(2026, 1, 1, 12, 30))
+    window = _window(conn, snapshot, now_fn=now)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    now.value = now.value + timedelta(seconds=5)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
+
+    assert window.getProperty('paused') == '0'
+    assert window.player.pause_calls == 2
+    assert window.catchup is None
+    assert len(window.player.plays) == plays_before
+
+
+def test_resume_beyond_buffer_starts_catchup_session(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = FakeNow(datetime(2026, 1, 1, 12, 30))  # Show3 12:00-13:00 airing
+    window = _window(conn, snapshot, now_fn=now)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 10
+    window.player.time = 5
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    assert window.getProperty('paused') == '1'
+
+    now.value = now.value + timedelta(hours=1)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
+
+    assert window.getProperty('paused') == '0'
+    assert window.catchup is not None
+    assert window.catchup['title'] == 'Show3'
+    assert len(window.player.plays) == plays_before + 1
+
+
+def test_catchup_session_pause_resume_is_always_native_toggle(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    start_dt = datetime(2026, 1, 1, 11, 0)
+    end_dt = datetime(2026, 1, 1, 12, 0)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
+        'title': 'Show2', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+    }
+    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
+    window.onInit()
+    window.session.on_av_started()
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
+
+    assert window.getProperty('paused') == '0'
+    assert window.player.pause_calls == 2
+    assert len(window.player.plays) == plays_before
+
+
+def test_back_to_live_button_click_zaps_live(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    start_dt = datetime(2026, 1, 1, 11, 0)
+    end_dt = datetime(2026, 1, 1, 12, 0)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
+        'title': 'Show2', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+    }
+    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
+    window.onInit()
+    window.session.on_av_started()
+
+    window.onClick(BTN_LIVE_ID)
+
+    assert window.catchup is None
+    assert window.getProperty('catchup') == '0'
+
+
+def test_behind_live_property_for_catchup_session(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    start_dt = datetime(2026, 1, 1, 11, 0)
+    end_dt = datetime(2026, 1, 1, 12, 0)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
+        'title': 'Show2', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+    }
+    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
+    window.onInit()
+    window.session.on_av_started()
+
+    # Catch-up is always "behind live": the Back to live button (715) stays
+    # reachable (bare behind_live=1), but the red LIVE pill and the blue
+    # "-MM:SS" behind pill are both gated on !catchup in the skin, so only
+    # the CATCH-UP pill (catchup=1) should be showing, never those two.
+    assert window.getProperty('behind_live') == '1'
+    assert window.getProperty('catchup') == '1'
+    assert window.getProperty('behind_text') == ''
+
+
+def test_behind_live_property_when_live_but_behind_buffer(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 40
+
+    window._update_behind_live()
+
+    assert window.getProperty('behind_live') == '1'
+    assert window.getProperty('behind_text') == '-01:00'
+
+
+def test_behind_live_property_zero_when_at_live_edge(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 100
+
+    window._update_behind_live()
+
+    assert window.getProperty('behind_live') == '0'
+    assert window.getProperty('behind_text') == ''
+
+
+def test_button_row_left_right_moves_focus(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.setFocusId(BTN_PLAYPAUSE_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    assert window.getFocusId() == BTN_REWIND_ID
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+    assert window.getFocusId() == BTN_FASTFORWARD_ID
+
+
+def test_button_row_left_right_skips_hidden_back_to_live_button(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    assert window.getProperty('behind_live') == '0'
+    window.setFocusId(BTN_FASTFORWARD_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+
+    assert window.getFocusId() == BTN_FASTFORWARD_ID
+
+
+def test_button_row_left_right_reaches_back_to_live_button_when_behind(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.setProperty('behind_live', '1')
+    window.setFocusId(BTN_FASTFORWARD_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+
+    assert window.getFocusId() == BTN_LIVE_ID
+
+
+def test_button_row_up_moves_focus_to_seek_row(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.setFocusId(BTN_PLAYPAUSE_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_UP))
+
+    assert window.getFocusId() == SEEK_ROW_ID
+
+
+def test_button_row_down_opens_list(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.setFocusId(BTN_PLAYPAUSE_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
+
+    assert window.getProperty('list_visible') == '1'
+
+
+def test_remote_action_with_bar_hidden_only_shows_bar(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window._hide_bar()
+    assert window.getProperty('bar_visible') == '0'
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+
+    assert window.getProperty('bar_visible') == '1'
+    assert window.getProperty('seek_step') == ''
+    assert window.player.seek_calls == []
+
+
+def test_pause_action_works_regardless_of_bar_visibility(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window._hide_bar()
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+
+    assert window.getProperty('paused') == '1'
+
+
+def test_rewind_forward_remote_actions_seek(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_REWIND))
+    assert window.getProperty('seek_step') == '-10s'
+    window.scheduler.advance(0.75)
+    assert window.player.seek_calls == [40]
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_FORWARD))
+    window.scheduler.advance(0.75)
+    assert window.player.seek_calls == [40, 50]

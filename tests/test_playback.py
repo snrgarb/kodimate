@@ -204,6 +204,20 @@ def _catchup_session(snapshot, catchup, probe_results=None, persist_catchup=None
     return session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup
 
 
+def test_catchup_offset_initialises_offset_seconds_and_shifts_start():
+    catchup = {'start': 1000, 'end': 4600, 'now': 5000, 'offset': 300}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup)
+
+    assert session.catchup_offset_seconds == 300
+
+    session.start()
+
+    url = player.plays[0][0]
+    # duration = min(end, now) - (start + offset) = 4600 - 1300 = 3300s = 55 minutes
+    assert '/55/' in url
+
+
 def test_catchup_xtream_attempt1_uses_path_form_and_minutes_from_window():
     catchup = {'start': 1000, 'end': 4600, 'now': 5000}  # 1h programme, all past
     session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \

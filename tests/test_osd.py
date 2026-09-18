@@ -144,6 +144,12 @@ def test_format_position():
     assert osd.format_position(-5, 60) == u'0:00:00 / 0:01:00'
 
 
+def test_format_behind():
+    assert osd.format_behind(0) == u'-00:00'
+    assert osd.format_behind(65) == u'-01:05'
+    assert osd.format_behind(-5) == u'-00:00'
+
+
 def test_back_layer_priority():
     assert osd.back_layer(list_open=True, bar_visible=True) == 'close_list'
     assert osd.back_layer(list_open=False, bar_visible=True) == 'hide_bar'

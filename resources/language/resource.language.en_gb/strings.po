@@ -483,3 +483,11 @@ msgstr ""
 msgctxt "#32116"
 msgid "Settings"
 msgstr ""
+
+msgctxt "#32117"
+msgid "LIVE"
+msgstr ""
+
+msgctxt "#32118"
+msgid "Back to live"
+msgstr ""

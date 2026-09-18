@@ -146,7 +146,7 @@ class PlaybackSession(object):
         self.logger = logger if logger is not None else log_module
         self.catchup = catchup
         self.persist_catchup_form = persist_catchup_form
-        self._catchup_offset_seconds = 0
+        self._catchup_offset_seconds = int(catchup.get('offset', 0)) if catchup is not None else 0
         self._catchup_clock_origin = self.clock() if catchup is not None else None
         self._explicit_catchup_form = (
             catchup is not None and snapshot.get('catchup_url_form') in ('path', 'query')
