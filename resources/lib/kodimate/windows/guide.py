@@ -11,7 +11,7 @@ import xbmc
 import xbmcaddon
 import xbmcgui
 
-from .. import catchup, channels, guide, ipc, log, osd, playback
+from .. import catchup, channels, guide, ipc, log, osd, playback, providers
 from .base import BaseWindow
 from .playback import PlaybackWindow
 from .programme_info import ProgrammeInfoDialog
@@ -67,6 +67,7 @@ class GuideWindow(BaseWindow):
     group_id = None
     favourites = False
     focus_channel_id = None
+    provider_id = None
 
     def onInit(self):
         if getattr(self, '_initialised', False):
@@ -86,6 +87,7 @@ class GuideWindow(BaseWindow):
 
         self._group_id = self.group_id
         self._favourites = self.favourites
+        self._provider_id = self.provider_id
 
         self._channel_rows = self._query_rows()
         self._top_row = 0
@@ -275,14 +277,19 @@ class GuideWindow(BaseWindow):
     # -- setup -----------------------------------------------------------
 
     def _query_rows(self):
-        return channels.list_channels(self.conn, group_id=self._group_id, favourites=self._favourites)
+        return channels.list_channels(
+            self.conn, group_id=self._group_id, favourites=self._favourites,
+            provider_id=self._provider_id,
+        )
 
     def _update_filter_header(self):
         addon = xbmcaddon.Addon()
         groups = channels.list_groups(self.conn)
+        provider_rows = providers.list_providers(self.conn)
         label = guide.filter_label(
             self._group_id, self._favourites, groups,
             addon.getLocalizedString(_STR_ALL_CHANNELS), addon.getLocalizedString(_STR_FAVOURITES),
+            provider_id=self._provider_id, providers=provider_rows,
         )
         self.setProperty('guide_filter', label)
 
@@ -304,6 +311,7 @@ class GuideWindow(BaseWindow):
             selected = options[choice]
             self._group_id = selected['group_id']
             self._favourites = selected['favourites']
+            self._provider_id = selected['provider_id']
             self._channel_rows = self._query_rows()
             self._populate_channel_list()
             self._top_row = 0

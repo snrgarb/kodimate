@@ -293,6 +293,34 @@ def test_group_id_filter(tmp_path):
         conn.close()
 
 
+def test_provider_id_filter(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pa = _provider(conn, name="PA")
+        pb = _provider(conn, name="PB")
+        _channel(conn, pa, "a", name="A")
+        _channel(conn, pb, "b", name="B")
+        rows = channels.list_channels(conn, provider_id=pa)
+        assert [r['name'] for r in rows] == ["A"]
+    finally:
+        conn.close()
+
+
+def test_provider_id_and_group_id_filter_combined(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pa = _provider(conn, name="PA")
+        pb = _provider(conn, name="PB")
+        ga = _group(conn, pa, name="GA")
+        _channel(conn, pa, "a1", name="A1", group_id=ga)
+        _channel(conn, pa, "a2", name="A2")
+        _channel(conn, pb, "b", name="B")
+        rows = channels.list_channels(conn, provider_id=pa, group_id=ga)
+        assert [r['name'] for r in rows] == ["A1"]
+    finally:
+        conn.close()
+
+
 def test_set_number_upserts_and_reflects_in_list_channels(tmp_path):
     conn = _conn(tmp_path)
     try:

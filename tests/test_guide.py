@@ -272,10 +272,10 @@ def test_filter_options_all_favourites_then_groups_in_order():
     groups = [{'id': 5, 'provider_id': 1, 'name': 'Sport'}, {'id': 9, 'provider_id': 1, 'name': 'News'}]
     options = guide.filter_options(groups, 'All channels', 'Favourites')
     assert options == [
-        {'label': 'All channels', 'group_id': None, 'favourites': False},
-        {'label': 'Favourites', 'group_id': None, 'favourites': True},
-        {'label': 'Sport', 'group_id': 5, 'favourites': False},
-        {'label': 'News', 'group_id': 9, 'favourites': False},
+        {'label': 'All channels', 'group_id': None, 'favourites': False, 'provider_id': None},
+        {'label': 'Favourites', 'group_id': None, 'favourites': True, 'provider_id': None},
+        {'label': 'Sport', 'group_id': 5, 'favourites': False, 'provider_id': 1},
+        {'label': 'News', 'group_id': 9, 'favourites': False, 'provider_id': 1},
     ]
 
 
@@ -289,6 +289,30 @@ def test_filter_label_for_all_favourites_and_group():
 def test_filter_label_unknown_group_id_falls_back_to_all():
     groups = [{'id': 5, 'provider_id': 1, 'name': 'Sport'}]
     assert guide.filter_label(999, False, groups, 'All channels', 'Favourites') == 'All channels'
+
+
+def test_filter_label_for_provider_id():
+    groups = [{'id': 5, 'provider_id': 1, 'name': 'Sport'}]
+    providers = [{'id': 1, 'name': 'Provider A'}]
+    assert guide.filter_label(
+        None, False, groups, 'All channels', 'Favourites', provider_id=1, providers=providers
+    ) == 'Provider A'
+
+
+def test_filter_label_unknown_provider_id_falls_back_to_all():
+    groups = [{'id': 5, 'provider_id': 1, 'name': 'Sport'}]
+    providers = [{'id': 1, 'name': 'Provider A'}]
+    assert guide.filter_label(
+        None, False, groups, 'All channels', 'Favourites', provider_id=999, providers=providers
+    ) == 'All channels'
+
+
+def test_filter_label_group_id_wins_over_provider_id():
+    groups = [{'id': 5, 'provider_id': 1, 'name': 'Sport'}]
+    providers = [{'id': 1, 'name': 'Provider A'}]
+    assert guide.filter_label(
+        5, False, groups, 'All channels', 'Favourites', provider_id=1, providers=providers
+    ) == 'Sport'
 
 
 def test_initial_cursor_index_finds_matching_row():

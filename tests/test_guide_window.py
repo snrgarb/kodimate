@@ -1159,6 +1159,74 @@ def test_group_filter_restricts_rows_and_sets_header(tmp_path):
         conn.close()
 
 
+def test_provider_filter_restricts_rows_and_sets_header(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pa = _provider(conn, name="Provider A")
+        pb = _provider(conn, name="Provider B")
+        _channel(conn, pa, "a", "Alpha", 0)
+        _channel(conn, pb, "b", "Beta", 1)
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, provider_id=pa)
+        window.onInit()
+        assert [row['name'] for row in window._channel_rows] == ['Alpha']
+        assert window.getProperty('guide_filter') == 'Provider A'
+    finally:
+        conn.close()
+
+
+def test_provider_filter_unknown_provider_id_falls_back_to_all_label(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, provider_id=999)
+        window.onInit()
+        assert window.getProperty('guide_filter') == 'String 32038'
+        assert window._channel_rows == []
+    finally:
+        conn.close()
+
+
+def test_provider_and_group_filter_combined_restricts_to_group(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pa = _provider(conn, name="Provider A")
+        pb = _provider(conn, name="Provider B")
+        gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
+            (pa,),
+        ).lastrowid
+        cid = _channel(conn, pa, "a", "Alpha", 0)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid))
+        _channel(conn, pa, "c", "Charlie", 1)
+        _channel(conn, pb, "b", "Beta", 0)
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, provider_id=pa, group_id=gid)
+        window.onInit()
+        assert [row['name'] for row in window._channel_rows] == ['Alpha']
+    finally:
+        conn.close()
+
+
+def test_generation_change_keeps_provider_filter(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pa = _provider(conn, name="Provider A")
+        pb = _provider(conn, name="Provider B")
+        _channel(conn, pa, "a", "Alpha", 0)
+        _channel(conn, pb, "b", "Beta", 1)
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, provider_id=pa)
+        window.onInit()
+        _bump_generation(1)
+        _notify_refreshed(window)
+        assert [row['name'] for row in window._channel_rows] == ['Alpha']
+    finally:
+        conn.close()
+
+
 def test_favourites_filter_restricts_rows_and_sets_header(tmp_path):
     conn = _conn(tmp_path)
     try:

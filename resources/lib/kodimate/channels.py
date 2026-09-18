@@ -29,7 +29,7 @@ def list_groups(conn):
     return [{'id': row[0], 'provider_id': row[1], 'name': row[2]} for row in rows]
 
 
-def list_channels(conn, group_id=None, favourites=False, show_hidden=False):
+def list_channels(conn, group_id=None, favourites=False, show_hidden=False, provider_id=None):
     """Listable channels, each including 'epg_channel_id' (used by the
     Guide window to look up programmes via list_programmes())."""
     where = []
@@ -39,6 +39,9 @@ def list_channels(conn, group_id=None, favourites=False, show_hidden=False):
     if group_id is not None:
         where.append("c.group_id = ?")
         params.append(group_id)
+    if provider_id is not None:
+        where.append("c.provider_id = ?")
+        params.append(provider_id)
     if favourites:
         where.append("o.favourite = 1")
 

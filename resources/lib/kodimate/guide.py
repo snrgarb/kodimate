@@ -188,26 +188,33 @@ def filter_options(groups, all_label, favourites_label):
     """Channel filter choices for the group picker: All channels,
     Favourites, then one per group in the given order."""
     options = [
-        {'label': all_label, 'group_id': None, 'favourites': False},
-        {'label': favourites_label, 'group_id': None, 'favourites': True},
+        {'label': all_label, 'group_id': None, 'favourites': False, 'provider_id': None},
+        {'label': favourites_label, 'group_id': None, 'favourites': True, 'provider_id': None},
     ]
     options.extend(
-        {'label': group['name'], 'group_id': group['id'], 'favourites': False}
+        {'label': group['name'], 'group_id': group['id'], 'favourites': False,
+         'provider_id': group['provider_id']}
         for group in groups
     )
     return options
 
 
-def filter_label(group_id, favourites, groups, all_label, favourites_label):
-    """Header text for the active filter; an unknown group_id falls back
-    to all_label."""
+def filter_label(group_id, favourites, groups, all_label, favourites_label,
+                  provider_id=None, providers=()):
+    """Header text for the active filter; an unknown group_id or
+    provider_id falls back to all_label."""
     if favourites:
         return favourites_label
-    if group_id is None:
+    if group_id is not None:
+        for group in groups:
+            if group['id'] == group_id:
+                return group['name']
         return all_label
-    for group in groups:
-        if group['id'] == group_id:
-            return group['name']
+    if provider_id is not None:
+        for provider in providers:
+            if provider['id'] == provider_id:
+                return provider['name']
+        return all_label
     return all_label
 
 
