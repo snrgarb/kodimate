@@ -16,7 +16,6 @@ from .base import BaseWindow
 from .catchup_browser import CatchupBrowserWindow
 from .playback import PlaybackWindow
 from .programme_info import ProgrammeInfoDialog
-from .providers import ProvidersWindow
 
 CHANNEL_LIST_ID = 500
 RAIL_LIVETV_ID = 601
@@ -72,7 +71,6 @@ class GuideWindow(BaseWindow):
     dialog_cls = ProgrammeInfoDialog
     playback_cls = PlaybackWindow
     catchup_cls = CatchupBrowserWindow
-    providers_cls = ProvidersWindow
     group_id = None
     favourites = False
     focus_channel_id = None
@@ -283,19 +281,21 @@ class GuideWindow(BaseWindow):
         finally:
             self._exit_modal()
 
-    def _open_providers(self):
+    def _open_settings(self):
         self._enter_modal()
         try:
-            self.providers_cls.open(conn=self.conn)
+            xbmcaddon.Addon().openSettings()
         finally:
-            self._exit_modal()
+            refreshed = self._exit_modal()
+        if not refreshed:
+            self._relayout()
 
     def onClick(self, control_id):
         if control_id == RAIL_CATCHUP_ID:
             self._open_catchup()
             return
         if control_id == RAIL_SETTINGS_ID:
-            self._open_providers()
+            self._open_settings()
             return
         if control_id != CHANNEL_LIST_ID:
             return

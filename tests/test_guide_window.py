@@ -8,6 +8,7 @@ from kodimate import db, guide
 from kodimate.windows import guide as win_guide
 from kodimate.windows.guide import GuideWindow, CHANNEL_LIST_ID
 import xbmc
+import xbmcaddon
 import xbmcgui
 
 _SKIN_XML = os.path.join(
@@ -1603,26 +1604,43 @@ def test_ok_on_catchup_rail_opens_stubbed_catchup_browser_and_defers_generation_
         conn.close()
 
 
-def test_ok_on_settings_rail_opens_stubbed_providers_window(tmp_path):
+def test_ok_on_settings_rail_opens_addon_settings(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
         _channel(conn, pid, "a", "Alpha", 0)
         window = _window(conn)
-
-        calls = []
-
-        class _FakeProviders(object):
-            @classmethod
-            def open(cls, **kwargs):
-                calls.append(kwargs)
-                return cls()
-
-        window.providers_cls = _FakeProviders
+        xbmcaddon.open_settings_calls[:] = []
 
         window.onClick(win_guide.RAIL_SETTINGS_ID)
 
-        assert calls and calls[0]['conn'] is conn
+        assert xbmcaddon.open_settings_calls == [True]
+    finally:
+        conn.close()
+
+
+def test_ok_on_settings_rail_defers_generation_change_until_after(tmp_path, monkeypatch):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        xbmcaddon.open_settings_calls[:] = []
+
+        def _bumping_open_settings(self):
+            xbmcaddon.open_settings_calls.append(True)
+            conn.execute("UPDATE channel SET name = 'Alpha2' WHERE channel_key = 'a'")
+            _bump_generation(2)
+            _notify_refreshed(window)
+
+        monkeypatch.setattr(xbmcaddon.Addon, 'openSettings', _bumping_open_settings)
+        list_control = window.getControl(CHANNEL_LIST_ID)
+        assert list_control.getListItem(0).getLabel() == 'Alpha'
+
+        window.onClick(win_guide.RAIL_SETTINGS_ID)
+
+        assert xbmcaddon.open_settings_calls == [True]
+        assert list_control.getListItem(0).getLabel() == 'Alpha2'
     finally:
         conn.close()
 

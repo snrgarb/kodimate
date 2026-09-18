@@ -8,6 +8,7 @@ polygon rasteriser.
 
 Usage: scripts/dev/icons.py
 """
+import math
 import os
 import struct
 import zlib
@@ -58,15 +59,18 @@ def point_in_polygon(x, y, poly):
     return inside
 
 
-def render(polygons):
+def render(polygons, holes=None):
     """Rasterise a list of polygons (each a list of (x, y) in 0..BIG coords)
-    at supersample resolution, then box-downsample to SIZE x SIZE RGBA."""
+    at supersample resolution, then box-downsample to SIZE x SIZE RGBA.
+    Points inside any polygon in `holes` are cut out of the fill."""
     mask = bytearray(BIG * BIG)
     for y in range(BIG):
         py = y + 0.5
         for x in range(BIG):
             px = x + 0.5
-            if any(point_in_polygon(px, py, poly) for poly in polygons):
+            if any(point_in_polygon(px, py, poly) for poly in polygons) and not (
+                holes and any(point_in_polygon(px, py, h) for h in holes)
+            ):
                 mask[y * BIG + x] = 1
 
     pixels = []
@@ -99,6 +103,22 @@ def triangle_left(x0, x1, y0=PAD, y1=BIG - PAD):
 
 def bar(x0, x1, y0=PAD, y1=BIG - PAD):
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+
+
+def circle(cx, cy, r, sides=32):
+    return [
+        (cx + r * math.cos(2 * math.pi * i / sides),
+         cy + r * math.sin(2 * math.pi * i / sides))
+        for i in range(sides)
+    ]
+
+
+def rotated_rect(cx, cy, x0, x1, y0, y1, angle):
+    ca, sa = math.cos(angle), math.sin(angle)
+    return [
+        (cx + x * ca - y * sa, cy + x * sa + y * ca)
+        for (x, y) in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+    ]
 
 
 def icon_play():
@@ -149,12 +169,53 @@ def icon_backtolive():
     ])
 
 
+def icon_livetv():
+    active = BIG - 2 * PAD
+    left = PAD
+    right = BIG - PAD
+    screen_h = active * 0.68
+    top = PAD
+    bottom = top + screen_h
+    border = active * 0.12
+    outer = bar(left, right, top, bottom)
+    inner = bar(left + border, right - border, top + border, bottom - border)
+
+    neck_w = active * 0.16
+    cx = (left + right) / 2
+    neck_y1 = bottom + active * 0.12
+    neck = bar(cx - neck_w / 2, cx + neck_w / 2, bottom, neck_y1)
+
+    base_w = active * 0.4
+    base = bar(cx - base_w / 2, cx + base_w / 2, neck_y1, neck_y1 + active * 0.08)
+
+    return render([outer, neck, base], holes=[inner])
+
+
+def icon_settings():
+    cx = cy = BIG / 2
+    active = BIG - 2 * PAD
+    r_out = active * 0.30
+    r_in = active * 0.16
+    tooth_len = active * 0.12
+    tooth_w = active * 0.14
+    teeth = [
+        rotated_rect(cx, cy, r_out - active * 0.02,
+                     r_out - active * 0.02 + tooth_len,
+                     -tooth_w / 2, tooth_w / 2,
+                     i * (2 * math.pi / 8))
+        for i in range(8)
+    ]
+    return render([circle(cx, cy, r_out)] + teeth, holes=[circle(cx, cy, r_in)])
+
+
 ICONS = {
     "play.png": icon_play,
     "pause.png": icon_pause,
     "rewind.png": icon_rewind,
     "fastforward.png": icon_fastforward,
     "backtolive.png": icon_backtolive,
+    "livetv.png": icon_livetv,
+    "settings.png": icon_settings,
 }
 
 
