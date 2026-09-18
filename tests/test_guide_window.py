@@ -128,7 +128,7 @@ def test_cell_proportional_to_duration(tmp_path):
         window._relayout()
         cells = window._row_cells[0]
         assert cells[0]['title'] == 'Show A'
-        assert cells[0]['width'] == _third_of_grid(1500)
+        assert cells[0]['width'] == _third_of_grid(1620)
         # The remaining two-thirds of the viewport is a filler cell.
         assert cells[1]['filler'] is True
     finally:
@@ -1350,6 +1350,7 @@ def test_opens_with_column_zone_focused_on_channel_list(tmp_path):
         assert window.getFocusId() not in (
             win_guide.RAIL_LIVETV_ID, win_guide.RAIL_CATCHUP_ID, win_guide.RAIL_SETTINGS_ID,
         )
+        assert window.getProperty('rail_open') == ''
     finally:
         conn.close()
 
@@ -1403,6 +1404,7 @@ def test_left_from_panel_reaches_rail_panel_stays_open(tmp_path):
         assert window._zone == 'rail'
         assert window.getFocusId() == win_guide.RAIL_LIVETV_ID
         assert window.getProperty('panel_open') == '1'
+        assert window.getProperty('rail_open') == '1'
     finally:
         conn.close()
 
@@ -1421,6 +1423,7 @@ def test_right_from_rail_returns_to_panel_when_open(tmp_path):
         assert window._zone == 'panel'
         assert window.getFocusId() == win_guide.PANEL_LIST_ID
         assert window.getProperty('panel_open') == '1'
+        assert window.getProperty('rail_open') == ''
     finally:
         conn.close()
 
