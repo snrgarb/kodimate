@@ -52,6 +52,9 @@ PROGRESS_KNOB_ID = 705
 PROGRESS_X = 940
 PROGRESS_KNOB_Y = 78
 PROGRESS_KNOB_SIZE = 8
+PROGRESS_KNOB_FOCUSED_ID = 706
+PROGRESS_KNOB_FOCUSED_Y = 74
+PROGRESS_KNOB_FOCUSED_SIZE = 16
 PROGRAMME_ROW_ID = 710
 SEEK_ROW_ID = 711
 BTN_REWIND_ID = 712
@@ -750,6 +753,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self.getControl(PROGRESS_KNOB_ID).setPosition(
                 PROGRESS_X + int(PROGRESS_WIDTH * fraction) - PROGRESS_KNOB_SIZE // 2,
                 PROGRESS_KNOB_Y,
+            )
+            self.getControl(PROGRESS_KNOB_FOCUSED_ID).setPosition(
+                PROGRESS_X + int(PROGRESS_WIDTH * fraction) - PROGRESS_KNOB_FOCUSED_SIZE // 2,
+                PROGRESS_KNOB_FOCUSED_Y,
             )
         except Exception:
             pass

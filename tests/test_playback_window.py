@@ -371,6 +371,8 @@ def test_tick_updates_progress_fill_width(tmp_path):
     assert window.getControl(704).getWidth() == 300  # 50% of PROGRESS_WIDTH(600)
     assert window.getControl(705).getX() == 1236  # 940 + 300 - 4
     assert window.getControl(705).getY() == 78
+    assert window.getControl(706).getX() == 1232  # 940 + 300 - 8 (focused, 16px knob)
+    assert window.getControl(706).getY() == 74
 
 
 def test_tick_updates_progress_while_bar_hidden(tmp_path):

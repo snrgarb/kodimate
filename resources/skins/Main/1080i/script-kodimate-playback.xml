@@ -21,13 +21,13 @@
         <control type="group">
             <visible>String.IsEqual(Window.Property(bar_visible),1)</visible>
             <animation type="Conditional" condition="String.IsEqual(Window.Property(osd_position),bottom)">
-                <effect type="slide" start="0,0" end="0,880" time="0"/>
+                <effect type="slide" start="0,0" end="0,790" time="0"/>
             </animation>
             <control type="image">
                 <posx>0</posx>
                 <posy>0</posy>
                 <width>1920</width>
-                <height>300</height>
+                <height>250</height>
                 <texture>white.png</texture>
                 <colordiffuse>cc0a0a10</colordiffuse>
             </control>
@@ -265,6 +265,16 @@
                 <height>8</height>
                 <texture>white.png</texture>
                 <colordiffuse>ffffffff</colordiffuse>
+                <visible>!Control.HasFocus(711)</visible>
+            </control>
+            <control type="image" id="706">
+                <posx>932</posx>
+                <posy>74</posy>
+                <width>16</width>
+                <height>16</height>
+                <texture>white.png</texture>
+                <colordiffuse>ffffffff</colordiffuse>
+                <visible>Control.HasFocus(711)</visible>
             </control>
             <control type="image">
                 <posx>934</posx>
@@ -310,7 +320,7 @@
             </control>
             <control type="label">
                 <posx>940</posx>
-                <posy>130</posy>
+                <posy>176</posy>
                 <width>900</width>
                 <height>40</height>
                 <font>font12</font>
@@ -320,7 +330,7 @@
             </control>
             <control type="label">
                 <posx>940</posx>
-                <posy>130</posy>
+                <posy>176</posy>
                 <width>900</width>
                 <height>40</height>
                 <font>font12</font>
@@ -330,7 +340,7 @@
             </control>
             <control type="label">
                 <posx>60</posx>
-                <posy>170</posy>
+                <posy>216</posy>
                 <width>1760</width>
                 <height>30</height>
                 <font>font12</font>
@@ -339,17 +349,17 @@
             </control>
             <control type="grouplist">
                 <posx>940</posx>
-                <posy>216</posy>
+                <posy>124</posy>
                 <width>500</width>
-                <height>60</height>
+                <height>44</height>
                 <orientation>horizontal</orientation>
-                <itemgap>12</itemgap>
+                <itemgap>8</itemgap>
                 <control type="group">
-                    <width>60</width>
-                    <height>60</height>
+                    <width>44</width>
+                    <height>44</height>
                     <control type="button" id="712">
-                        <width>60</width>
-                        <height>60</height>
+                        <width>44</width>
+                        <height>44</height>
                         <onup>712</onup>
                         <ondown>712</ondown>
                         <onleft>712</onleft>
@@ -360,17 +370,17 @@
                     <control type="image">
                         <posx>6</posx>
                         <posy>6</posy>
-                        <width>48</width>
-                        <height>48</height>
+                        <width>32</width>
+                        <height>32</height>
                         <texture>rewind.png</texture>
                     </control>
                 </control>
                 <control type="group">
-                    <width>60</width>
-                    <height>60</height>
+                    <width>44</width>
+                    <height>44</height>
                     <control type="button" id="713">
-                        <width>60</width>
-                        <height>60</height>
+                        <width>44</width>
+                        <height>44</height>
                         <onup>713</onup>
                         <ondown>713</ondown>
                         <texturefocus colordiffuse="66ffffff">white.png</texturefocus>
@@ -380,26 +390,26 @@
                     <control type="image">
                         <posx>6</posx>
                         <posy>6</posy>
-                        <width>48</width>
-                        <height>48</height>
+                        <width>32</width>
+                        <height>32</height>
                         <texture>play.png</texture>
                         <visible>String.IsEqual(Window.Property(paused),1)</visible>
                     </control>
                     <control type="image">
                         <posx>6</posx>
                         <posy>6</posy>
-                        <width>48</width>
-                        <height>48</height>
+                        <width>32</width>
+                        <height>32</height>
                         <texture>pause.png</texture>
                         <visible>!String.IsEqual(Window.Property(paused),1)</visible>
                     </control>
                 </control>
                 <control type="group">
-                    <width>60</width>
-                    <height>60</height>
+                    <width>44</width>
+                    <height>44</height>
                     <control type="button" id="714">
-                        <width>60</width>
-                        <height>60</height>
+                        <width>44</width>
+                        <height>44</height>
                         <onup>714</onup>
                         <ondown>714</ondown>
                         <texturefocus colordiffuse="66ffffff">white.png</texturefocus>
@@ -409,18 +419,18 @@
                     <control type="image">
                         <posx>6</posx>
                         <posy>6</posy>
-                        <width>48</width>
-                        <height>48</height>
+                        <width>32</width>
+                        <height>32</height>
                         <texture>fastforward.png</texture>
                     </control>
                 </control>
                 <control type="group">
-                    <width>220</width>
-                    <height>60</height>
+                    <width>170</width>
+                    <height>44</height>
                     <visible>String.IsEqual(Window.Property(behind_live),1)</visible>
                     <control type="button" id="715">
-                        <width>220</width>
-                        <height>60</height>
+                        <width>170</width>
+                        <height>44</height>
                         <onup>715</onup>
                         <ondown>715</ondown>
                         <onright>715</onright>
@@ -431,15 +441,15 @@
                     <control type="image">
                         <posx>6</posx>
                         <posy>6</posy>
-                        <width>48</width>
-                        <height>48</height>
+                        <width>32</width>
+                        <height>32</height>
                         <texture>backtolive.png</texture>
                     </control>
                     <control type="label">
-                        <posx>60</posx>
+                        <posx>44</posx>
                         <posy>0</posy>
-                        <width>160</width>
-                        <height>60</height>
+                        <width>126</width>
+                        <height>44</height>
                         <font>font12</font>
                         <aligny>center</aligny>
                         <textcolor>ffffffff</textcolor>
