@@ -56,9 +56,28 @@ _Avoid_: Category
 **Channel Number**:
 The number shown and used for zapping a Channel. Comes from the Provider (tvg-chno / Xtream num) if present, otherwise from Provider order; the user may override it, and Providers may have number offsets applied. Numbers are labels, not keys: duplicates are allowed. Number-entry Zapping selects the first Channel in list order (Provider order, then Channel order within Provider).
 
+**Live TV view**:
+The screen the addon opens into after startup autoplay: an Icon rail, a slide-out Groups panel, the Guide, and a Now strip above it. Replaces the former separate channel list and home menu.
+_Avoid_: channel list, home screen, main menu
+
+**Icon rail**:
+The always-visible strip of destinations (Live TV, Catch-up, Settings) at the edge of the Live TV view. Highlights the current destination and never steals focus when the view opens.
+_Avoid_: sidebar, home menu
+
+**Groups panel**:
+The panel that slides out on Left from the Live TV view's channel column, listing each Provider's Groups under a collapsible header, plus a flat All channels and Favourites at the top and a show-hidden toggle at the foot. OK or Right on a row applies it, closes the panel, and returns focus to the channel column; Back closes it without changing the filter.
+_Avoid_: group picker, Groups pane
+
 **Guide**:
-The EPG grid view showing channels against a timeline.
+The EPG grid inside the Live TV view, showing Channels down the side against a scrolling timeline of Programmes.
 _Avoid_: EPG grid, TV guide
+
+**Channel column**:
+The Guide's list of Channels, one per row with number, logo, and name; together with the programme cells it forms the Guide grid.
+_Avoid_: Channel list (its name before the Guide and the channel list merged into the Live TV view)
+
+**Now strip**:
+The strip above the Guide grid on the Live TV view showing the date/time and the focused Channel's current Programme with progress, following the focused row as it moves; shows "No information" when the Channel has no Programme now.
 
 **Programme**:
 One scheduled broadcast on a Channel, keyed by its EPG Source channel id and start time, with title, subtitle, description, start, end, icon, category, and catch-up id, sourced from XMLTV or Xtream EPG.
@@ -93,7 +112,7 @@ The screen listing past Programmes per Channel, grouped by day, for Channels wit
 _Avoid_: archive browser, replay list
 
 **Origin screen**:
-The screen a playback session was started from (Guide, Catch-up browser, channel list); Back from playback returns there.
+The screen a playback session was started from (Live TV view, Catch-up browser); Back from playback returns there.
 
 **Favourite**:
 A user-marked Channel, held in a single flat user-ordered list; there are no multiple lists.
