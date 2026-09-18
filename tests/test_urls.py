@@ -431,6 +431,74 @@ def test_m3u_catchup_supported_true_for_other_modes():
     assert urls.m3u_catchup_supported(channel) is True
 
 
+# ---------------------------------------------------------------------------
+# catchup_granularity_seconds
+# ---------------------------------------------------------------------------
+
+def test_catchup_granularity_xtream_is_minute_precision():
+    snapshot = {'kind': 'xtream'}
+    assert urls.catchup_granularity_seconds(snapshot) == 60
+
+
+def test_catchup_granularity_m3u_xc_shaped_default_is_minute_precision():
+    snapshot = {
+        'kind': 'm3u',
+        'stream_url': 'https://xc.example/live/u/p/1.ts',
+        'catchup_mode': 'default',
+    }
+    assert urls.catchup_granularity_seconds(snapshot) == 60
+
+
+def test_catchup_granularity_m3u_xc_mode_is_minute_precision():
+    snapshot = {
+        'kind': 'm3u',
+        'stream_url': 'https://xc.example/live/u/p/1.ts',
+        'catchup_mode': 'xc',
+    }
+    assert urls.catchup_granularity_seconds(snapshot) == 60
+
+
+def test_catchup_granularity_m3u_shift_is_second_precision():
+    snapshot = {
+        'kind': 'm3u', 'stream_url': 'http://host/live.m3u8', 'catchup_mode': 'shift',
+    }
+    assert urls.catchup_granularity_seconds(snapshot) == 1
+
+
+def test_catchup_granularity_m3u_append_default_is_second_precision():
+    snapshot = {
+        'kind': 'm3u', 'stream_url': 'http://host/live.m3u8', 'catchup_mode': 'append',
+    }
+    assert urls.catchup_granularity_seconds(snapshot) == 1
+
+
+def test_catchup_granularity_m3u_flussonic_ts_is_second_precision():
+    snapshot = {
+        'kind': 'm3u', 'stream_url': 'http://host/151/mpegts', 'catchup_mode': 'flussonic-ts',
+    }
+    assert urls.catchup_granularity_seconds(snapshot) == 1
+
+
+def test_catchup_granularity_m3u_flussonic_hls_is_second_precision():
+    snapshot = {
+        'kind': 'm3u', 'stream_url': 'http://host/151/mpegts', 'catchup_mode': 'flussonic',
+    }
+    assert urls.catchup_granularity_seconds(snapshot) == 1
+
+
+def test_catchup_granularity_m3u_custom_source_follows_its_own_tokens():
+    minute_precision = {
+        'kind': 'm3u', 'stream_url': 'http://host/live.m3u8', 'catchup_mode': 'append',
+        'catchup_source': 'http://host/vod?from={Y}{m}{d}{H}{M}',
+    }
+    second_precision = {
+        'kind': 'm3u', 'stream_url': 'http://host/live.m3u8', 'catchup_mode': 'append',
+        'catchup_source': 'http://host/vod?from={utc}',
+    }
+    assert urls.catchup_granularity_seconds(minute_precision) == 60
+    assert urls.catchup_granularity_seconds(second_precision) == 1
+
+
 def test_xc_credentials_matches_xc_shaped_url():
     url = 'https://xc.example/live/u/p/1.ts'
     assert urls.xc_credentials(url) == ('https://xc.example', 'u', 'p')

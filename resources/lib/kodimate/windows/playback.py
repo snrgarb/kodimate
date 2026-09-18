@@ -332,6 +332,11 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
 
     def _on_player_stop_or_end(self, is_ended):
         with self._lock:
+            log.debug(
+                'Playback stop/end callback: is_ended={0} pending={1} catchup={2} playing={3}'.format(
+                    is_ended, self._pending_transition is not None, bool(self.catchup), self._playing
+                )
+            )
             if self._awaiting_upnext_stop_target is not _NO_UPNEXT_TARGET:
                 target = self._awaiting_upnext_stop_target
                 self._awaiting_upnext_stop_target = _NO_UPNEXT_TARGET
@@ -343,7 +348,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 # (possibly late) after we already asked it to abort in
                 # _replace_session: run the deferred transition instead of
                 # forwarding this to whatever session is current now.
-                self._run_pending_transition()
+                self._run_pending_transition('callback')
                 return
             if self.catchup and self._playing and not self._upnext and self._near_catchup_end():
                 session = self.session
@@ -412,10 +417,14 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         Up-next keeps its own, pre-existing await-stop mechanism."""
         self._reset_transient_playback_state()
         if self._pending_transition is not None:
+            log.debug('Playback session replace: transition already pending, replacing it (last wins)')
             self._pending_transition = prepare
             return
         session = self.session
         if session is not None and self.getProperty('state') in _ALIVE_STATES:
+            log.debug('Playback session replace: deferred, session alive (state={0})'.format(
+                self.getProperty('state')
+            ))
             self._pending_transition = prepare
             session.abort()
             self.player.detach(session)
@@ -429,10 +438,12 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 3, self._on_pending_transition_fallback
             )
             return
+        log.debug('Playback session replace: immediate, no alive session')
         prepare()
         self._start_new_session()
 
-    def _run_pending_transition(self):
+    def _run_pending_transition(self, source):
+        log.debug('Playback pending transition running (source={0})'.format(source))
         prepare = self._pending_transition
         self._pending_transition = None
         self._cancel_pending_transition_fallback()
@@ -445,7 +456,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         with self._lock:
             if self._pending_transition is None:
                 return
-            self._run_pending_transition()
+            self._run_pending_transition('fallback')
 
     def _cancel_pending_transition_fallback(self):
         if self._pending_transition_fallback_timer is not None:
@@ -838,41 +849,86 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self.setProperty('seek_step', '')
             if step == 0:
                 return
+            if self._pending_transition is not None or self.getProperty('state') != 'playing':
+                # A session replacement is already in flight (or the player
+                # isn't attached to anything playing): committing against a
+                # stopped/about-to-be-replaced player reads a stale/zeroed
+                # position and would rebuild from the wrong place.
+                log.debug(
+                    'Playback seek commit dropped: pending_transition={0} state={1}'.format(
+                        self._pending_transition is not None, self.getProperty('state')
+                    )
+                )
+                return
             self._apply_seek(step)
 
     def _apply_seek(self, step):
         behind = self._behind_live_seconds()
         now = _epoch(self.now_fn())
         target = min(now, now - behind + step)
-        if target >= now - _BEHIND_LIVE_TOLERANCE_SECONDS:
-            self._go_live_if_needed()
-            return
         time_seconds = self._player_time_seconds()
         total_seconds = self._player_total_seconds()
-        if total_seconds > 0 and 0 <= time_seconds + step <= total_seconds:
+        if target >= now - _BEHIND_LIVE_TOLERANCE_SECONDS:
+            log.debug(
+                'Playback seek: behind={0} time={1} total={2} target={3} path=live'.format(
+                    behind, time_seconds, total_seconds, target
+                )
+            )
+            self._go_live_if_needed()
+            return
+        if self.catchup is not None and self.session is not None:
+            # A Catch-up stream is a fixed range [session_start, min(end,
+            # now)] requested from the Provider; Kodi's getTotalTime() for
+            # an HTTP TS file is frequently 0, so the range from our own
+            # Catch-up dict is the buffer, not getTotalTime().
+            session_start = self.catchup['start'] + self.session.catchup_offset_seconds
+            range_end = min(self.catchup['end'], self.catchup['now'])
+            in_buffer = (range_end - session_start) > 0 and 0 <= time_seconds + step < range_end - session_start
+        else:
+            in_buffer = total_seconds > 0 and 0 <= time_seconds + step <= total_seconds
+        log.debug(
+            'Playback seek: behind={0} time={1} total={2} target={3} path={4}'.format(
+                behind, time_seconds, total_seconds, target, 'native' if in_buffer else 'rebuild'
+            )
+        )
+        if in_buffer:
             try:
                 self.player.seekTime(time_seconds + step)
             except Exception:
                 pass
             self._update_behind_live()
             return
-        self._rebuild_for_target(target)
+        self._rebuild_for_target(target, -1 if step < 0 else 1)
 
     def _go_live_if_needed(self):
         if self.catchup is not None or self._behind_live_seconds() > _BEHIND_LIVE_TOLERANCE_SECONDS:
             self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
 
-    def _rebuild_at_target(self, target_epoch, unavailable):
+    @staticmethod
+    def _snap_catchup_offset(offset, granularity, direction):
+        offset = max(0, offset)
+        if granularity <= 1:
+            return offset
+        remainder = offset % granularity
+        if remainder == 0:
+            return offset
+        if direction > 0:
+            return offset + (granularity - remainder)
+        return offset - remainder
+
+    def _rebuild_at_target(self, target_epoch, unavailable, direction=0):
         """Find the programme covering `target_epoch` and start a Catch-up
-        session there (`target_epoch - programme start` as the initial
-        offset) -- Start Over semantics when the programme is still airing
-        (state 'live') -- or call `unavailable()` when no programme covers
-        it or it isn't playable (including a 'live' programme with no
-        Catch-up Window at all). Going live at/after the live edge is
+        session there -- Start Over semantics when the programme is still
+        airing (state 'live') -- or call `unavailable()` when no programme
+        covers it or it isn't playable (including a 'live' programme with
+        no Catch-up Window at all). Going live at/after the live edge is
         decided earlier, by the caller's live-edge check; this only ever
-        rebuilds a Catch-up URL. Shared by a seek/big-step commit that
-        lands outside the player's buffer and a resume past the buffer
-        after a pause."""
+        rebuilds a Catch-up URL. The offset is snapped to the Provider's
+        URL-rebuild granularity (floor for a rewind, ceil for a forward
+        seek; `direction` 0 floors) so a step smaller than that granularity
+        still yields a URL Kodi hasn't already got open. Shared by a
+        seek/big-step commit that lands outside the player's buffer and a
+        resume past the buffer after a pause."""
         self._load_programmes()
         programme = self._programme_containing(target_epoch)
         window_days = self._catchup_window_days()
@@ -884,18 +940,26 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         if programme is None or not playable:
             unavailable()
             return
-        offset = target_epoch - _epoch(programme['start'])
+        programme_start = _epoch(programme['start'])
+        offset = target_epoch - programme_start
+        granularity = urls.catchup_granularity_seconds(self.snapshot)
+        offset = self._snap_catchup_offset(offset, granularity, direction)
+        current_start = None
+        if self.catchup is not None and self.session is not None:
+            current_start = self.catchup['start'] + self.session.catchup_offset_seconds
+        if current_start is not None and programme_start + offset == current_start:
+            offset = max(0, offset + (granularity if direction >= 0 else -granularity))
 
         def prepare():
             self.catchup = self._catchup_dict_for(programme, now, offset=offset)
         self._replace_session(prepare)
 
-    def _rebuild_for_target(self, target_epoch):
+    def _rebuild_for_target(self, target_epoch, direction=0):
         def unavailable():
             addon = xbmcaddon.Addon()
             self.notify('Kodimate', addon.getLocalizedString(_STR_CATCHUP_UNAVAILABLE)
                         % self.snapshot['provider_name'])
-        self._rebuild_at_target(target_epoch, unavailable)
+        self._rebuild_at_target(target_epoch, unavailable, direction)
 
     def _toggle_pause(self):
         with self._lock:
@@ -919,6 +983,11 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 except Exception:
                     pass
                 self.setProperty('paused', '1')
+                # Best-effort: Kodi has no "pause without showing its own
+                # seek-bar OSD" action, so close the dialog it just opened;
+                # _tick() repeats this every second while paused in case it
+                # reappears (e.g. a stray input event re-triggers it).
+                xbmc.executebuiltin('Dialog.Close(seekbar,true)')
                 self._show_bar(arm_hide=False)
                 return
             behind_now = self._behind_at_pause + (
@@ -1063,6 +1132,8 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         try:
             if not self._playing:
                 return
+            if self._paused:
+                xbmc.executebuiltin('Dialog.Close(seekbar,true)')
             self._update_stream_info()
             if self._stopped():
                 return

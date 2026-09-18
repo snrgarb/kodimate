@@ -266,6 +266,65 @@ def m3u_catchup_url(channel, start, end, now, catchup_id=None, local_offset_seco
     return _default_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds)
 
 
+_FINE_GRAIN_TOKEN_RE = re.compile(r'\$?\{(?:utc|start)\}|\$?\{S\}')
+_UNDIVIDED_OFFSET_RE = re.compile(r'\$?\{(?:offset|duration)(?::(?P<fmt>[^}]*))?\}')
+
+
+def _template_granularity_seconds(template):
+    """1 if `template` renders the raw `{utc}`/`{start}` epoch, an explicit
+    `{S}` seconds component, or an `{offset}`/`{duration}` undivided (or
+    divided by 1) -- all second precision; 60 if it only ever renders bare
+    Y/m/d/H/M date components (minute precision, e.g. the Xtream-Codes-
+    style `timeshift/.../{Y}-{m}-{d}:{H}-{M}/...` path) or a coarsely-
+    divided `{offset:N}`/`{duration:N}` (N > 1)."""
+    if not template:
+        return 60
+    if _FINE_GRAIN_TOKEN_RE.search(template):
+        return 1
+    for m in _UNDIVIDED_OFFSET_RE.finditer(template):
+        fmt = m.group('fmt')
+        if fmt is None or int(fmt) <= 1:
+            return 1
+    return 60
+
+
+def catchup_granularity_seconds(snapshot):
+    """Coarsest interval, in seconds, at which a rebuilt Catch-up URL's
+    start time actually changes for this Channel/Provider. A seek rebuild
+    whose new offset differs from the current one by less than this
+    yields the identical URL already open (Kodi restarts the same file
+    instead of perceiving a seek), so callers must snap the offset to
+    this granularity before rebuilding."""
+    if snapshot.get('kind') != 'm3u':
+        return 60  # Xtream: '%Y-%m-%d:%H-%M' path/query stamp, minute precision
+    stream_url = snapshot.get('stream_url') or ''
+    live_url, _pipe = _split_pipe(stream_url)
+    mode = (snapshot.get('catchup_mode') or 'default').strip().lower()
+    if mode not in _KNOWN_MODES:
+        mode = 'default'
+    source = snapshot.get('catchup_source')
+
+    if mode == 'append':
+        return _template_granularity_seconds(source or '?utc={utc}&lutc={lutc}')
+    if mode in ('shift', 'timeshift'):
+        sep = '&' if '?' in live_url else '?'
+        return _template_granularity_seconds(live_url + sep + 'utc={utc}&lutc={lutc}')
+    if mode in ('flussonic', 'flussonic-hls', 'flussonic-ts', 'fs'):
+        template = _flussonic_template(live_url, mode)
+        return _template_granularity_seconds(template) if template is not None else 60
+    if mode == 'xc':
+        template = _xc_template(live_url)
+        return _template_granularity_seconds(template) if template is not None else 60
+    if mode == 'vod':
+        return _template_granularity_seconds(source or '{catchup-id}')
+
+    # 'default'
+    if source:
+        return _template_granularity_seconds(source)
+    template = _xc_template(live_url)
+    return _template_granularity_seconds(template) if template is not None else 60
+
+
 def m3u_catchup_supported(channel):
     """True iff `m3u_catchup_url` can produce a URL for `channel`."""
     stream_url = channel.get('stream_url') or ''
