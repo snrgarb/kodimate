@@ -136,6 +136,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
         self._behind_at_pause = 0
         self._seek_timer = None
         self._seek_stepper = None
+        self._screensaver_inhibited = False
         if self.osd_position is None:
             self.osd_position = self._addon_setting_string('osd_position', 'top')
         if self.osd_position != 'bottom':
@@ -203,6 +204,9 @@ class PlaybackWindow(xbmcgui.WindowXML):
             if self.seek_delay_ms is None:
                 self.seek_delay_ms = delay_ms
         self._seek_stepper = seek.SeekStepper(self.seek_steps)
+
+        xbmc.executebuiltin('InhibitScreensaver(true)')
+        self._screensaver_inhibited = True
 
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._progress_loop)
@@ -1479,4 +1483,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
         self._cancel_upnext_timer()
         self._cancel_upnext_fallback_timer()
         self._cancel_pending_transition_fallback()
+        if self._screensaver_inhibited:
+            xbmc.executebuiltin('InhibitScreensaver(false)')
+            self._screensaver_inhibited = False
         super(PlaybackWindow, self).close()

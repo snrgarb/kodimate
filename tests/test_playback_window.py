@@ -260,6 +260,33 @@ def test_no_busy_dialog_builtin_issued(tmp_path):
     assert not any('busydialognocancel' in c for c in xbmc.executebuiltin_calls)
 
 
+def test_on_init_inhibits_screensaver(tmp_path):
+    xbmc.executebuiltin_calls[:] = []
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+
+    window.onInit()
+
+    assert 'InhibitScreensaver(true)' in xbmc.executebuiltin_calls
+
+
+def test_close_uninhibits_screensaver_once(tmp_path):
+    xbmc.executebuiltin_calls[:] = []
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+
+    window.close()
+
+    assert xbmc.executebuiltin_calls.count('InhibitScreensaver(false)') == 1
+
+    window.close()
+
+    assert xbmc.executebuiltin_calls.count('InhibitScreensaver(false)') == 1
+
+
 # -- info bar ------------------------------------------------------------
 
 def test_bar_shows_number_logo_name_now_next_and_times(tmp_path):
