@@ -2028,7 +2028,9 @@ def test_strip_properties_after_init_for_programme_airing_now(tmp_path):
         assert window.getProperty('strip_title') == 'Current Show'
         assert window.getProperty('strip_description') == 'About the current show'
         assert window.getProperty('strip_live') == '1'
-        assert window.getProperty('strip_catchup') == '1'
+        # A currently-airing programme is 'live', not 'past_playable' --
+        # LIVE and Catch-up are mutually exclusive, driven by state.
+        assert window.getProperty('strip_catchup') == ''
         assert int(window.getProperty('strip_progress')) > 0
         assert window.getProperty('strip_remaining') != ''
 
@@ -2037,6 +2039,78 @@ def test_strip_properties_after_init_for_programme_airing_now(tmp_path):
         expected_times = '%s - %s (1h)' % (start_local.strftime('%H:%M'), end_local.strftime('%H:%M'))
         assert window.getProperty('strip_times') == expected_times
         assert window.getProperty('strip_date').startswith('String 32130')
+    finally:
+        conn.close()
+
+
+def test_strip_live_and_catchup_are_mutually_exclusive_for_live_programme(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        conn.execute("UPDATE channel SET catchup_days = 3 WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        start = now - timedelta(minutes=30)
+        end = now + timedelta(minutes=30)
+        _programme(conn, eid, "x1", guide.format_iso(start), guide.format_iso(end), "Current Show")
+        window = _window(conn)
+
+        assert window.getProperty('strip_live') == '1'
+        assert window.getProperty('strip_catchup') == ''
+    finally:
+        conn.close()
+
+
+def test_strip_shows_catchup_not_live_for_past_playable_programme(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        conn.execute("UPDATE channel SET catchup_days = 3 WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        now = datetime.utcnow()
+        past_start = now - timedelta(hours=2)
+        past_end = now - timedelta(hours=1)
+        _programme(conn, eid, "x1", guide.format_iso(past_start), guide.format_iso(past_end),
+                   "Past Show")
+        window._load_programmes()
+
+        # Put the cursor directly on the past cell rather than depending on
+        # viewport-scrolling navigation to land exactly on it.
+        window._zone = 'grid'
+        window._cursor_time = past_start
+        window._update_strip()
+
+        assert window.getProperty('strip_title') == 'Past Show'
+        assert window.getProperty('strip_live') == ''
+        assert window.getProperty('strip_catchup') == '1'
+    finally:
+        conn.close()
+
+
+def test_strip_no_catchup_for_past_programme_without_catchup_window(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        now = datetime.utcnow()
+        past_start = now - timedelta(hours=2)
+        past_end = now - timedelta(hours=1)
+        _programme(conn, eid, "x1", guide.format_iso(past_start), guide.format_iso(past_end),
+                   "Past Show")
+        window._load_programmes()
+
+        window._zone = 'grid'
+        window._cursor_time = past_start
+        window._update_strip()
+
+        assert window.getProperty('strip_title') == 'Past Show'
+        assert window.getProperty('strip_live') == ''
+        assert window.getProperty('strip_catchup') == ''
     finally:
         conn.close()
 

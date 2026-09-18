@@ -385,7 +385,7 @@
 
             <!-- Top-right corner: clock/date, right-aligned to the screen edge. -->
             <control type="label">
-                <posx>1400</posx>
+                <posx>1900</posx>
                 <posy>20</posy>
                 <width>500</width>
                 <height>30</height>
@@ -395,7 +395,7 @@
                 <textcolor>ffffffff</textcolor>
             </control>
             <control type="label">
-                <posx>1400</posx>
+                <posx>1900</posx>
                 <posy>55</posy>
                 <width>500</width>
                 <height>26</height>

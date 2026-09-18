@@ -615,6 +615,16 @@ class GuideWindow(BaseWindow):
 
         values = guide.strip_values(programmes, at_time, now, self._no_info_title, tz=self._tz)
 
+        # LIVE and Catch-up are mutually exclusive, driven by the
+        # programme's own state (not just the channel's entitlement).
+        programme = next(
+            (p for p in programmes if p['start'] <= at_time < p['end']), None
+        )
+        if programme is not None:
+            state = catchup.cell_state(programme['start'], programme['end'], window_days, now)
+        else:
+            state = None
+
         channel_logo = (row.get('logo_url') or '') if row else ''
         self.setProperty('strip_channel_logo', channel_logo)
         self.setProperty('strip_image', values['icon'] or channel_logo)
@@ -627,9 +637,9 @@ class GuideWindow(BaseWindow):
         self.setProperty('strip_remaining', remaining)
         self.setProperty('strip_description', values['description'])
         has_programme = values['has_programme']
-        self.setProperty('strip_live', '1' if values['live'] else '')
+        self.setProperty('strip_live', '1' if state == 'live' else '')
         self.setProperty('strip_hd', '1' if has_programme and hd else '')
-        self.setProperty('strip_catchup', '1' if has_programme and window_days else '')
+        self.setProperty('strip_catchup', '1' if state == 'past_playable' else '')
         self.setProperty(
             'strip_date',
             guide.date_label(at_time, now, addon.getLocalizedString(_STR_TODAY), tz=self._tz),
