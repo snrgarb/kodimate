@@ -44,7 +44,7 @@
                 </setting>
                 <setting id="autoplay_overlay_list" type="boolean" label="32108">
                     <level>0</level>
-                    <default>true</default>
+                    <default>false</default>
                     <control type="toggle"/>
                 </setting>
                 <setting id="osd_hide_seconds" type="integer" label="32091">
