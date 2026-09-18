@@ -40,12 +40,12 @@ def _provider(conn, name="P1"):
 
 
 def _channel(conn, provider_id, channel_key, name, position, epg_channel_id=None,
-             stream_url='http://x/live/u/p/1.ts', catchup_days=None):
+             stream_url='http://x/live/u/p/1.ts', catchup_days=None, logo_url=None):
     cursor = conn.execute(
         "INSERT INTO channel (provider_id, channel_key, name, normalised_name, stream_url, "
-        "position, epg_channel_id, catchup_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "position, epg_channel_id, catchup_days, logo_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (provider_id, channel_key, name, name.lower(), stream_url, position, epg_channel_id,
-         catchup_days),
+         catchup_days, logo_url),
     )
     return cursor.lastrowid
 
@@ -109,14 +109,47 @@ def _window_with_fakes(conn, dialog_result):
     return window, _Dialog, _Playback
 
 
-def test_opens_with_empty_lists_when_no_channels_qualify(tmp_path):
+def test_opens_with_hint_row_when_no_channels_qualify(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
         _channel(conn, pid, "a", "Alpha", 0)  # no catchup_days, no provider default
         window = _window(conn)
-        assert window.getControl(CHANNEL_LIST_ID).size() == 0
+        channel_control = window.getControl(CHANNEL_LIST_ID)
+        assert channel_control.size() == 1
+        assert channel_control.getListItem(0).getProperty('hint') == '1'
         assert window.getControl(PROGRAMME_LIST_ID).size() == 0
+    finally:
+        conn.close()
+
+
+def test_ok_on_channel_hint_row_is_a_no_op(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window, dialog_cls, playback_cls = _window_with_fakes(conn, None)
+        window.onClick(CHANNEL_LIST_ID)
+        assert dialog_cls.opened_with is None
+    finally:
+        conn.close()
+
+
+def test_no_programmes_shows_hint_row_and_ok_is_a_no_op(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1", catchup_days=3)
+        window, dialog_cls, playback_cls = _window_with_fakes(conn, None)
+        control = window.getControl(PROGRAMME_LIST_ID)
+
+        assert control.size() == 1
+        assert control.getListItem(0).getProperty('header') == '1'
+
+        control.selectItem(0)
+        window.onClick(PROGRAMME_LIST_ID)
+
+        assert dialog_cls.opened_with is None
     finally:
         conn.close()
 
@@ -425,6 +458,165 @@ def test_ok_on_live_like_programme_dispatches_watch_live(tmp_path):
         conn.close()
 
 
+def test_programme_row_has_duration_description_and_playable_properties(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1", catchup_days=3)
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        start = now - timedelta(hours=1)
+        end = now - timedelta(minutes=30)  # 30 minute programme, safely inside the window
+        _programme(conn, eid, "x1", guide.format_iso(start), guide.format_iso(end),
+                   "Alpha Show", description="An Alpha description")
+
+        window = _window(conn)
+        control = window.getControl(PROGRAMME_LIST_ID)
+        item = control.getListItem(1)  # after the "Today" header
+
+        assert item.getProperty('duration') == '30 min'
+        assert item.getProperty('description') == 'An Alpha description'
+        assert item.getProperty('playable') == '1'
+    finally:
+        conn.close()
+
+
+def test_programme_row_outside_channel_window_is_not_playable(tmp_path):
+    # A programme still "live" by wall-clock now is not Catch-up playable
+    # even though it is included as a past-facing row (cell_state is
+    # computed fresh, matching the OK-time check).
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1", catchup_days=3)
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        start = now - timedelta(minutes=10)
+        end = now + timedelta(minutes=10)
+        _programme(conn, eid, "x1", guide.format_iso(start), guide.format_iso(end), "Alpha Show")
+
+        window = _window(conn)
+        control = window.getControl(PROGRAMME_LIST_ID)
+        item = control.getListItem(1)
+
+        assert item.getProperty('playable') == '0'
+    finally:
+        conn.close()
+
+
+def test_catchup_channel_header_shows_number_name_and_window(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, catchup_days=5)
+        window = _window(conn)
+        assert window.getProperty('catchup_channel') == '0 Alpha · String 32124'
+    finally:
+        conn.close()
+
+
+def test_catchup_channel_header_logo_property(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, catchup_days=5, logo_url="http://x/alpha.png")
+        window = _window(conn)
+        assert window.getProperty('catchup_channel_logo') == 'http://x/alpha.png'
+    finally:
+        conn.close()
+
+
+def test_page_down_on_programme_list_skips_header_and_updates_day(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1", catchup_days=3)
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        today_start = now - timedelta(hours=1)
+        yesterday_start = now - timedelta(days=1, hours=1)
+        _programme(conn, eid, "x1", guide.format_iso(today_start),
+                   guide.format_iso(today_start + timedelta(minutes=30)), "Today Show")
+        _programme(conn, eid, "x1", guide.format_iso(yesterday_start),
+                   guide.format_iso(yesterday_start + timedelta(minutes=30)), "Yesterday Show")
+
+        window = _window(conn)
+        control = window.getControl(PROGRAMME_LIST_ID)
+        # Positions: 0 header "Today", 1 "Today Show", 2 header "Yesterday", 3 "Yesterday Show"
+        control.selectItem(2)  # native Page Down already moved onto the "Yesterday" header
+        window.setFocusId(PROGRAMME_LIST_ID)
+
+        window.onAction(xbmcgui.Action(6))  # ACTION_PAGE_DOWN
+
+        assert control.getSelectedPosition() == 3
+        assert control.getListItem(3).getLabel() == 'Yesterday Show'
+        assert window.getProperty('catchup_day') == 'String 32112'  # "Yesterday"
+    finally:
+        conn.close()
+
+
+def test_page_up_on_programme_list_skips_header_and_updates_day(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1", catchup_days=3)
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        today_start = now - timedelta(hours=1)
+        yesterday_start = now - timedelta(days=1, hours=1)
+        _programme(conn, eid, "x1", guide.format_iso(today_start),
+                   guide.format_iso(today_start + timedelta(minutes=30)), "Today Show")
+        _programme(conn, eid, "x1", guide.format_iso(yesterday_start),
+                   guide.format_iso(yesterday_start + timedelta(minutes=30)), "Yesterday Show")
+
+        window = _window(conn)
+        control = window.getControl(PROGRAMME_LIST_ID)
+        control.selectItem(2)  # native Page Up already moved onto the "Yesterday" header
+        window.setFocusId(PROGRAMME_LIST_ID)
+
+        window.onAction(xbmcgui.Action(5))  # ACTION_PAGE_UP
+
+        assert control.getSelectedPosition() == 1
+        assert control.getListItem(1).getLabel() == 'Today Show'
+        assert window.getProperty('catchup_day') == 'String 32111'  # "Today"
+    finally:
+        conn.close()
+
+
+def test_catchup_day_follows_focused_programme_and_resets_on_channel_change(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1", catchup_days=3)
+        _channel(conn, pid, "b", "Bravo", 1, epg_channel_id="x2", catchup_days=3)
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        today_start = now - timedelta(hours=1)
+        yesterday_start = now - timedelta(days=1, hours=1)
+        _programme(conn, eid, "x1", guide.format_iso(today_start),
+                   guide.format_iso(today_start + timedelta(minutes=30)), "Today Show")
+        _programme(conn, eid, "x1", guide.format_iso(yesterday_start),
+                   guide.format_iso(yesterday_start + timedelta(minutes=30)), "Yesterday Show")
+
+        window = _window(conn)
+        assert window.getProperty('catchup_day') == 'String 32111'  # "Today"
+
+        control = window.getControl(PROGRAMME_LIST_ID)
+        control.selectItem(2)  # native Down moved onto the "Yesterday" header
+        window.setFocusId(PROGRAMME_LIST_ID)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
+
+        assert window.getProperty('catchup_day') == 'String 32112'  # "Yesterday"
+
+        window.getControl(CHANNEL_LIST_ID).selectItem(1)
+        window.setFocusId(CHANNEL_LIST_ID)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
+
+        assert window.getProperty('catchup_day') == ''  # Bravo has no programmes
+    finally:
+        conn.close()
+
+
 def test_back_closes_window(tmp_path):
     conn = _conn(tmp_path)
     try:
@@ -537,3 +729,25 @@ def test_skin_pins_rail_and_list_horizontal_navigation():
         assert control.find('onright').text == control_id
     assert controls_by_id['200'].find('onleft').text == '200'
     assert controls_by_id['201'].find('onright').text == '201'
+
+
+def test_skin_panes_fill_the_screen_to_y_1040_and_clear_the_rail():
+    tree = ET.parse(_SKIN_XML)
+    controls_by_id = {}
+    for control in tree.getroot().iter('control'):
+        control_id = control.get('id')
+        if control_id is not None:
+            controls_by_id[control_id] = control
+
+    channel_pane = controls_by_id['200']
+    programme_pane = controls_by_id['201']
+
+    channel_posy = int(channel_pane.find('posy').text)
+    channel_height = int(channel_pane.find('height').text)
+    channel_posx = int(channel_pane.find('posx').text)
+    programme_posy = int(programme_pane.find('posy').text)
+    programme_height = int(programme_pane.find('height').text)
+
+    assert channel_posy + channel_height == 1040
+    assert programme_posy + programme_height == 1040
+    assert channel_posx >= 120  # clear of the 120px Icon rail

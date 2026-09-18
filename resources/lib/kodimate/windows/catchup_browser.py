@@ -23,6 +23,16 @@ PROGRAMME_LIST_ID = 201
 
 _STR_TODAY = 32111
 _STR_YESTERDAY = 32112
+_STR_NO_CATCHUP_CHANNELS = 32122
+_STR_NO_CATCHUP_PROGRAMMES = 32123
+_STR_CATCHUP_DAYS = 32124
+
+# Real Kodi's xbmcgui module does not export these action-id constants (only
+# xbmcgui.ACTION_MOVE_LEFT/RIGHT/UP/DOWN, ACTION_NAV_BACK, ACTION_PREVIOUS_MENU
+# and a handful of others genuinely exist there); defined here directly from
+# Kodi's ActionIDs.h numeric values instead, same convention as windows/guide.py.
+_ACTION_PAGE_UP = 5
+_ACTION_PAGE_DOWN = 6
 
 
 class CatchupBrowserWindow(BaseWindow):
@@ -124,8 +134,11 @@ class CatchupBrowserWindow(BaseWindow):
             self._maybe_render_for_channel_move()
             return
         if self.getFocusId() == PROGRAMME_LIST_ID and action_id in (
-                xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN):
-            self._skip_header_row(-1 if action_id == xbmcgui.ACTION_MOVE_UP else 1)
+                xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN,
+                _ACTION_PAGE_UP, _ACTION_PAGE_DOWN):
+            direction = -1 if action_id in (xbmcgui.ACTION_MOVE_UP, _ACTION_PAGE_UP) else 1
+            self._skip_header_row(direction)
+            self._update_day_property()
 
     def _handle_left(self):
         if self.getFocusId() == CHANNEL_LIST_ID:
@@ -140,8 +153,10 @@ class CatchupBrowserWindow(BaseWindow):
     def onFocus(self, control_id):
         if control_id == CHANNEL_LIST_ID:
             self._maybe_render_for_channel_move()
+            self._update_day_property(0)
         elif control_id == PROGRAMME_LIST_ID:
             self._skip_header_row(1)
+            self._update_day_property()
 
     def _maybe_render_for_channel_move(self):
         position = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
@@ -158,13 +173,32 @@ class CatchupBrowserWindow(BaseWindow):
         position = control.getSelectedPosition()
         if not (0 <= position < len(self._right_entries)):
             return
-        if self._right_entries[position]['type'] != 'header':
+        if self._right_entries[position]['type'] == 'programme':
             return
         target = position + direction
         if not (0 <= target < len(self._right_entries)):
             target = position + 1
         if 0 <= target < len(self._right_entries):
             control.selectItem(target)
+
+    def _update_day_property(self, index=None):
+        if index is None:
+            index = self.getControl(PROGRAMME_LIST_ID).getSelectedPosition()
+        if 0 <= index < len(self._right_entries):
+            self.setProperty('catchup_day', self._right_entries[index]['day_label'])
+        else:
+            self.setProperty('catchup_day', '')
+
+    def _update_channel_header(self):
+        row = self._selected_channel_row()
+        if row is None:
+            self.setProperty('catchup_channel', '')
+            self.setProperty('catchup_channel_logo', '')
+            return
+        addon = xbmcaddon.Addon()
+        suffix = addon.getLocalizedString(_STR_CATCHUP_DAYS) % row['window_days']
+        self.setProperty('catchup_channel', u'%s %s · %s' % (row['number'], row['name'], suffix))
+        self.setProperty('catchup_channel_logo', row['logo_url'] or '')
 
     def onClick(self, control_id):
         if control_id == RAIL_LIVETV_ID:
@@ -181,7 +215,7 @@ class CatchupBrowserWindow(BaseWindow):
         if not (0 <= position < len(self._right_entries)):
             return
         entry = self._right_entries[position]
-        if entry['type'] == 'header':
+        if entry['type'] != 'programme':
             return
         channel_row = self._selected_channel_row()
         if channel_row is None:
@@ -267,12 +301,19 @@ class CatchupBrowserWindow(BaseWindow):
         control = self.getControl(CHANNEL_LIST_ID)
         control.reset()
         items = []
-        for row in self._channel_rows:
-            item = xbmcgui.ListItem(label=row['name'])
-            item.setProperty('number', str(row['number']))
-            if row['logo_url']:
-                item.setArt({'icon': row['logo_url']})
-            items.append(item)
+        if self._channel_rows:
+            for row in self._channel_rows:
+                item = xbmcgui.ListItem(label=row['name'])
+                item.setProperty('number', str(row['number']))
+                item.setProperty('catchup', '1')
+                if row['logo_url']:
+                    item.setArt({'icon': row['logo_url']})
+                items.append(item)
+        else:
+            addon = xbmcaddon.Addon()
+            hint_item = xbmcgui.ListItem(label=addon.getLocalizedString(_STR_NO_CATCHUP_CHANNELS))
+            hint_item.setProperty('hint', '1')
+            items.append(hint_item)
         control.addItems(items)
         if items:
             control.selectItem(0)
@@ -281,9 +322,11 @@ class CatchupBrowserWindow(BaseWindow):
         control = self.getControl(PROGRAMME_LIST_ID)
         control.reset()
         self._right_entries = []
+        self._update_channel_header()
 
         channel_row = self._selected_channel_row()
         if channel_row is None:
+            self._update_day_property(0)
             return
 
         now = datetime.utcnow()
@@ -321,16 +364,29 @@ class CatchupBrowserWindow(BaseWindow):
             header_item = xbmcgui.ListItem(label=label)
             header_item.setProperty('header', '1')
             items.append(header_item)
-            self._right_entries.append({'type': 'header'})
+            self._right_entries.append({'type': 'header', 'day_label': label})
 
             for entry in sorted(groups[day], key=lambda e: e['start'], reverse=True):
                 item = xbmcgui.ListItem(label=entry['title'])
                 item.setProperty('header', '0')
                 item.setProperty('times', osd.format_times(entry['start'], entry['end'], self._tz))
+                item.setProperty('duration', osd.format_duration(entry['start'], entry['end']))
+                item.setProperty('description', entry['description'])
+                state = catchup.cell_state(entry['start'], entry['end'], window_days, now)
+                entry['type'] = 'programme'
+                entry['day_label'] = label
+                item.setProperty('playable', '1' if state == 'past_playable' else '0')
                 items.append(item)
                 self._right_entries.append(entry)
 
+        if not items:
+            hint_item = xbmcgui.ListItem(label=addon.getLocalizedString(_STR_NO_CATCHUP_PROGRAMMES))
+            hint_item.setProperty('header', '1')
+            items.append(hint_item)
+            self._right_entries.append({'type': 'hint', 'day_label': ''})
+
         control.addItems(items)
+        self._update_day_property(0)
 
 
 

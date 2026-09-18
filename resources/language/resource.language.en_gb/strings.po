@@ -503,3 +503,15 @@ msgstr ""
 msgctxt "#32121"
 msgid "Settings"
 msgstr ""
+
+msgctxt "#32122"
+msgid "No channels with catch-up"
+msgstr ""
+
+msgctxt "#32123"
+msgid "No catch-up programmes"
+msgstr ""
+
+msgctxt "#32124"
+msgid "Catch-up %d days"
+msgstr ""

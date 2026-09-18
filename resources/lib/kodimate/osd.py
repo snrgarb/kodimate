@@ -87,6 +87,17 @@ def format_times(start, end, tz=None):
     return u'%s–%s' % (local_start.strftime('%H:%M'), local_end.strftime('%H:%M'))
 
 
+def format_duration(start, end):
+    """'NN min' or 'H h NN min' for a Programme's runtime."""
+    total_minutes = max(0, int((end - start).total_seconds() // 60))
+    hours, minutes = divmod(total_minutes, 60)
+    if hours and minutes:
+        return u'%d h %d min' % (hours, minutes)
+    if hours:
+        return u'%d h' % hours
+    return u'%d min' % minutes
+
+
 def neighbour_programme(programmes, current, direction):
     """The programme adjacent to `current` in `programmes` (matched by
     'start', ordered by 'start') in `direction` (-1 previous, +1 next);
