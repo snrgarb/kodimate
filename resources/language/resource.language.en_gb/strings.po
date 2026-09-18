@@ -515,3 +515,23 @@ msgstr ""
 msgctxt "#32125"
 msgid "Groups"
 msgstr ""
+
+msgctxt "#32126"
+msgid "LIVE"
+msgstr ""
+
+msgctxt "#32127"
+msgid "HD"
+msgstr ""
+
+msgctxt "#32128"
+msgid "Catch-up"
+msgstr ""
+
+msgctxt "#32129"
+msgid "%s remaining"
+msgstr ""
+
+msgctxt "#32130"
+msgid "Today"
+msgstr ""

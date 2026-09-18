@@ -1,10 +1,21 @@
 # -*- coding: utf-8 -*-
 """Pure layout/cursor logic for the Guide window (issue #26): no xbmc
 imports, so it is exercised directly by tests without the fakes."""
+import re
 from datetime import datetime, timedelta, timezone
 
 VISIBLE_ROWS = 10
 VISIBLE_HOURS = 3
+
+# Same suffix rule as ingest.normalise_name (kept local so this pure module
+# has no dependency on the service-side ingest module).
+_HD_SUFFIX_RE = re.compile(r'(hd|fhd|uhd|4k)$')
+_NON_ALNUM_RE = re.compile(r'[^a-z0-9]+')
+
+_WEEKDAY_ABBR = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')
+_MONTH_ABBR = (
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+)
 
 RETENTION_DAYS = 7  # Programme retention is fixed at 7 days elsewhere too.
 # HORIZON_DAYS is a fixed guess at how far ahead EPG data is ever available,
@@ -308,3 +319,79 @@ def back_target(zone, panel_open):
     if zone == 'grid':
         return 'column'
     return 'close_panel' if panel_open else 'close'
+
+
+def is_hd_name(name):
+    """True when the Normalised Name suffix rule (ingest.normalise_name)
+    strips an HD/FHD/UHD/4K suffix off `name`."""
+    lowered = (name or '').lower()
+    stripped = _NON_ALNUM_RE.sub('', lowered)
+    return bool(_HD_SUFFIX_RE.search(stripped))
+
+
+def format_duration_short(total_seconds):
+    """"2h 30m" / "45m" / "2h" for a duration in seconds."""
+    total_minutes = int(round(total_seconds / 60.0))
+    hours, minutes = divmod(total_minutes, 60)
+    if hours and minutes:
+        return '%dh %dm' % (hours, minutes)
+    if hours:
+        return '%dh' % hours
+    return '%dm' % minutes
+
+
+def strip_values(programmes, at_time, now, no_info_title, tz=None):
+    """Programme detail strip values (issue #54) for the programme covering
+    `at_time`: title, times with duration, progress 0-100, remaining
+    duration text (only when airing at `now`), description, live/has_programme
+    flags. `progress` is 0 for a programme that has not started at `now` and
+    100 for one that has already ended, so a static (non-live) strip still
+    renders a sensible bar position."""
+    programme = None
+    for candidate in programmes:
+        if candidate['start'] <= at_time < candidate['end']:
+            programme = candidate
+            break
+
+    if programme is None:
+        return {
+            'title': no_info_title, 'times': '', 'progress': 0, 'remaining': '',
+            'description': '', 'live': False, 'has_programme': False,
+        }
+
+    start_local = utc_to_local(programme['start'], tz)
+    end_local = utc_to_local(programme['end'], tz)
+    duration = format_duration_short((programme['end'] - programme['start']).total_seconds())
+    times = '%s - %s (%s)' % (start_local.strftime('%H:%M'), end_local.strftime('%H:%M'), duration)
+
+    live = programme['start'] <= now < programme['end']
+    if live:
+        total = (programme['end'] - programme['start']).total_seconds()
+        elapsed = (now - programme['start']).total_seconds()
+        progress = int(round(max(0, min(total, elapsed)) / total * 100)) if total > 0 else 0
+        remaining = format_duration_short((programme['end'] - now).total_seconds())
+    else:
+        progress = 100 if now >= programme['end'] else 0
+        remaining = ''
+
+    return {
+        'title': programme['title'], 'times': times, 'progress': progress,
+        'remaining': remaining, 'description': programme.get('description') or '',
+        'live': live, 'has_programme': True,
+    }
+
+
+def visible_rows(available_height, row_height):
+    """Number of whole rows that fit in available_height, at least 1."""
+    return max(1, int(available_height // row_height))
+
+
+def date_label(at_time, now, today_label, tz=None):
+    """"Today, 18 Sep" when at_time's local date matches now's local date,
+    else "Thu, 18 Sep"."""
+    local_at = utc_to_local(at_time, tz)
+    local_now = utc_to_local(now, tz)
+    day_month = '%d %s' % (local_at.day, _MONTH_ABBR[local_at.month - 1])
+    if local_at.date() == local_now.date():
+        return '%s, %s' % (today_label, day_month)
+    return '%s, %s' % (_WEEKDAY_ABBR[local_at.weekday()], day_month)

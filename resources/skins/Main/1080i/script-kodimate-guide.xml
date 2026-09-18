@@ -188,19 +188,215 @@
             </control>
         </control>
 
+        <control type="group">
+            <control type="image">
+                <posx>150</posx>
+                <posy>0</posy>
+                <width>1770</width>
+                <height>220</height>
+                <texture>white.png</texture>
+                <colordiffuse>ff181818</colordiffuse>
+            </control>
+
+            <!-- Preview slot (issue #50 mini player lands here); left empty
+                 until then so the text block's left origin never moves. -->
+            <control type="image">
+                <posx>170</posx>
+                <posy>17</posy>
+                <width>330</width>
+                <height>185</height>
+                <texture>white.png</texture>
+                <colordiffuse>ff0a0a0a</colordiffuse>
+            </control>
+
+            <control type="image">
+                <posx>530</posx>
+                <posy>20</posy>
+                <width>80</width>
+                <height>60</height>
+                <texture background="true">$INFO[Window.Property(strip_channel_logo)]</texture>
+                <aspectratio>keep</aspectratio>
+            </control>
+            <control type="label">
+                <posx>620</posx>
+                <posy>20</posy>
+                <width>700</width>
+                <height>30</height>
+                <label>$INFO[Window.Property(strip_channel_number)] $INFO[Window.Property(strip_channel_name)]</label>
+                <font>font12</font>
+                <textcolor>ffaaaaaa</textcolor>
+                <align>left</align>
+            </control>
+            <control type="label">
+                <posx>530</posx>
+                <posy>85</posy>
+                <width>900</width>
+                <height>40</height>
+                <label>$INFO[Window.Property(strip_title)]</label>
+                <font>font13</font>
+                <textcolor>ffffffff</textcolor>
+                <align>left</align>
+            </control>
+            <control type="label">
+                <posx>530</posx>
+                <posy>125</posy>
+                <width>900</width>
+                <height>26</height>
+                <label>$INFO[Window.Property(strip_times)]</label>
+                <font>font12</font>
+                <textcolor>ffaaaaaa</textcolor>
+                <align>left</align>
+            </control>
+
+            <control type="image">
+                <posx>530</posx>
+                <posy>155</posy>
+                <width>400</width>
+                <height>6</height>
+                <texture>white.png</texture>
+                <colordiffuse>ff3a3a3a</colordiffuse>
+            </control>
+            <control type="image" id="531">
+                <posx>530</posx>
+                <posy>155</posy>
+                <width>0</width>
+                <height>6</height>
+                <texture>white.png</texture>
+                <colordiffuse>ff3a6ea5</colordiffuse>
+                <visible>String.IsEqual(Window.Property(strip_live),1)</visible>
+            </control>
+            <control type="label">
+                <posx>940</posx>
+                <posy>140</posy>
+                <width>250</width>
+                <height>26</height>
+                <label>$INFO[Window.Property(strip_remaining)]</label>
+                <font>font12</font>
+                <textcolor>ff808080</textcolor>
+                <align>left</align>
+                <visible>String.IsEqual(Window.Property(strip_live),1)</visible>
+            </control>
+
+            <control type="textbox">
+                <posx>530</posx>
+                <posy>170</posy>
+                <width>900</width>
+                <height>44</height>
+                <label>$INFO[Window.Property(strip_description)]</label>
+                <font>font12</font>
+                <textcolor>ff8a8a8a</textcolor>
+            </control>
+
+            <control type="image">
+                <posx>530</posx>
+                <posy>0</posy>
+                <width>60</width>
+                <height>26</height>
+                <texture>white.png</texture>
+                <colordiffuse>ffb33a3a</colordiffuse>
+                <visible>String.IsEqual(Window.Property(strip_live),1)</visible>
+            </control>
+            <control type="label">
+                <posx>530</posx>
+                <posy>0</posy>
+                <width>60</width>
+                <height>26</height>
+                <label>$ADDON[script.kodimate 32126]</label>
+                <font>font12</font>
+                <align>center</align>
+                <aligny>center</aligny>
+                <textcolor>ffffffff</textcolor>
+                <visible>String.IsEqual(Window.Property(strip_live),1)</visible>
+            </control>
+            <control type="image">
+                <posx>598</posx>
+                <posy>0</posy>
+                <width>50</width>
+                <height>26</height>
+                <texture>white.png</texture>
+                <colordiffuse>ff2a4e75</colordiffuse>
+                <visible>String.IsEqual(Window.Property(strip_hd),1)</visible>
+            </control>
+            <control type="label">
+                <posx>598</posx>
+                <posy>0</posy>
+                <width>50</width>
+                <height>26</height>
+                <label>$ADDON[script.kodimate 32127]</label>
+                <font>font12</font>
+                <align>center</align>
+                <aligny>center</aligny>
+                <textcolor>ffffffff</textcolor>
+                <visible>String.IsEqual(Window.Property(strip_hd),1)</visible>
+            </control>
+            <control type="image">
+                <posx>656</posx>
+                <posy>0</posy>
+                <width>90</width>
+                <height>26</height>
+                <texture>white.png</texture>
+                <colordiffuse>ff2a4e75</colordiffuse>
+                <visible>String.IsEqual(Window.Property(strip_catchup),1)</visible>
+            </control>
+            <control type="label">
+                <posx>656</posx>
+                <posy>0</posy>
+                <width>90</width>
+                <height>26</height>
+                <label>$ADDON[script.kodimate 32128]</label>
+                <font>font12</font>
+                <align>center</align>
+                <aligny>center</aligny>
+                <textcolor>ffffffff</textcolor>
+                <visible>String.IsEqual(Window.Property(strip_catchup),1)</visible>
+            </control>
+
+            <control type="label">
+                <posx>1620</posx>
+                <posy>20</posy>
+                <width>250</width>
+                <height>30</height>
+                <label>$INFO[System.Time]</label>
+                <font>font13</font>
+                <align>right</align>
+                <textcolor>ffffffff</textcolor>
+            </control>
+            <control type="label">
+                <posx>1620</posx>
+                <posy>55</posy>
+                <width>250</width>
+                <height>26</height>
+                <label>$INFO[System.Date]</label>
+                <font>font12</font>
+                <align>right</align>
+                <textcolor>ffaaaaaa</textcolor>
+            </control>
+        </control>
+
         <control type="label">
             <posx>150</posx>
-            <posy>0</posy>
+            <posy>220</posy>
             <width>300</width>
-            <height>60</height>
+            <height>30</height>
             <label>$INFO[Window.Property(guide_filter)]</label>
             <align>center</align>
             <aligny>center</aligny>
             <textcolor>ffaaaaaa</textcolor>
         </control>
+        <control type="label">
+            <posx>150</posx>
+            <posy>250</posy>
+            <width>300</width>
+            <height>30</height>
+            <label>$INFO[Window.Property(strip_date)]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font12</font>
+            <textcolor>ff808080</textcolor>
+        </control>
         <control type="label" id="510">
             <posx>450</posx>
-            <posy>0</posy>
+            <posy>220</posy>
             <width>245</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header0)]</label>
@@ -210,7 +406,7 @@
         </control>
         <control type="label" id="511">
             <posx>695</posx>
-            <posy>0</posy>
+            <posy>220</posy>
             <width>245</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header1)]</label>
@@ -220,7 +416,7 @@
         </control>
         <control type="label" id="512">
             <posx>940</posx>
-            <posy>0</posy>
+            <posy>220</posy>
             <width>245</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header2)]</label>
@@ -230,7 +426,7 @@
         </control>
         <control type="label" id="513">
             <posx>1185</posx>
-            <posy>0</posy>
+            <posy>220</posy>
             <width>245</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header3)]</label>
@@ -240,7 +436,7 @@
         </control>
         <control type="label" id="514">
             <posx>1430</posx>
-            <posy>0</posy>
+            <posy>220</posy>
             <width>245</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header4)]</label>
@@ -250,7 +446,7 @@
         </control>
         <control type="label" id="515">
             <posx>1675</posx>
-            <posy>0</posy>
+            <posy>220</posy>
             <width>245</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header5)]</label>
@@ -261,9 +457,9 @@
 
         <control type="list" id="500">
             <posx>150</posx>
-            <posy>60</posy>
+            <posy>280</posy>
             <width>300</width>
-            <height>980</height>
+            <height>800</height>
             <onleft>500</onleft>
             <onright>500</onright>
             <onup>500</onup>
@@ -326,9 +522,9 @@
 
         <control type="image">
             <posx>448</posx>
-            <posy>60</posy>
+            <posy>280</posy>
             <width>2</width>
-            <height>980</height>
+            <height>800</height>
             <texture>white.png</texture>
             <colordiffuse>ff3a3a3a</colordiffuse>
         </control>

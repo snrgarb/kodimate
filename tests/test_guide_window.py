@@ -732,11 +732,11 @@ def test_vertical_row_scroll_is_instant(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
-        for i in range(guide.VISIBLE_ROWS + 1):
+        for i in range(win_guide._VISIBLE_ROWS + 1):
             _channel(conn, pid, "c%d" % i, "Chan %d" % i, i)
         window = _window(conn)
         list_control = window.getControl(CHANNEL_LIST_ID)
-        list_control.selectItem(guide.VISIBLE_ROWS)
+        list_control.selectItem(win_guide._VISIBLE_ROWS)
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
 
@@ -1021,16 +1021,16 @@ def test_generation_change_keeps_channel_focus_and_viewport_offset(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
-        for i in range(guide.VISIBLE_ROWS + 2):
+        for i in range(win_guide._VISIBLE_ROWS + 2):
             _channel(conn, pid, "c%d" % i, "Chan%d" % i, i)
         window = _window(conn)
         list_control = window.getControl(CHANNEL_LIST_ID)
-        list_control.selectItem(guide.VISIBLE_ROWS)  # scrolls the viewport down
+        list_control.selectItem(win_guide._VISIBLE_ROWS)  # scrolls the viewport down
         window._handle_vertical_move()
         old_top_row = window._top_row
         old_offset = list_control.getSelectedPosition() - old_top_row
 
-        conn.execute("UPDATE channel SET name = 'Renamed' WHERE channel_key = 'c%d' " % guide.VISIBLE_ROWS)
+        conn.execute("UPDATE channel SET name = 'Renamed' WHERE channel_key = 'c%d' " % win_guide._VISIBLE_ROWS)
         _bump_generation(2)
         _notify_refreshed(window)
 
@@ -1994,3 +1994,243 @@ def test_focus_channel_id_outside_filtered_rows_defaults_to_first_row(tmp_path):
         assert window._top_row == 0
     finally:
         conn.close()
+
+
+# -- Programme detail strip (issue #54) --------------------------------------
+
+def test_strip_properties_after_init_for_programme_airing_now(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        conn.execute(
+            "UPDATE channel SET catchup_days = 3, logo_url = 'http://x/alpha.png' WHERE id = ?",
+            (cid,),
+        )
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        start = now - timedelta(minutes=30)
+        end = now + timedelta(minutes=30)
+        _programme(conn, eid, "x1", guide.format_iso(start), guide.format_iso(end),
+                   "Current Show", "About the current show")
+
+        class _LocalGuideWindow(GuideWindow):
+            _tz = timezone(timedelta(hours=9, minutes=30))
+
+        window = _LocalGuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i', conn=conn)
+        window.onInit()
+
+        assert window.getProperty('strip_channel_name') == 'Alpha'
+        assert window.getProperty('strip_channel_number') == '0'
+        assert window.getProperty('strip_channel_logo') == 'http://x/alpha.png'
+        assert window.getProperty('strip_title') == 'Current Show'
+        assert window.getProperty('strip_description') == 'About the current show'
+        assert window.getProperty('strip_live') == '1'
+        assert window.getProperty('strip_catchup') == '1'
+        assert int(window.getProperty('strip_progress')) > 0
+        assert window.getProperty('strip_remaining') != ''
+
+        start_local = guide.utc_to_local(start, tz=window._tz)
+        end_local = guide.utc_to_local(end, tz=window._tz)
+        expected_times = '%s - %s (1h)' % (start_local.strftime('%H:%M'), end_local.strftime('%H:%M'))
+        assert window.getProperty('strip_times') == expected_times
+        assert window.getProperty('strip_date').startswith('String 32130')
+    finally:
+        conn.close()
+
+
+def test_strip_channel_with_no_programmes_shows_no_information(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+
+        assert window.getProperty('strip_title') == 'String 32083'
+        assert window.getProperty('strip_times') == ''
+        assert window.getProperty('strip_live') == ''
+        assert window.getProperty('strip_hd') == ''
+        assert window.getProperty('strip_catchup') == ''
+    finally:
+        conn.close()
+
+
+def test_strip_no_programme_shows_no_badges_even_when_channel_qualifies(tmp_path):
+    # issue #54: "A channel with no programme shows 'No information' and no
+    # badges" -- an HD-named, catch-up-enabled channel must not leak its HD
+    # or Catch-up badge (or LIVE) onto the strip when there is no programme
+    # under the cursor.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha HD", 0)
+        conn.execute("UPDATE channel SET catchup_days = 3 WHERE id = ?", (cid,))
+        window = _window(conn)
+
+        assert window.getProperty('strip_title') == 'String 32083'
+        assert window.getProperty('strip_live') == ''
+        assert window.getProperty('strip_hd') == ''
+        assert window.getProperty('strip_catchup') == ''
+    finally:
+        conn.close()
+
+
+def test_strip_no_badges_in_gap_between_programmes(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha HD", 0, epg_channel_id="x1")
+        conn.execute("UPDATE channel SET catchup_days = 3 WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        # Programme ends well before the cursor time (viewport_start), so
+        # the cursor sits in the trailing gap.
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start - timedelta(hours=1)),
+                   guide.format_iso(viewport_start - timedelta(minutes=30)), "Before")
+        window._load_programmes()
+        window._relayout()
+
+        assert window.getProperty('strip_title') == 'String 32083'
+        assert window.getProperty('strip_live') == ''
+        assert window.getProperty('strip_hd') == ''
+        assert window.getProperty('strip_catchup') == ''
+    finally:
+        conn.close()
+
+
+def test_strip_hd_flag_set_for_hd_channel_name(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha HD", 0, epg_channel_id="x1")
+        _channel(conn, pid, "b", "Beta", 1)
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
+        window._load_programmes()
+        window._relayout()
+
+        assert window.getProperty('strip_hd') == '1'
+
+        window.getControl(CHANNEL_LIST_ID).selectItem(1)
+        window._handle_vertical_move()
+
+        assert window.getProperty('strip_hd') == ''
+    finally:
+        conn.close()
+
+
+def test_strip_follows_focused_row_after_down(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        _channel(conn, pid, "b", "Beta", 1, epg_channel_id="x2")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x2", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Beta Show")
+        window._load_programmes()
+        window._relayout()
+
+        window.getControl(CHANNEL_LIST_ID).selectItem(1)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
+
+        assert window.getProperty('strip_channel_name') == 'Beta'
+        assert window.getProperty('strip_title') == 'Beta Show'
+    finally:
+        conn.close()
+
+
+def test_strip_follows_cursor_into_future_cell_on_right(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start + timedelta(hours=1)),
+                   guide.format_iso(viewport_start + timedelta(hours=2)), "Show B")
+        window._load_programmes()
+        window._relayout()
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # column -> grid, cell 0
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # cell 0 -> cell 1 (future)
+
+        assert window.getProperty('strip_title') == 'Show B'
+        assert window.getProperty('strip_live') == ''
+        assert window.getProperty('strip_remaining') == ''
+    finally:
+        conn.close()
+
+
+def test_strip_shows_first_row_after_applying_group(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn, name="P1")
+        gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
+            (pid,),
+        ).lastrowid
+        _channel(conn, pid, "a", "Alpha", 0)
+        cid_b = _channel(conn, pid, "b", "Beta", 1, epg_channel_id="x2")
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_b))
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x2", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Beta Show")
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # open panel
+        panel = window.getControl(win_guide.PANEL_LIST_ID)
+        panel.selectItem(3)  # 'Sports'
+
+        window.onClick(win_guide.PANEL_LIST_ID)
+
+        assert window.getProperty('strip_channel_name') == 'Beta'
+        assert window.getProperty('strip_title') == 'Beta Show'
+    finally:
+        conn.close()
+
+
+def test_strip_shows_renamed_programme_after_generation_refresh(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        now = datetime.utcnow()
+        start = now - timedelta(minutes=30)
+        end = now + timedelta(minutes=30)
+        pid_row = _programme(conn, eid, "x1", guide.format_iso(start), guide.format_iso(end), "Old Title")
+        window._load_programmes()
+        window._relayout()
+
+        conn.execute("UPDATE programme SET title = 'New Title' WHERE epg_source_id = ?", (eid,))
+        _bump_generation(2)
+        _notify_refreshed(window)
+
+        assert window.getProperty('strip_title') == 'New Title'
+    finally:
+        conn.close()
+
+
+def test_strip_property_names_appear_in_skin():
+    with open(_SKIN_XML) as f:
+        xml_text = f.read()
+    for prop in (
+        'strip_title', 'strip_live', 'strip_hd', 'strip_catchup',
+        'strip_times', 'strip_remaining', 'strip_description',
+        'strip_channel_logo', 'strip_channel_name', 'strip_channel_number', 'strip_date',
+    ):
+        assert prop in xml_text
+    assert 'System.Time' in xml_text
+
+

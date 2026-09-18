@@ -25,14 +25,24 @@ _STR_NO_INFO = 32083
 _STR_ALL_CHANNELS = 32038
 _STR_FAVOURITES = 32039
 _STR_GROUPS = 32125
+_STR_REMAINING = 32129
+_STR_TODAY = 32130
 
 _RAIL_WIDTH = 150
 _LEFT_COL_WIDTH = 300
 _GRID_X = _RAIL_WIDTH + _LEFT_COL_WIDTH
+_STRIP_HEIGHT = 220
 _HEADER_HEIGHT = 60
 _ROW_HEIGHT = 98
 _GRID_WIDTH = 1920 - _GRID_X
 _POOL_COLS = 28  # real EPG data can pack ~24 short programmes into a 3h window
+
+# Visible row count derives from the height left over below the strip and
+# the sticky time header, replacing guide.VISIBLE_ROWS's fixed constant.
+_VISIBLE_ROWS = guide.visible_rows(1080 - _STRIP_HEIGHT - _HEADER_HEIGHT, _ROW_HEIGHT)
+
+_STRIP_PROGRESS_FILL_ID = 531
+_STRIP_PROGRESS_WIDTH = 400
 
 _HEADER_SLOTS = 6  # 3 hours in 30-minute slots
 _SLOT_MINUTES = 30
@@ -122,7 +132,7 @@ class GuideWindow(BaseWindow):
         index = guide.initial_cursor_index(self._channel_rows, self.focus_channel_id)
         if self._channel_rows:
             self.getControl(CHANNEL_LIST_ID).selectItem(index)
-        self._top_row = guide.compute_top_row(0, index)
+        self._top_row = guide.compute_top_row(0, index, visible_rows=_VISIBLE_ROWS)
         self._last_selected = index
         self._update_filter_header()
         self._build_pool()
@@ -209,7 +219,7 @@ class GuideWindow(BaseWindow):
                     new_index = min(selected, len(self._channel_rows) - 1) if self._channel_rows else 0
 
             top_row = new_index - old_offset
-            max_top = max(0, len(self._channel_rows) - guide.VISIBLE_ROWS)
+            max_top = max(0, len(self._channel_rows) - _VISIBLE_ROWS)
             self._top_row = max(0, min(top_row, max_top))
 
         if self._channel_rows:
@@ -535,7 +545,7 @@ class GuideWindow(BaseWindow):
     def _build_pool(self):
         self._pool = []
         added = []
-        for _row in range(guide.VISIBLE_ROWS):
+        for _row in range(_VISIBLE_ROWS):
             row_pool = []
             for _col in range(_POOL_COLS):
                 image = xbmcgui.ControlImage(0, 0, 1, _ROW_HEIGHT - 2, self._tex_cell)
@@ -559,7 +569,7 @@ class GuideWindow(BaseWindow):
         # order for Python-created controls) puts it above every cell.
         addon_path = xbmcaddon.Addon().getAddonInfo('path')
         self.now_line = xbmcgui.ControlImage(
-            0, _HEADER_HEIGHT, 2, guide.VISIBLE_ROWS * _ROW_HEIGHT,
+            0, _STRIP_HEIGHT + _HEADER_HEIGHT, 2, _VISIBLE_ROWS * _ROW_HEIGHT,
             _abs_path(addon_path, _NOW_LINE_RELPATH))
         self.addControl(self.now_line)
         self.now_line.setColorDiffuse('FFFF3333')
@@ -573,13 +583,58 @@ class GuideWindow(BaseWindow):
         self.now_line.setVisible(visible)
         if visible:
             x = int(_GRID_X + minutes_from_view * px_per_min)
-            self.now_line.setPosition(x, _HEADER_HEIGHT)
+            self.now_line.setPosition(x, _STRIP_HEIGHT + _HEADER_HEIGHT)
 
     def _update_header(self):
         for i in range(_HEADER_SLOTS):
             t = self._viewport_start + timedelta(minutes=i * _SLOT_MINUTES)
             local_t = guide.utc_to_local(t, self._tz)
             self.setProperty('guide_header%d' % i, local_t.strftime('%H:%M'))
+
+    def _update_strip(self):
+        addon = xbmcaddon.Addon()
+        now = datetime.utcnow()
+        selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
+        row = self._channel_rows[selected] if 0 <= selected < len(self._channel_rows) else None
+
+        if row is not None:
+            if self._zone == 'grid':
+                at_time = self._cursor_time
+            elif self._viewport_start <= now < guide.viewport_end(self._viewport_start):
+                at_time = now
+            else:
+                at_time = self._cursor_time
+            programmes = self._programmes_by_channel.get(row['id'], [])
+            window_days = self._window_days_for_channel(selected)
+            hd = guide.is_hd_name(row['name'])
+        else:
+            at_time = now
+            programmes = []
+            window_days = None
+            hd = False
+
+        values = guide.strip_values(programmes, at_time, now, self._no_info_title, tz=self._tz)
+
+        self.setProperty('strip_channel_logo', (row.get('logo_url') or '') if row else '')
+        self.setProperty('strip_channel_name', row['name'] if row else '')
+        self.setProperty('strip_channel_number', str(row['number']) if row else '')
+        self.setProperty('strip_title', values['title'])
+        self.setProperty('strip_times', values['times'])
+        self.setProperty('strip_progress', str(values['progress']))
+        remaining = addon.getLocalizedString(_STR_REMAINING) % values['remaining'] if values['remaining'] else ''
+        self.setProperty('strip_remaining', remaining)
+        self.setProperty('strip_description', values['description'])
+        has_programme = values['has_programme']
+        self.setProperty('strip_live', '1' if values['live'] else '')
+        self.setProperty('strip_hd', '1' if has_programme and hd else '')
+        self.setProperty('strip_catchup', '1' if has_programme and window_days else '')
+        self.setProperty(
+            'strip_date',
+            guide.date_label(at_time, now, addon.getLocalizedString(_STR_TODAY), tz=self._tz),
+        )
+        self.getControl(_STRIP_PROGRESS_FILL_ID).setWidth(
+            int(_STRIP_PROGRESS_WIDTH * values['progress'] / 100.0)
+        )
 
     # -- data --------------------------------------------------------------
 
@@ -630,7 +685,7 @@ class GuideWindow(BaseWindow):
                     desc_label.setVisible(False)
 
             selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
-            self._top_row = guide.compute_top_row(self._top_row, selected)
+            self._top_row = guide.compute_top_row(self._top_row, selected, visible_rows=_VISIBLE_ROWS)
             focused_row = selected - self._top_row
             now = datetime.utcnow()
 
@@ -638,7 +693,7 @@ class GuideWindow(BaseWindow):
             self._row_cells = []
             to_show = []
 
-            for row in range(guide.VISIBLE_ROWS):
+            for row in range(_VISIBLE_ROWS):
                 channel_index = self._top_row + row
                 cells = []
                 if channel_index < len(self._channel_rows):
@@ -647,7 +702,7 @@ class GuideWindow(BaseWindow):
                         programmes, self._viewport_start, _GRID_WIDTH, self._no_info_title
                     )
                     window_days = self._window_days_for_channel(channel_index)
-                    y = _HEADER_HEIGHT + row * _ROW_HEIGHT
+                    y = _STRIP_HEIGHT + _HEADER_HEIGHT + row * _ROW_HEIGHT
                     row_pool = self._pool[row]
                     cursor_cell = guide.resolve_cursor(layout_cells, self._cursor_time) \
                         if row == focused_row and self._zone == 'grid' else None
@@ -671,6 +726,7 @@ class GuideWindow(BaseWindow):
                 label.setVisible(True)
                 desc_label.setVisible(True)
             self._update_now_line()
+            self._update_strip()
 
     def _state_for_cell(self, cell, window_days, now):
         if cell['filler']:
@@ -744,6 +800,8 @@ class GuideWindow(BaseWindow):
             self._cursor_time = new_time
             if not self._swap_cursor_cell(focused_row, old_time, new_time):
                 self._relayout()
+            else:
+                self._update_strip()
             return
 
         # The cursor cell touches the viewport's edge in this direction:
@@ -817,7 +875,7 @@ class GuideWindow(BaseWindow):
             return
 
         prev_top = self._top_row
-        new_top = guide.compute_top_row(self._top_row, selected)
+        new_top = guide.compute_top_row(self._top_row, selected, visible_rows=_VISIBLE_ROWS)
         if new_top != prev_top:
             self._relayout()
             self._last_selected = selected
@@ -827,6 +885,8 @@ class GuideWindow(BaseWindow):
         new_row = selected - prev_top
         if not self._swap_cursor_row(old_row, new_row):
             self._relayout()
+        else:
+            self._update_strip()
         self._last_selected = selected
 
     def _swap_cursor_row(self, old_row, new_row):

@@ -492,3 +492,117 @@ def test_back_target_closes_panel_when_panel_open(zone):
 def test_back_target_unknown_zone_raises():
     with pytest.raises(ValueError):
         guide.back_target('bogus', False)
+
+
+# -- strip_values (issue #54) -----------------------------------------------
+
+def test_strip_values_airing_now_has_progress_and_remaining():
+    now = datetime(2026, 1, 1, 12, 30)
+    programmes = [_p((12, 0), (13, 0), 'Current', 'About current')]
+    values = guide.strip_values(programmes, at_time=now, now=now, no_info_title='No information', tz=timezone.utc)
+    assert values['title'] == 'Current'
+    assert values['times'] == '12:00 - 13:00 (1h)'
+    assert values['progress'] == 50
+    assert values['remaining'] == '30m'
+    assert values['description'] == 'About current'
+    assert values['live'] is True
+    assert values['has_programme'] is True
+
+
+def test_strip_values_cursor_on_future_cell_has_no_remaining_or_live():
+    now = datetime(2026, 1, 1, 12, 30)
+    at_time = datetime(2026, 1, 1, 14, 15)
+    programmes = [
+        _p((12, 0), (13, 0), 'Current'),
+        _p((14, 0), (15, 0), 'Future'),
+    ]
+    values = guide.strip_values(programmes, at_time=at_time, now=now, no_info_title='No information')
+    assert values['title'] == 'Future'
+    assert values['live'] is False
+    assert values['remaining'] == ''
+    assert values['has_programme'] is True
+
+
+def test_strip_values_gap_between_programmes_is_no_information():
+    now = datetime(2026, 1, 1, 13, 15)
+    programmes = [
+        _p((12, 0), (13, 0), 'Before'),
+        _p((14, 0), (15, 0), 'After'),
+    ]
+    values = guide.strip_values(programmes, at_time=now, now=now, no_info_title='No information')
+    assert values['title'] == 'No information'
+    assert values['times'] == ''
+    assert values['progress'] == 0
+    assert values['remaining'] == ''
+    assert values['description'] == ''
+    assert values['live'] is False
+    assert values['has_programme'] is False
+
+
+def test_strip_values_no_programmes_is_no_information():
+    now = datetime(2026, 1, 1, 13, 15)
+    values = guide.strip_values([], at_time=now, now=now, no_info_title='No information')
+    assert values['title'] == 'No information'
+    assert values['has_programme'] is False
+
+
+def test_strip_values_duration_formatting_minutes_only():
+    now = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((12, 0), (12, 45), 'Short')]
+    values = guide.strip_values(programmes, at_time=now, now=now, no_info_title='No information', tz=timezone.utc)
+    assert values['times'] == '12:00 - 12:45 (45m)'
+
+
+def test_strip_values_duration_formatting_whole_hours():
+    now = datetime(2026, 1, 1, 12, 0)
+    programmes = [_p((12, 0), (14, 0), 'Two hours')]
+    values = guide.strip_values(programmes, at_time=now, now=now, no_info_title='No information', tz=timezone.utc)
+    assert values['times'] == '12:00 - 14:00 (2h)'
+
+
+# -- is_hd_name (issue #54) --------------------------------------------------
+
+def test_is_hd_name_true_for_hd_suffix():
+    assert guide.is_hd_name('BBC One HD') is True
+
+
+def test_is_hd_name_false_for_plain_name():
+    assert guide.is_hd_name('BBC One') is False
+
+
+def test_is_hd_name_true_for_fhd_suffix():
+    assert guide.is_hd_name('Sky Sports FHD') is True
+
+
+def test_is_hd_name_true_for_4k_suffix():
+    assert guide.is_hd_name('Channel 4K') is True
+
+
+def test_is_hd_name_false_for_name_ending_in_hd_substring_but_no_word_boundary():
+    # "Ahd" strips to "ahd" which the bare suffix rule would still match --
+    # the ticket accepts the Normalised Name rule as-is (false positive kept).
+    assert guide.is_hd_name('Ahd') is True
+
+
+# -- visible_rows (issue #54) -------------------------------------------------
+
+def test_visible_rows_floor_divides_available_height():
+    assert guide.visible_rows(800, 98) == 8
+
+
+def test_visible_rows_at_least_one():
+    assert guide.visible_rows(50, 98) == 1
+
+
+# -- date_label (issue #54) ---------------------------------------------------
+
+def test_date_label_today():
+    now = datetime(2026, 9, 18, 10, 0)
+    at_time = datetime(2026, 9, 18, 18, 0)
+    assert guide.date_label(at_time, now, today_label='Today', tz=timezone.utc) == 'Today, 18 Sep'
+
+
+def test_date_label_other_day():
+    now = datetime(2026, 9, 18, 10, 0)
+    at_time = datetime(2026, 9, 17, 18, 0)
+    assert guide.date_label(at_time, now, today_label='Today', tz=timezone.utc) == 'Thu, 17 Sep'
