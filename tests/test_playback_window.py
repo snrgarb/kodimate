@@ -424,6 +424,7 @@ def test_ok_on_channel_row_zaps_and_closes_list(tmp_path):
     channels_control.selectItem(target_position)
 
     window.onClick(201)
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert window.getProperty('list_visible') == '0'
     assert window.getProperty('channel_name') == 'Bravo'
@@ -520,6 +521,7 @@ def test_bar_shows_new_channel_name_while_connecting_after_zap(tmp_path):
     window.onInit()
 
     window._zap(provider_id, 'b')
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert window.getProperty('channel_name') == 'Bravo'
     assert window.session.state == 'connecting'
@@ -671,6 +673,9 @@ def test_zap_during_connecting_cancels_timer_and_stops_player(tmp_path):
 
     assert window.player.stop_calls > stops_before
     assert window.player.detached is old_session
+
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
+
     assert window.getProperty('channel_name') == 'Bravo'
 
 
@@ -821,6 +826,7 @@ def test_probe_in_flight_discarded_when_aborted_by_zap(tmp_path):
     window.onInit()
 
     window.session.on_error()
+    window.scheduler.advance(3)  # pending-transition fallback: no stop callback arrives here
 
     assert events == ['probe-start', 'probe-end']
     assert window.getProperty('channel_name') == 'Bravo'
@@ -1112,6 +1118,7 @@ def test_zap_updates_last_channel(tmp_path):
     window.onInit()
 
     window._zap(provider_id, 'b')
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert autoplay.resolve_autoplay_channel(conn) == (provider_id, 'b')
 
@@ -1197,6 +1204,7 @@ def test_zap_clears_stream_properties(tmp_path):
     window.setProperty('stream_audio', 'EAC3 5.1')
 
     window._zap(provider_id, 'b')
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert window.getProperty('stream_res') == ''
     assert window.getProperty('stream_fps') == ''
@@ -1293,6 +1301,7 @@ def test_step_commits_after_debounce_with_exactly_one_play(tmp_path):
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
     window.scheduler.advance(1.5)
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert len(window.player.plays) == plays_before + 1
     assert window.catchup is not None
@@ -1319,6 +1328,7 @@ def test_rapid_left_presses_commit_only_once(tmp_path):
     assert window.getProperty('now_title') == 'Show1'
 
     window.scheduler.advance(1.5)
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert len(window.player.plays) == plays_before + 1
     assert window.catchup['title'] == 'Show1'
@@ -1378,6 +1388,7 @@ def test_step_to_now_while_in_catchup_goes_live(tmp_path):
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
     window.scheduler.advance(1.5)
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert window.catchup is None
     assert window.getProperty('catchup') == '0'
@@ -1404,6 +1415,7 @@ def test_ok_on_bar_visible_opens_dialog_and_starts_catchup(tmp_path):
     plays_before = len(window.player.plays)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_SELECT_ITEM))
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert _Dialog.opened_with['title'] == 'Show3'
     assert 'start_over' in _Dialog.opened_with['actions']
@@ -1436,6 +1448,7 @@ def test_ok_on_bar_visible_watch_live_from_catchup(tmp_path):
     window.setFocusId(PROGRAMME_ROW_ID)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_SELECT_ITEM))
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert window.catchup is None
     assert window.getProperty('catchup') == '0'
@@ -1761,6 +1774,7 @@ def test_seek_outside_buffer_rebuilds_catchup_session(tmp_path):
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_BIG_STEP_BACK))
     window.scheduler.advance(0.75)
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert window.catchup is not None
     assert window.catchup['title'] == 'Show2'
@@ -1769,6 +1783,12 @@ def test_seek_outside_buffer_rebuilds_catchup_session(tmp_path):
 
 
 def test_seek_left_on_unseekable_live_stream_starts_over_airing_programme(tmp_path):
+    # Regression: rewind on a live, unseekable (getTotalTime()==0) TS stream
+    # used to _zap() the live URL for a still-airing programme, which the
+    # provider then refused as an immediate reconnect ("unavailable"). It
+    # must instead rebuild a Catch-up (Start Over) session for that
+    # programme, and only once the old stream's own stop callback (or the
+    # fallback) arrives -- never forwarding that stop to the new session.
     conn = _conn(tmp_path)
     provider_id, snapshot = _setup_channel_with_programmes(conn)
     now = datetime(2026, 1, 1, 12, 30)  # Show3 12:00-13:00 airing
@@ -1783,12 +1803,101 @@ def test_seek_left_on_unseekable_live_stream_starts_over_airing_programme(tmp_pa
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
     window.scheduler.advance(0.75)
 
+    # The old stream's stop callback has not arrived yet: no new play, and
+    # the OSD shows 'connecting', never a 'stopped' flash.
+    assert len(window.player.plays) == plays_before
+    assert window.getProperty('state') == 'connecting'
+
+    old_session = window.session
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
+
+    assert window.session is not old_session
     assert window.catchup is not None
     assert window.catchup['title'] == 'Show3'
     assert window.catchup['start'] == _epoch(datetime(2026, 1, 1, 12, 0))
     # now (12:30) is 1800s into Show3 (12:00-13:00); a 10s rewind targets 1790s in.
     assert window.catchup['offset'] == 1790
     assert len(window.player.plays) == plays_before + 1
+
+
+def test_seek_rebuild_fallback_starts_session_if_no_stop_arrives(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)  # Show3 12:00-13:00 airing
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0
+    window.player.time = 0
+    window.setFocusId(SEEK_ROW_ID)
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(0.75)
+    assert len(window.player.plays) == plays_before
+
+    window.scheduler.advance(3)  # no stop callback ever arrives
+
+    assert window.catchup is not None
+    assert window.catchup['title'] == 'Show3'
+    assert len(window.player.plays) == plays_before + 1
+
+
+def test_seek_rebuild_old_stream_stop_not_forwarded_to_old_session(tmp_path):
+    # The defect: the outgoing session's onPlayBackStopped/Ended, arriving
+    # after _replace_session() already asked it to abort, used to be
+    # forwarded straight to whatever `self.session` was (see
+    # _on_player_stop_or_end) -- by the time it arrived that was already
+    # the freshly-started new session, so the stale callback aborted it.
+    # It must instead be consumed to drive the deferred transition, never
+    # reach a session's on_stopped/on_ended at all.
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)  # Show3 12:00-13:00 airing
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0
+    window.player.time = 0
+    window.setFocusId(SEEK_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(0.75)
+    old_session = window.session
+    stop_forwarded = []
+    old_session.on_stopped = lambda: stop_forwarded.append(True)
+
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
+
+    assert stop_forwarded == []
+    assert window.session is not old_session
+    assert window.catchup is not None
+
+
+def test_back_while_transition_pending_cancels_it(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)  # Show3 12:00-13:00 airing
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0
+    window.player.time = 0
+    window.setFocusId(SEEK_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(0.75)
+    assert window.getProperty('state') == 'connecting'
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
+
+    assert window.getProperty('state') == 'stopped'
+    assert window._pending_transition is None
+
+    window.on_stopped()  # a late stop callback must not resurrect the transition
+
+    assert window.catchup is None
+    assert window.getProperty('state') == 'stopped'
 
 
 def test_pause_cancels_pending_seek(tmp_path):
@@ -1848,6 +1957,9 @@ def test_seek_committed_while_paused_beyond_buffer_clears_paused(tmp_path):
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_BIG_STEP_BACK))
     window.scheduler.advance(0.75)
+    assert window.getProperty('paused') == '0'  # cleared synchronously, not deferred
+
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert window.catchup is not None
     assert window.catchup['title'] == 'Show2'
@@ -1874,6 +1986,7 @@ def test_seek_forward_past_live_edge_goes_live(tmp_path):
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_BIG_STEP_FORWARD))
     window.scheduler.advance(0.75)
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert window.catchup is None
     assert window.getProperty('catchup') == '0'
@@ -1999,6 +2112,7 @@ def test_resume_beyond_buffer_starts_catchup_session(tmp_path):
 
     now.value = now.value + timedelta(hours=1)
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert window.getProperty('paused') == '0'
     assert window.catchup is not None
@@ -2044,6 +2158,7 @@ def test_back_to_live_button_click_zaps_live(tmp_path):
     window.session.on_av_started()
 
     window.onClick(BTN_LIVE_ID)
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
 
     assert window.catchup is None
     assert window.getProperty('catchup') == '0'

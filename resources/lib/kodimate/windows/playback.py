@@ -127,6 +127,8 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self._upnext_remaining = 0
         self._upnext_session_stopped = False
         self._awaiting_upnext_stop_target = _NO_UPNEXT_TARGET
+        self._pending_transition = None
+        self._pending_transition_fallback_timer = None
         self._lock = threading.RLock()
         self._paused = False
         self._paused_at = None
@@ -333,6 +335,13 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 self._cancel_upnext_fallback_timer()
                 self._advance_upnext(target)
                 return
+            if self._pending_transition is not None:
+                # The outgoing session's own stop/end callback, arriving
+                # (possibly late) after we already asked it to abort in
+                # _replace_session: run the deferred transition instead of
+                # forwarding this to whatever session is current now.
+                self._run_pending_transition()
+                return
             if self.catchup and self._playing and not self._upnext and self._near_catchup_end():
                 session = self.session
                 self._playing = False
@@ -352,20 +361,27 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         with self._lock:
             self._cancel_step_timer()
             self._step_programme = None
-            self._abort_current_session()
             snapshot = playback.load_snapshot(self.conn, provider_id, channel_key)
             if snapshot is None:
+                self._abort_current_session()
                 return
-            self.snapshot = snapshot
-            self.catchup = None
-            self._start_new_session()
+
+            def prepare():
+                self.snapshot = snapshot
+                self.catchup = None
+            self._replace_session(prepare)
 
     def _abort_current_session(self):
         """Abort the current session (if alive) and leave the window in a
         consistent, visible 'stopped' state -- never a dangling session with
-        stale 'Connecting...' properties. Used by every abort path: zap,
-        digit entry, Back with the list open, and Back leaving playback."""
+        stale 'Connecting...' properties. Used by every abort-without-
+        restart path: digit entry, Back with the list open, and Back
+        leaving playback. A transition that replaces the session with a new
+        one (zap, catch-up rebuild, ...) goes through `_replace_session`
+        instead, which never lets the outgoing session's stop/end callback
+        reach the new one."""
         self._reset_transient_playback_state()
+        self._cancel_pending_transition()
         if self.session is not None and self.getProperty('state') in _ALIVE_STATES:
             self.session.abort()
             self.player.detach(self.session)
@@ -373,6 +389,69 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self.setProperty('state', 'stopped')
             self.setProperty('status_text', '')
             self._show_bar(arm_hide=False)
+
+    def _replace_session(self, prepare):
+        """Replace the running session with a new one built by `prepare()`
+        (sets self.snapshot/self.catchup for the session `_start_new_session`
+        is about to build) without ever letting the outgoing session's
+        onPlayBackStopped/Ended reach the new one: Kodi can deliver that
+        callback (tens to hundreds of ms after `player.stop()`) well after
+        the new stream's `player.play()` already started, and forwarding it
+        there aborts the just-opened stream ("Catch-up not available" from
+        a perfectly good URL). If a session is alive, abort it, show
+        'connecting' (never 'stopped', so the OSD doesn't flash it) and
+        defer `prepare()` + `_start_new_session()` until that stop callback
+        arrives (`_on_player_stop_or_end`) or a 3s fallback fires. A second
+        call while one is already pending just replaces which `prepare`
+        eventually runs (last wins). With no alive session, run
+        immediately. Used by every "replace the running session" transition
+        (zap, seek/pause-resume catch-up rebuild, programme-step catch-up);
+        Up-next keeps its own, pre-existing await-stop mechanism."""
+        self._reset_transient_playback_state()
+        if self._pending_transition is not None:
+            self._pending_transition = prepare
+            return
+        session = self.session
+        if session is not None and self.getProperty('state') in _ALIVE_STATES:
+            self._pending_transition = prepare
+            session.abort()
+            self.player.detach(session)
+            self._playing = False
+            self.setProperty('state', 'connecting')
+            self.setProperty(
+                'status_text', xbmcaddon.Addon().getLocalizedString(_STR_CONNECTING)
+            )
+            self._show_bar(arm_hide=False)
+            self._pending_transition_fallback_timer = self.scheduler(
+                3, self._on_pending_transition_fallback
+            )
+            return
+        prepare()
+        self._start_new_session()
+
+    def _run_pending_transition(self):
+        prepare = self._pending_transition
+        self._pending_transition = None
+        self._cancel_pending_transition_fallback()
+        if prepare is None:
+            return
+        prepare()
+        self._start_new_session()
+
+    def _on_pending_transition_fallback(self):
+        with self._lock:
+            if self._pending_transition is None:
+                return
+            self._run_pending_transition()
+
+    def _cancel_pending_transition_fallback(self):
+        if self._pending_transition_fallback_timer is not None:
+            self._pending_transition_fallback_timer.cancel()
+            self._pending_transition_fallback_timer = None
+
+    def _cancel_pending_transition(self):
+        self._pending_transition = None
+        self._cancel_pending_transition_fallback()
 
     def _reset_transient_playback_state(self):
         self._paused = False
@@ -593,9 +672,11 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
 
     def _start_catchup_for(self, programme):
         with self._lock:
-            self._abort_current_session()
-            self.catchup = self._catchup_dict_for(programme, self.now_fn())
-            self._start_new_session()
+            now = self.now_fn()
+
+            def prepare():
+                self.catchup = self._catchup_dict_for(programme, now)
+            self._replace_session(prepare)
 
     def _referenced_programme(self):
         if self._step_programme is not None:
@@ -797,9 +878,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             unavailable()
             return
         offset = target_epoch - _epoch(programme['start'])
-        self._abort_current_session()
-        self.catchup = self._catchup_dict_for(programme, now, offset=offset)
-        self._start_new_session()
+
+        def prepare():
+            self.catchup = self._catchup_dict_for(programme, now, offset=offset)
+        self._replace_session(prepare)
 
     def _rebuild_for_target(self, target_epoch):
         def unavailable():
@@ -1324,4 +1406,5 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self._cancel_seek_timer()
         self._cancel_upnext_timer()
         self._cancel_upnext_fallback_timer()
+        self._cancel_pending_transition_fallback()
         super(PlaybackWindow, self).close()
