@@ -26,25 +26,11 @@
             <textcolor>ffcccccc</textcolor>
             <focusedcolor>ffffffff</focusedcolor>
             <onup>204</onup>
-            <ondown>200</ondown>
-        </control>
-        <control type="button" id="200">
-            <posx>80</posx>
-            <posy>220</posy>
-            <width>360</width>
-            <height>60</height>
-            <label>$ADDON[script.kodimate 32007]</label>
-            <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
-            <texturenofocus colordiffuse="ff202020">white.png</texturenofocus>
-            <textcolor>ffcccccc</textcolor>
-            <focusedcolor>ffffffff</focusedcolor>
-            <onup>201</onup>
             <ondown>202</ondown>
-            <onclick>RunScript(script.kodimate,providers)</onclick>
         </control>
         <control type="button" id="202">
             <posx>80</posx>
-            <posy>300</posy>
+            <posy>220</posy>
             <width>360</width>
             <height>60</height>
             <label>$ADDON[script.kodimate 32082]</label>
@@ -52,12 +38,12 @@
             <texturenofocus colordiffuse="ff202020">white.png</texturenofocus>
             <textcolor>ffcccccc</textcolor>
             <focusedcolor>ffffffff</focusedcolor>
-            <onup>200</onup>
+            <onup>201</onup>
             <ondown>203</ondown>
         </control>
         <control type="button" id="203">
             <posx>80</posx>
-            <posy>380</posy>
+            <posy>300</posy>
             <width>360</width>
             <height>60</height>
             <label>$ADDON[script.kodimate 32110]</label>
@@ -70,7 +56,7 @@
         </control>
         <control type="button" id="204">
             <posx>80</posx>
-            <posy>473</posy>
+            <posy>393</posy>
             <width>360</width>
             <height>60</height>
             <label>$ADDON[script.kodimate 32116]</label>
