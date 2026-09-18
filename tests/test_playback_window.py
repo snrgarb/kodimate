@@ -264,6 +264,30 @@ def test_bar_shows_number_logo_name_now_next_and_times(tmp_path):
     assert window.getProperty('bar_visible') == '1'
 
 
+def test_osd_position_defaults_to_top(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot, osd_position=None)
+
+    assert window.getProperty('osd_position') == 'top'
+
+
+def test_osd_position_bottom_override(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot, osd_position='bottom')
+
+    assert window.getProperty('osd_position') == 'bottom'
+
+
+def test_osd_position_invalid_value_normalises_to_top(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot, osd_position='sideways')
+
+    assert window.getProperty('osd_position') == 'top'
+
+
 def test_bar_shows_no_information_when_no_programme(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)

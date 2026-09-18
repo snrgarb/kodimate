@@ -467,3 +467,15 @@ msgstr ""
 msgctxt "#32112"
 msgid "Yesterday"
 msgstr ""
+
+msgctxt "#32113"
+msgid "Top"
+msgstr ""
+
+msgctxt "#32114"
+msgid "Bottom"
+msgstr ""
+
+msgctxt "#32115"
+msgid "OSD position"
+msgstr ""

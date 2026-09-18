@@ -83,6 +83,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
     clock = None
     persist_learned_form = None
     osd_hide_seconds = None
+    osd_position = None
     number_commit_delay = None
     now_fn = None
     session = None
@@ -117,6 +118,10 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self._upnext_session_stopped = False
         self._awaiting_upnext_stop_target = _NO_UPNEXT_TARGET
         self._lock = threading.RLock()
+        if self.osd_position is None:
+            self.osd_position = self._addon_setting_string('osd_position', 'top')
+        if self.osd_position != 'bottom':
+            self.osd_position = 'top'
         # Set before doModal() draws the first frame: WindowXMLDialog
         # honours setProperty() called here, so the spinner and channel
         # labels are already correct on frame one instead of appearing a
@@ -124,6 +129,7 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         self.setProperty('state', 'connecting')
         self.setProperty('status_text', xbmcaddon.Addon().getLocalizedString(_STR_CONNECTING))
         self.setProperty('bar_visible', '1')
+        self.setProperty('osd_position', self.osd_position)
         self.setProperty('list_visible', '0')
         self.setProperty('digits', '')
         self.setProperty('catchup', '1' if self.catchup else '0')
@@ -222,6 +228,14 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             value = xbmcaddon.Addon().getSettingNumber(key)
         except Exception:
             value = 0
+        return value if value else default
+
+    @staticmethod
+    def _addon_setting_string(key, default):
+        try:
+            value = xbmcaddon.Addon().getSettingString(key)
+        except Exception:
+            value = ''
         return value if value else default
 
     def _persist_learned_form(self, provider_id, form):

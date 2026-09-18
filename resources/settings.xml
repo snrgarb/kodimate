@@ -56,6 +56,17 @@
                     </constraints>
                     <control type="slider" format="integer"/>
                 </setting>
+                <setting id="osd_position" type="string" label="32115">
+                    <level>0</level>
+                    <default>top</default>
+                    <constraints>
+                        <options>
+                            <option label="32113">top</option>
+                            <option label="32114">bottom</option>
+                        </options>
+                    </constraints>
+                    <control type="list" format="string"/>
+                </setting>
                 <setting id="number_commit_delay" type="number" label="32092">
                     <level>0</level>
                     <default>1.5</default>
