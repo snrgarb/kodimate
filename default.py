@@ -21,7 +21,10 @@ def run():
     conn = db.open_db(os.path.join(profile, 'kodimate.db'))
     try:
         arg = sys.argv[1] if len(sys.argv) > 1 else None
-        if arg == 'providers' or providers.count_enabled(conn) == 0:
+        if arg == 'providers':
+            ProvidersWindow.open(conn=conn)
+            return
+        if providers.count_enabled(conn) == 0:
             ProvidersWindow.open(conn=conn)
         else:
             if addon.getSettingBool('autoplay_last_channel'):
