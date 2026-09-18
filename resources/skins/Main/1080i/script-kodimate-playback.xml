@@ -344,15 +344,19 @@
                 <height>60</height>
                 <orientation>horizontal</orientation>
                 <itemgap>12</itemgap>
-                <control type="button" id="712">
+                <control type="group">
                     <width>60</width>
                     <height>60</height>
-                    <onup>712</onup>
-                    <ondown>712</ondown>
-                    <onleft>712</onleft>
-                    <texturefocus colordiffuse="4dffffff">white.png</texturefocus>
-                    <texturenofocus colordiffuse="00ffffff">white.png</texturenofocus>
-                    <label></label>
+                    <control type="button" id="712">
+                        <width>60</width>
+                        <height>60</height>
+                        <onup>712</onup>
+                        <ondown>712</ondown>
+                        <onleft>712</onleft>
+                        <texturefocus colordiffuse="66ffffff">white.png</texturefocus>
+                        <texturenofocus colordiffuse="20ffffff">white.png</texturenofocus>
+                        <label></label>
+                    </control>
                     <control type="image">
                         <posx>6</posx>
                         <posy>6</posy>
@@ -361,14 +365,18 @@
                         <texture>rewind.png</texture>
                     </control>
                 </control>
-                <control type="button" id="713">
+                <control type="group">
                     <width>60</width>
                     <height>60</height>
-                    <onup>713</onup>
-                    <ondown>713</ondown>
-                    <texturefocus colordiffuse="4dffffff">white.png</texturefocus>
-                    <texturenofocus colordiffuse="00ffffff">white.png</texturenofocus>
-                    <label></label>
+                    <control type="button" id="713">
+                        <width>60</width>
+                        <height>60</height>
+                        <onup>713</onup>
+                        <ondown>713</ondown>
+                        <texturefocus colordiffuse="66ffffff">white.png</texturefocus>
+                        <texturenofocus colordiffuse="20ffffff">white.png</texturenofocus>
+                        <label></label>
+                    </control>
                     <control type="image">
                         <posx>6</posx>
                         <posy>6</posy>
@@ -386,14 +394,18 @@
                         <visible>!String.IsEqual(Window.Property(paused),1)</visible>
                     </control>
                 </control>
-                <control type="button" id="714">
+                <control type="group">
                     <width>60</width>
                     <height>60</height>
-                    <onup>714</onup>
-                    <ondown>714</ondown>
-                    <texturefocus colordiffuse="4dffffff">white.png</texturefocus>
-                    <texturenofocus colordiffuse="00ffffff">white.png</texturenofocus>
-                    <label></label>
+                    <control type="button" id="714">
+                        <width>60</width>
+                        <height>60</height>
+                        <onup>714</onup>
+                        <ondown>714</ondown>
+                        <texturefocus colordiffuse="66ffffff">white.png</texturefocus>
+                        <texturenofocus colordiffuse="20ffffff">white.png</texturenofocus>
+                        <label></label>
+                    </control>
                     <control type="image">
                         <posx>6</posx>
                         <posy>6</posy>
@@ -402,16 +414,20 @@
                         <texture>fastforward.png</texture>
                     </control>
                 </control>
-                <control type="button" id="715">
+                <control type="group">
                     <width>220</width>
                     <height>60</height>
-                    <onup>715</onup>
-                    <ondown>715</ondown>
-                    <onright>715</onright>
                     <visible>String.IsEqual(Window.Property(behind_live),1)</visible>
-                    <texturefocus colordiffuse="4dffffff">white.png</texturefocus>
-                    <texturenofocus colordiffuse="00ffffff">white.png</texturenofocus>
-                    <label></label>
+                    <control type="button" id="715">
+                        <width>220</width>
+                        <height>60</height>
+                        <onup>715</onup>
+                        <ondown>715</ondown>
+                        <onright>715</onright>
+                        <texturefocus colordiffuse="66ffffff">white.png</texturefocus>
+                        <texturenofocus colordiffuse="20ffffff">white.png</texturenofocus>
+                        <label></label>
+                    </control>
                     <control type="image">
                         <posx>6</posx>
                         <posy>6</posy>
