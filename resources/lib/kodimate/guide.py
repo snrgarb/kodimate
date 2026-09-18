@@ -356,7 +356,7 @@ def strip_values(programmes, at_time, now, no_info_title, tz=None):
     if programme is None:
         return {
             'title': no_info_title, 'times': '', 'progress': 0, 'remaining': '',
-            'description': '', 'live': False, 'has_programme': False,
+            'description': '', 'live': False, 'has_programme': False, 'icon': '',
         }
 
     start_local = utc_to_local(programme['start'], tz)
@@ -377,7 +377,7 @@ def strip_values(programmes, at_time, now, no_info_title, tz=None):
     return {
         'title': programme['title'], 'times': times, 'progress': progress,
         'remaining': remaining, 'description': programme.get('description') or '',
-        'live': live, 'has_programme': True,
+        'live': live, 'has_programme': True, 'icon': programme.get('icon') or '',
     }
 
 

@@ -496,6 +496,27 @@ def test_back_target_unknown_zone_raises():
 
 # -- strip_values (issue #54) -----------------------------------------------
 
+
+def test_strip_values_includes_programme_icon():
+    now = datetime(2026, 1, 1, 12, 30)
+    programmes = [dict(_p((12, 0), (13, 0), 'Current'), icon='http://x/show.png')]
+    values = guide.strip_values(programmes, at_time=now, now=now, no_info_title='No information')
+    assert values['icon'] == 'http://x/show.png'
+
+
+def test_strip_values_icon_empty_when_programme_has_none():
+    now = datetime(2026, 1, 1, 12, 30)
+    programmes = [_p((12, 0), (13, 0), 'Current')]
+    values = guide.strip_values(programmes, at_time=now, now=now, no_info_title='No information')
+    assert values['icon'] == ''
+
+
+def test_strip_values_icon_empty_when_no_programme():
+    now = datetime(2026, 1, 1, 13, 15)
+    values = guide.strip_values([], at_time=now, now=now, no_info_title='No information')
+    assert values['icon'] == ''
+
+
 def test_strip_values_airing_now_has_progress_and_remaining():
     now = datetime(2026, 1, 1, 12, 30)
     programmes = [_p((12, 0), (13, 0), 'Current', 'About current')]

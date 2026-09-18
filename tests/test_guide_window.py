@@ -2023,6 +2023,8 @@ def test_strip_properties_after_init_for_programme_airing_now(tmp_path):
         assert window.getProperty('strip_channel_name') == 'Alpha'
         assert window.getProperty('strip_channel_number') == '0'
         assert window.getProperty('strip_channel_logo') == 'http://x/alpha.png'
+        # No programme icon set on this row -> falls back to the channel logo.
+        assert window.getProperty('strip_image') == 'http://x/alpha.png'
         assert window.getProperty('strip_title') == 'Current Show'
         assert window.getProperty('strip_description') == 'About the current show'
         assert window.getProperty('strip_live') == '1'
@@ -2035,6 +2037,70 @@ def test_strip_properties_after_init_for_programme_airing_now(tmp_path):
         expected_times = '%s - %s (1h)' % (start_local.strftime('%H:%M'), end_local.strftime('%H:%M'))
         assert window.getProperty('strip_times') == expected_times
         assert window.getProperty('strip_date').startswith('String 32130')
+    finally:
+        conn.close()
+
+
+def test_strip_image_uses_programme_icon_over_channel_logo(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        conn.execute("UPDATE channel SET logo_url = 'http://x/alpha.png' WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        viewport_start = guide.round_down_30_local(datetime.utcnow(), None)
+        conn.execute(
+            "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title, icon_url) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (eid, "x1", guide.format_iso(viewport_start),
+             guide.format_iso(viewport_start + timedelta(hours=1)), "Show A", "http://x/show-a.png"),
+        )
+        window = _window(conn)
+
+        assert window.getProperty('strip_image') == 'http://x/show-a.png'
+    finally:
+        conn.close()
+
+
+def test_strip_image_empty_when_no_icon_and_no_channel_logo(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+
+        assert window.getProperty('strip_image') == ''
+    finally:
+        conn.close()
+
+
+def test_strip_remaining_falls_back_to_bare_duration_when_string_not_loaded(tmp_path, monkeypatch):
+    # issue #54 follow-up: if strings.po's #32129 hasn't loaded yet,
+    # getLocalizedString(32129) can return a plain '' with no '%s' --
+    # '' % duration raises TypeError in real Python, which must not abort
+    # onInit.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        now = datetime.utcnow()
+        start = now - timedelta(minutes=30)
+        end = now + timedelta(minutes=30)
+        _programme(conn, eid, "x1", guide.format_iso(start), guide.format_iso(end), "Current Show")
+
+        real_get = xbmcaddon.Addon.getLocalizedString
+
+        def _flaky_get(self, string_id):
+            if string_id == win_guide._STR_REMAINING:
+                return ''
+            return real_get(self, string_id)
+
+        monkeypatch.setattr(xbmcaddon.Addon, 'getLocalizedString', _flaky_get)
+
+        window = _window(conn)  # must not raise
+
+        assert window.getProperty('strip_remaining') == guide.format_duration_short(30 * 60)
     finally:
         conn.close()
 

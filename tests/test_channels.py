@@ -531,3 +531,39 @@ def test_now_titles_omits_channel_without_current_programme(tmp_path):
         assert cid not in result
     finally:
         conn.close()
+
+
+def test_list_programmes_includes_icon_url(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        conn.execute("UPDATE channel SET epg_channel_id = 'x1' WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        conn.execute(
+            "INSERT INTO programme (epg_source_id, xmltv_channel_id, start, end, title, icon_url) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (eid, "x1", "2026-01-01T12:00:00Z", "2026-01-01T13:00:00Z", "Show A", "http://x/show-a.png"),
+        )
+        result = channels.list_programmes(
+            conn, [cid], "2026-01-01T11:00:00Z", "2026-01-01T14:00:00Z"
+        )
+        assert result[cid][0]['icon'] == "http://x/show-a.png"
+    finally:
+        conn.close()
+
+
+def test_list_programmes_icon_none_when_not_set(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        conn.execute("UPDATE channel SET epg_channel_id = 'x1' WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        _programme(conn, eid, "x1", "2026-01-01T12:00:00Z", "2026-01-01T13:00:00Z", "Show A")
+        result = channels.list_programmes(
+            conn, [cid], "2026-01-01T11:00:00Z", "2026-01-01T14:00:00Z"
+        )
+        assert result[cid][0]['icon'] is None
+    finally:
+        conn.close()

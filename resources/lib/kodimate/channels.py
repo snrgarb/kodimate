@@ -177,7 +177,7 @@ def list_programmes(conn, channel_ids, window_start, window_end):
 
     placeholders = ','.join('?' for _ in channel_ids)
     rows = conn.execute(
-        "SELECT c.id, pr.start, pr.end, pr.title, pr.description, pr.catchup_id "
+        "SELECT c.id, pr.start, pr.end, pr.title, pr.description, pr.catchup_id, pr.icon_url "
         "FROM channel c "
         "JOIN epg_source e ON e.provider_id = c.provider_id "
         "JOIN programme pr ON pr.epg_source_id = e.id "
@@ -190,7 +190,7 @@ def list_programmes(conn, channel_ids, window_start, window_end):
     for row in rows:
         result[row[0]].append({
             'start': row[1], 'end': row[2], 'title': row[3], 'description': row[4] or '',
-            'catchup_id': row[5],
+            'catchup_id': row[5], 'icon': row[6],
         })
     return result
 

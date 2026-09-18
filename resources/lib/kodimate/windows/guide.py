@@ -42,7 +42,7 @@ _POOL_COLS = 28  # real EPG data can pack ~24 short programmes into a 3h window
 _VISIBLE_ROWS = guide.visible_rows(1080 - _STRIP_HEIGHT - _HEADER_HEIGHT, _ROW_HEIGHT)
 
 _STRIP_PROGRESS_FILL_ID = 531
-_STRIP_PROGRESS_WIDTH = 400
+_STRIP_PROGRESS_WIDTH = 300  # matches the skin's row-3 progress track width
 
 _HEADER_SLOTS = 6  # 3 hours in 30-minute slots
 _SLOT_MINUTES = 30
@@ -615,13 +615,15 @@ class GuideWindow(BaseWindow):
 
         values = guide.strip_values(programmes, at_time, now, self._no_info_title, tz=self._tz)
 
-        self.setProperty('strip_channel_logo', (row.get('logo_url') or '') if row else '')
+        channel_logo = (row.get('logo_url') or '') if row else ''
+        self.setProperty('strip_channel_logo', channel_logo)
+        self.setProperty('strip_image', values['icon'] or channel_logo)
         self.setProperty('strip_channel_name', row['name'] if row else '')
         self.setProperty('strip_channel_number', str(row['number']) if row else '')
         self.setProperty('strip_title', values['title'])
         self.setProperty('strip_times', values['times'])
         self.setProperty('strip_progress', str(values['progress']))
-        remaining = addon.getLocalizedString(_STR_REMAINING) % values['remaining'] if values['remaining'] else ''
+        remaining = _format_remaining(addon, values['remaining']) if values['remaining'] else ''
         self.setProperty('strip_remaining', remaining)
         self.setProperty('strip_description', values['description'])
         has_programme = values['has_programme']
@@ -657,6 +659,7 @@ class GuideWindow(BaseWindow):
                     'title': row['title'] or '',
                     'description': row['description'],
                     'catchup_id': row.get('catchup_id'),
+                    'icon': row.get('icon'),
                 }
                 for row in rows
             ]
@@ -931,3 +934,12 @@ def _abs_path(addon_path, relpath):
 
 def _epoch(dt):
     return calendar.timegm(dt.utctimetuple())
+
+
+def _format_remaining(addon, duration):
+    # Guards against a stale/untranslated strings.po (no '%s' in the
+    # localized format) raising TypeError on '%' and aborting onInit.
+    template = addon.getLocalizedString(_STR_REMAINING)
+    if '%s' not in template:
+        return duration
+    return template % duration
