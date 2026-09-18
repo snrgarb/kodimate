@@ -16,6 +16,7 @@ from .. import catchup, channels, guide, ipc, osd, playback
 from .base import BaseWindow
 from .playback import PlaybackWindow
 from .programme_info import ProgrammeInfoDialog
+from .rail import RAIL_LIVETV_ID, RAIL_CATCHUP_ID, RAIL_SETTINGS_ID
 
 CHANNEL_LIST_ID = 200
 PROGRAMME_LIST_ID = 201
@@ -48,10 +49,12 @@ class CatchupBrowserWindow(BaseWindow):
         self._lock = threading.RLock()
         self._last_channel_position = 0
         self._right_entries = []
+        self._rail_focus_id = RAIL_CATCHUP_ID
 
         self._channel_rows = self._build_channel_rows()
         self._render_channels()
         self._render_programmes()
+        self.setProperty('rail_selected', 'catchup')
         self._watcher = ipc.GenerationWatcher(self._on_generation_change)
         self._initialised = True
 
@@ -111,12 +114,28 @@ class CatchupBrowserWindow(BaseWindow):
         if action_id in (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU):
             self.close()
             return
+        if action_id == xbmcgui.ACTION_MOVE_LEFT:
+            self._handle_left()
+            return
+        if action_id == xbmcgui.ACTION_MOVE_RIGHT:
+            self._handle_right()
+            return
         if self.getFocusId() == CHANNEL_LIST_ID:
             self._maybe_render_for_channel_move()
             return
         if self.getFocusId() == PROGRAMME_LIST_ID and action_id in (
                 xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN):
             self._skip_header_row(-1 if action_id == xbmcgui.ACTION_MOVE_UP else 1)
+
+    def _handle_left(self):
+        if self.getFocusId() == CHANNEL_LIST_ID:
+            self.setFocusId(self._rail_focus_id)
+
+    def _handle_right(self):
+        focus_id = self.getFocusId()
+        if focus_id in (RAIL_LIVETV_ID, RAIL_CATCHUP_ID, RAIL_SETTINGS_ID):
+            self._rail_focus_id = focus_id
+            self.setFocusId(CHANNEL_LIST_ID)
 
     def onFocus(self, control_id):
         if control_id == CHANNEL_LIST_ID:
@@ -148,6 +167,14 @@ class CatchupBrowserWindow(BaseWindow):
             control.selectItem(target)
 
     def onClick(self, control_id):
+        if control_id == RAIL_LIVETV_ID:
+            self.close()
+            return
+        if control_id == RAIL_CATCHUP_ID:
+            return
+        if control_id == RAIL_SETTINGS_ID:
+            self._open_settings()
+            return
         if control_id != PROGRAMME_LIST_ID:
             return
         position = self.getControl(PROGRAMME_LIST_ID).getSelectedPosition()
@@ -195,6 +222,13 @@ class CatchupBrowserWindow(BaseWindow):
             refreshed = self._exit_modal()
         if not refreshed:
             self._render_programmes()
+
+    def _open_settings(self):
+        self._enter_modal()
+        try:
+            xbmcaddon.Addon().openSettings()
+        finally:
+            self._exit_modal()
 
     # -- data ----------------------------------------------------------
 

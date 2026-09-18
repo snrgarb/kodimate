@@ -16,11 +16,9 @@ from .base import BaseWindow
 from .catchup_browser import CatchupBrowserWindow
 from .playback import PlaybackWindow
 from .programme_info import ProgrammeInfoDialog
+from .rail import RAIL_LIVETV_ID, RAIL_CATCHUP_ID, RAIL_SETTINGS_ID  # noqa: F401 (re-exported)
 
 CHANNEL_LIST_ID = 500
-RAIL_LIVETV_ID = 601
-RAIL_CATCHUP_ID = 602
-RAIL_SETTINGS_ID = 603
 
 _STR_NO_INFO = 32083
 _STR_ALL_CHANNELS = 32038

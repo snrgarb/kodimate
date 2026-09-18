@@ -1,10 +1,21 @@
+import os
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
 import pytest
 
 from kodimate import db, guide
-from kodimate.windows.catchup_browser import CatchupBrowserWindow, CHANNEL_LIST_ID, PROGRAMME_LIST_ID
+from kodimate.windows.catchup_browser import (
+    CatchupBrowserWindow, CHANNEL_LIST_ID, PROGRAMME_LIST_ID,
+    RAIL_LIVETV_ID, RAIL_CATCHUP_ID, RAIL_SETTINGS_ID,
+)
+import xbmcaddon
 import xbmcgui
+
+_SKIN_XML = os.path.join(
+    os.path.dirname(__file__), '..', 'resources', 'skins', 'Main', '1080i',
+    'script-kodimate-catchup-browser.xml',
+)
 
 
 @pytest.fixture(autouse=True)
@@ -426,3 +437,103 @@ def test_back_closes_window(tmp_path):
         assert closed.get('done') is True
     finally:
         conn.close()
+
+
+# -- Icon rail (issue #46 follow-up) ----------------------------------------
+
+def test_rail_selected_property_set_to_catchup(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, catchup_days=3)
+        window = _window(conn)
+        assert window.getProperty('rail_selected') == 'catchup'
+    finally:
+        conn.close()
+
+
+def test_focus_not_on_rail_after_init(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, catchup_days=3)
+        window = _window(conn)
+        assert window.getFocusId() not in (RAIL_LIVETV_ID, RAIL_CATCHUP_ID, RAIL_SETTINGS_ID)
+    finally:
+        conn.close()
+
+
+def test_left_from_channel_list_focuses_catchup_rail(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, catchup_days=3)
+        window = _window(conn)
+        window.setFocusId(CHANNEL_LIST_ID)
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+
+        assert window.getFocusId() == RAIL_CATCHUP_ID
+    finally:
+        conn.close()
+
+
+def test_right_from_rail_returns_to_channel_list(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, catchup_days=3)
+        window = _window(conn)
+        window.setFocusId(RAIL_CATCHUP_ID)
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+
+        assert window.getFocusId() == CHANNEL_LIST_ID
+    finally:
+        conn.close()
+
+
+def test_ok_on_livetv_rail_closes_window(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, catchup_days=3)
+        window = _window(conn)
+        closed = {}
+        window.close = lambda: closed.setdefault('done', True)
+
+        window.onClick(RAIL_LIVETV_ID)
+
+        assert closed.get('done') is True
+    finally:
+        conn.close()
+
+
+def test_ok_on_settings_rail_opens_addon_settings(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, catchup_days=3)
+        window = _window(conn)
+        xbmcaddon.open_settings_calls[:] = []
+
+        window.onClick(RAIL_SETTINGS_ID)
+
+        assert xbmcaddon.open_settings_calls == [True]
+    finally:
+        conn.close()
+
+
+def test_skin_pins_rail_and_list_horizontal_navigation():
+    tree = ET.parse(_SKIN_XML)
+    controls_by_id = {}
+    for control in tree.getroot().iter('control'):
+        control_id = control.get('id')
+        if control_id is not None:
+            controls_by_id[control_id] = control
+    for control_id in ('601', '602', '603'):
+        control = controls_by_id[control_id]
+        assert control.find('onleft').text == control_id
+        assert control.find('onright').text == control_id
+    assert controls_by_id['200'].find('onleft').text == '200'
+    assert controls_by_id['201'].find('onright').text == '201'
