@@ -117,3 +117,37 @@ def test_startup_snapshot_none_when_nothing_listable(tmp_path):
     _channel(conn, pid, "a", position=0, stale_since="2024-01-01T00:00:00Z")
 
     assert autoplay.startup_snapshot(conn) is None
+
+
+def test_last_channel_id_returns_remembered_channel_row_id(tmp_path):
+    conn = _conn(tmp_path)
+    pid = _provider(conn)
+    _channel(conn, pid, "a", position=0)
+    _channel(conn, pid, "b", position=1)
+    autoplay.remember_last_channel(conn, pid, "b")
+
+    row_id = conn.execute(
+        "SELECT id FROM channel WHERE provider_id = ? AND channel_key = 'b'", (pid,)
+    ).fetchone()[0]
+    assert autoplay.last_channel_id(conn) == row_id
+
+
+def test_last_channel_id_falls_back_to_first_row_when_remembered_not_listable(tmp_path):
+    conn = _conn(tmp_path)
+    pid = _provider(conn)
+    _channel(conn, pid, "a", position=0)
+    _channel(conn, pid, "b", position=1, stale_since="2024-01-01T00:00:00Z")
+    autoplay.remember_last_channel(conn, pid, "b")
+
+    row_id = conn.execute(
+        "SELECT id FROM channel WHERE provider_id = ? AND channel_key = 'a'", (pid,)
+    ).fetchone()[0]
+    assert autoplay.last_channel_id(conn) == row_id
+
+
+def test_last_channel_id_none_when_nothing_listable(tmp_path):
+    conn = _conn(tmp_path)
+    pid = _provider(conn)
+    _channel(conn, pid, "a", position=0, stale_since="2024-01-01T00:00:00Z")
+
+    assert autoplay.last_channel_id(conn) is None

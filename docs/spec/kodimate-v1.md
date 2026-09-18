@@ -162,7 +162,7 @@ Actor is "Kodi user" unless noted otherwise.
 
 ### Addon shape and packaging
 
-Kodimate is a single addon, id `script.kodimate`, licensed GPL-2.0-or-later, built as an `xbmc.python.script` extension point (its own WindowXML UI, entered via the main menu / `RunScript`) plus a `service` extension point that runs continuously in the background for Refresh. There is no `pluginsource` extension and no dependency on the Kodi PVR API or `pvr.iptvsimple` (ADR 0004): Kodimate never appears in Kodi's native PVR channel list, EPG window, or PVR settings, and none of that native PVR UI is reused.
+Kodimate is a single addon, id `script.kodimate`, licensed GPL-2.0-or-later, built as an `xbmc.python.script` extension point (its own WindowXML UI, entered via Kodi's Programs menu / `RunScript`, opening straight into the Live TV view) plus a `service` extension point that runs continuously in the background for Refresh. There is no `pluginsource` extension and no dependency on the Kodi PVR API or `pvr.iptvsimple` (ADR 0004): Kodimate never appears in Kodi's native PVR channel list, EPG window, or PVR settings, and none of that native PVR UI is reused.
 
 The UI follows the `script.plexmod` reference pattern: `BaseWindow`/`BaseDialog` wrapping `xbmcgui.WindowXML`/`WindowXMLDialog`, `ManagedControlList`/`ManagedListItem` for binding Python-side lists to native list/panel controls, and a single skin under `resources/skins/Main/1080i` that Kodi scales to other resolutions rather than shipping multiple resolution variants. All user-facing strings are sourced from `strings.po` ids from the start; v1 ships British English (en_GB) only, with no other language files yet.
 
@@ -299,7 +299,7 @@ First run (zero enabled providers, including immediately after deleting the last
 
 ### Settings
 
-Global, addon-wide knobs live in Kodi's own `settings.xml`-backed settings screen (opened via `Addon().openSettings()` from the main menu), not a bespoke WindowXML screen: Refresh interval (hours, default 12), Refresh on startup (on), Autoplay last channel (on), Channel-list overlay on autoplay (on), OSD auto-hide seconds (default 3), Number-entry commit delay (default 1.5s), Timezone correction (auto), Debug logging (off), and a "Manage providers…" button that opens the Providers window directly. Everything CRUD-shaped — providers themselves, and per-channel overrides — lives in Kodimate's own WindowXML screens instead, specifically because Kodi settings has a fixed slot count and no native list-CRUD affordance. EPG retention (fixed at 7 days) is not exposed as a setting in v1.
+Global, addon-wide knobs live in Kodi's own `settings.xml`-backed settings screen (opened via `Addon().openSettings()`, e.g. from Kodi's addon browser), not a bespoke WindowXML screen: Refresh interval (hours, default 12), Refresh on startup (on), Autoplay last channel (on), Channel-list overlay on autoplay (on), OSD auto-hide seconds (default 3), Number-entry commit delay (default 1.5s), Timezone correction (auto), Debug logging (off), and a "Manage providers…" button that opens the Providers window directly. Everything CRUD-shaped — providers themselves, and per-channel overrides — lives in Kodimate's own WindowXML screens instead, specifically because Kodi settings has a fixed slot count and no native list-CRUD affordance. EPG retention (fixed at 7 days) is not exposed as a setting in v1.
 
 ### Logging / i18n
 

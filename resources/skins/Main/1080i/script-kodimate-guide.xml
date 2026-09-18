@@ -8,8 +8,63 @@
     </coordinates>
     <backgroundcolor>ff101010</backgroundcolor>
     <controls>
-        <control type="label">
+        <control type="image">
             <posx>0</posx>
+            <posy>0</posy>
+            <width>120</width>
+            <height>60</height>
+            <texture>white.png</texture>
+            <colordiffuse>ff2a4e75</colordiffuse>
+            <visible>String.IsEqual(Window.Property(rail_selected),livetv)</visible>
+        </control>
+        <control type="button" id="601">
+            <posx>0</posx>
+            <posy>0</posy>
+            <width>120</width>
+            <height>60</height>
+            <label>$ADDON[script.kodimate 32119]</label>
+            <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
+            <texturenofocus colordiffuse="ff202020">white.png</texturenofocus>
+            <textcolor>ffcccccc</textcolor>
+            <focusedcolor>ffffffff</focusedcolor>
+            <onleft>601</onleft>
+            <onright>601</onright>
+            <onup>603</onup>
+            <ondown>602</ondown>
+        </control>
+        <control type="button" id="602">
+            <posx>0</posx>
+            <posy>60</posy>
+            <width>120</width>
+            <height>60</height>
+            <label>$ADDON[script.kodimate 32120]</label>
+            <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
+            <texturenofocus colordiffuse="ff202020">white.png</texturenofocus>
+            <textcolor>ffcccccc</textcolor>
+            <focusedcolor>ffffffff</focusedcolor>
+            <onleft>602</onleft>
+            <onright>602</onright>
+            <onup>601</onup>
+            <ondown>603</ondown>
+        </control>
+        <control type="button" id="603">
+            <posx>0</posx>
+            <posy>120</posy>
+            <width>120</width>
+            <height>60</height>
+            <label>$ADDON[script.kodimate 32121]</label>
+            <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
+            <texturenofocus colordiffuse="ff202020">white.png</texturenofocus>
+            <textcolor>ffcccccc</textcolor>
+            <focusedcolor>ffffffff</focusedcolor>
+            <onleft>603</onleft>
+            <onright>603</onright>
+            <onup>602</onup>
+            <ondown>601</ondown>
+        </control>
+
+        <control type="label">
+            <posx>120</posx>
             <posy>0</posy>
             <width>300</width>
             <height>60</height>
@@ -19,9 +74,9 @@
             <textcolor>ffaaaaaa</textcolor>
         </control>
         <control type="label" id="510">
-            <posx>300</posx>
+            <posx>420</posx>
             <posy>0</posy>
-            <width>270</width>
+            <width>250</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header0)]</label>
             <align>center</align>
@@ -29,9 +84,9 @@
             <textcolor>ffaaaaaa</textcolor>
         </control>
         <control type="label" id="511">
-            <posx>570</posx>
+            <posx>670</posx>
             <posy>0</posy>
-            <width>270</width>
+            <width>250</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header1)]</label>
             <align>center</align>
@@ -39,9 +94,9 @@
             <textcolor>ffaaaaaa</textcolor>
         </control>
         <control type="label" id="512">
-            <posx>840</posx>
+            <posx>920</posx>
             <posy>0</posy>
-            <width>270</width>
+            <width>250</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header2)]</label>
             <align>center</align>
@@ -49,9 +104,9 @@
             <textcolor>ffaaaaaa</textcolor>
         </control>
         <control type="label" id="513">
-            <posx>1110</posx>
+            <posx>1170</posx>
             <posy>0</posy>
-            <width>270</width>
+            <width>250</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header3)]</label>
             <align>center</align>
@@ -59,9 +114,9 @@
             <textcolor>ffaaaaaa</textcolor>
         </control>
         <control type="label" id="514">
-            <posx>1380</posx>
+            <posx>1420</posx>
             <posy>0</posy>
-            <width>270</width>
+            <width>250</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header4)]</label>
             <align>center</align>
@@ -69,9 +124,9 @@
             <textcolor>ffaaaaaa</textcolor>
         </control>
         <control type="label" id="515">
-            <posx>1650</posx>
+            <posx>1670</posx>
             <posy>0</posy>
-            <width>270</width>
+            <width>250</width>
             <height>60</height>
             <label>$INFO[Window.Property(guide_header5)]</label>
             <align>center</align>
@@ -80,7 +135,7 @@
         </control>
 
         <control type="list" id="500">
-            <posx>0</posx>
+            <posx>120</posx>
             <posy>60</posy>
             <width>300</width>
             <height>980</height>
@@ -145,7 +200,7 @@
         </control>
 
         <control type="image">
-            <posx>298</posx>
+            <posx>418</posx>
             <posy>60</posy>
             <width>2</width>
             <height>980</height>

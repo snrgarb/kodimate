@@ -9,7 +9,7 @@ import xbmcaddon
 import xbmcvfs
 
 from kodimate import autoplay, db, log, providers
-from kodimate.windows.main import MainWindow
+from kodimate.windows.guide import GuideWindow
 from kodimate.windows.playback import PlaybackWindow
 from kodimate.windows.providers import ProvidersWindow
 
@@ -31,7 +31,7 @@ def run():
                         conn=conn, snapshot=snapshot,
                         open_list_on_init=addon.getSettingBool('autoplay_overlay_list'),
                     )
-            MainWindow.open(conn=conn)
+        GuideWindow.open(conn=conn, focus_channel_id=autoplay.last_channel_id(conn))
     finally:
         conn.close()
 

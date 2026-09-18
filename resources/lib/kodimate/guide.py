@@ -225,3 +225,33 @@ def initial_cursor_index(rows, focus_channel_id):
             if row['id'] == focus_channel_id:
                 return index
     return 0
+
+
+ZONES = ('rail', 'panel', 'column', 'grid')
+
+_ZONE_TRANSITIONS = {
+    ('rail', 'left', False): ('rail', None),
+    ('rail', 'left', True): ('rail', None),
+    ('rail', 'right', False): ('column', None),
+    ('rail', 'right', True): ('panel', None),
+    ('panel', 'left', False): ('rail', None),
+    ('panel', 'left', True): ('rail', None),
+    ('panel', 'right', False): ('column', 'close'),
+    ('panel', 'right', True): ('column', 'close'),
+    ('column', 'left', False): ('rail', None),
+    ('column', 'left', True): ('panel', None),
+    ('column', 'right', False): ('grid', None),
+    ('column', 'right', True): ('grid', None),
+    ('grid', 'left', False): ('column', None),
+    ('grid', 'left', True): ('column', None),
+    ('grid', 'right', False): ('grid', None),
+    ('grid', 'right', True): ('grid', None),
+}
+
+
+def zone_transition(zone, action, panel_open):
+    """(next_zone, panel_change) for Left/Right from `zone`, where
+    panel_change is None, 'open' or 'close'."""
+    if zone not in ZONES or action not in ('left', 'right'):
+        raise ValueError("invalid zone/action: %r/%r" % (zone, action))
+    return _ZONE_TRANSITIONS[(zone, action, panel_open)]

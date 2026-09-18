@@ -325,3 +325,67 @@ def test_initial_cursor_index_defaults_to_zero():
     assert guide.initial_cursor_index(rows, None) == 0
     assert guide.initial_cursor_index(rows, 999) == 0
     assert guide.initial_cursor_index([], 1) == 0
+
+
+# -- zone_transition (issue #46) --------------------------------------------
+
+import pytest
+
+
+@pytest.mark.parametrize('panel_open, expected', [
+    (False, ('rail', None)),
+    (True, ('rail', None)),
+])
+def test_zone_transition_rail_left(panel_open, expected):
+    assert guide.zone_transition('rail', 'left', panel_open) == expected
+
+
+def test_zone_transition_rail_right_panel_closed():
+    assert guide.zone_transition('rail', 'right', False) == ('column', None)
+
+
+def test_zone_transition_rail_right_panel_open():
+    assert guide.zone_transition('rail', 'right', True) == ('panel', None)
+
+
+@pytest.mark.parametrize('panel_open', [False, True])
+def test_zone_transition_panel_left(panel_open):
+    assert guide.zone_transition('panel', 'left', panel_open) == ('rail', None)
+
+
+@pytest.mark.parametrize('panel_open', [False, True])
+def test_zone_transition_panel_right(panel_open):
+    assert guide.zone_transition('panel', 'right', panel_open) == ('column', 'close')
+
+
+@pytest.mark.parametrize('panel_open, expected', [
+    (False, ('rail', None)),
+    (True, ('panel', None)),
+])
+def test_zone_transition_column_left(panel_open, expected):
+    assert guide.zone_transition('column', 'left', panel_open) == expected
+
+
+@pytest.mark.parametrize('panel_open', [False, True])
+def test_zone_transition_column_right(panel_open):
+    assert guide.zone_transition('column', 'right', panel_open) == ('grid', None)
+
+
+@pytest.mark.parametrize('panel_open', [False, True])
+def test_zone_transition_grid_left(panel_open):
+    assert guide.zone_transition('grid', 'left', panel_open) == ('column', None)
+
+
+@pytest.mark.parametrize('panel_open', [False, True])
+def test_zone_transition_grid_right(panel_open):
+    assert guide.zone_transition('grid', 'right', panel_open) == ('grid', None)
+
+
+def test_zone_transition_unknown_zone_raises():
+    with pytest.raises(ValueError):
+        guide.zone_transition('bogus', 'left', False)
+
+
+def test_zone_transition_unknown_action_raises():
+    with pytest.raises(ValueError):
+        guide.zone_transition('rail', 'up', False)

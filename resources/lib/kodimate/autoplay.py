@@ -51,6 +51,20 @@ def resolve_autoplay_channel(conn):
     return rows[0]['provider_id'], rows[0]['channel_key']
 
 
+def last_channel_id(conn):
+    """The channel table 'id' to focus the Live TV view on: the last-watched
+    channel if still listable, else the first listable channel, else None."""
+    resolved = resolve_autoplay_channel(conn)
+    if resolved is None:
+        return None
+    provider_id, channel_key = resolved
+    row = conn.execute(
+        "SELECT id FROM channel WHERE provider_id = ? AND channel_key = ?",
+        (provider_id, channel_key),
+    ).fetchone()
+    return row[0] if row is not None else None
+
+
 def startup_snapshot(conn):
     """Channel snapshot to autoplay on startup, or None to skip autoplay."""
     resolved = resolve_autoplay_channel(conn)

@@ -1,3 +1,5 @@
+import os
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -7,6 +9,10 @@ from kodimate.windows import guide as win_guide
 from kodimate.windows.guide import GuideWindow, CHANNEL_LIST_ID
 import xbmc
 import xbmcgui
+
+_SKIN_XML = os.path.join(
+    os.path.dirname(__file__), '..', 'resources', 'skins', 'Main', '1080i', 'script-kodimate-guide.xml',
+)
 
 
 @pytest.fixture(autouse=True)
@@ -121,7 +127,7 @@ def test_cell_proportional_to_duration(tmp_path):
         window._relayout()
         cells = window._row_cells[0]
         assert cells[0]['title'] == 'Show A'
-        assert cells[0]['width'] == _third_of_grid(1620)
+        assert cells[0]['width'] == _third_of_grid(1500)
         # The remaining two-thirds of the viewport is a filler cell.
         assert cells[1]['filler'] is True
     finally:
@@ -148,6 +154,10 @@ def test_left_right_move_cursor_between_programmes(tmp_path):
         window._load_programmes()
         window._relayout()
 
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # column -> grid, cell 0
+        assert window._zone == 'grid'
+        assert window._cursor_time == viewport_start
+
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
         assert window._cursor_time == viewport_start + timedelta(hours=1)
 
@@ -158,9 +168,12 @@ def test_left_right_move_cursor_between_programmes(tmp_path):
 
 
 def test_left_from_leftmost_cell_scrolls_viewport_one_slot(tmp_path):
-    # Bug fix: Left/Right must always move (scrolling the viewport by one
-    # slot at the cell edge) rather than doing nothing just because there
-    # happens to be no earlier programme in the data.
+    # Superseded by issue #46: Left from a row's first cell now moves focus
+    # into the channel column instead of scrolling the viewport (see
+    # test_left_from_first_cell_in_row_moves_to_column_not_time_scroll).
+    # The underlying scroll-at-edge behaviour of _move_cursor_horizontal
+    # itself is unchanged and still used by Right, so it is exercised here
+    # directly rather than through onAction.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -173,7 +186,7 @@ def test_left_from_leftmost_cell_scrolls_viewport_one_slot(tmp_path):
         window._load_programmes()
         window._relayout()
 
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+        window._move_cursor_horizontal(-1)
 
         assert window._viewport_start == viewport_start - timedelta(minutes=30)
         assert window._cursor_time == window._viewport_start
@@ -246,6 +259,8 @@ def test_down_over_long_past_starting_programme_does_not_move_viewport(tmp_path)
 def test_left_onto_several_hour_programme_scrolls_one_slot(tmp_path):
     # Regression for bug 2: Left onto an off-screen multi-hour programme
     # must scroll by one 30-minute slot, not snap to the programme's start.
+    # Exercised directly on _move_cursor_horizontal (see the note on
+    # test_left_from_leftmost_cell_scrolls_viewport_one_slot).
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -260,7 +275,7 @@ def test_left_onto_several_hour_programme_scrolls_one_slot(tmp_path):
         window._load_programmes()
         window._relayout()
 
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+        window._move_cursor_horizontal(-1)
 
         assert window._viewport_start == t0 - timedelta(minutes=30)
         assert window._cursor_time == window._viewport_start
@@ -350,6 +365,7 @@ def test_past_cell_is_dimmed_but_cursor_cell_is_not(tmp_path):
         # Put the travel axis on "Current Show" so "Past Show" is dimmed
         # without being the cursor cell.
         window._cursor_time = now_snapshot
+        window._zone = 'grid'
         window._relayout()
 
         past_image, past_label, past_desc = window._pool[0][0]
@@ -378,6 +394,7 @@ def test_cell_shows_description_below_title_with_colour_by_state(tmp_path):
                    description="About the current show")
         window._load_programmes()
         window._cursor_time = now_snapshot
+        window._zone = 'grid'
         window._relayout()
 
         _past_image, _past_label, past_desc = window._pool[0][0]
@@ -438,6 +455,7 @@ def test_relayout_highlights_filler_cell_when_axis_falls_in_a_former_gap(tmp_pat
         # 50 minutes in: inside the filler gap between A's end (30m) and
         # B's start (1h).
         window._cursor_time = t0 + timedelta(minutes=50)
+        window._zone = 'grid'
         window._relayout()
 
         cells = window._row_cells[0]
@@ -467,6 +485,7 @@ def test_swap_cursor_cell_restores_past_color_not_plain_text_color(tmp_path):
                    guide.format_iso(t0 + timedelta(hours=2)), "Current Show")
         window._load_programmes()
         window._relayout()
+        window._zone = 'grid'
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
 
@@ -519,6 +538,7 @@ def test_right_on_empty_row_scrolls_viewport_and_lands_on_right_edge_filler(tmp_
         window._load_programmes()
         window._relayout()
 
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # column -> grid, on the row's only cell
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
 
         assert window._viewport_start == t0 + timedelta(minutes=30)
@@ -532,6 +552,9 @@ def test_right_on_empty_row_scrolls_viewport_and_lands_on_right_edge_filler(tmp_
 
 
 def test_left_on_empty_row_scrolls_viewport_back_one_slot(tmp_path):
+    # An empty row is a single filler cell, i.e. always at index 0, so this
+    # is now reached via _move_cursor_horizontal directly rather than
+    # onAction (see the note on test_left_from_leftmost_cell_scrolls_viewport_one_slot).
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -541,7 +564,7 @@ def test_left_on_empty_row_scrolls_viewport_back_one_slot(tmp_path):
         window._load_programmes()
         window._relayout()
 
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+        window._move_cursor_horizontal(-1)
 
         assert window._viewport_start == t0 - timedelta(minutes=30)
         assert window._cursor_time == window._viewport_start
@@ -564,6 +587,9 @@ def test_right_from_programme_into_gap_then_into_next_programme(tmp_path):
                    guide.format_iso(t0 + timedelta(hours=2)), "B")
         window._load_programmes()
         window._relayout()
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # column -> grid, cell 0 ('A')
+        assert window._cursor_time == t0
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
         assert window._cursor_time == t0 + timedelta(minutes=30)
@@ -670,7 +696,9 @@ def test_horizontal_viewport_jump_is_instant_and_clips_edge_cell(tmp_path):
     # User feedback: horizontal scrolling (Left/Right) must be instant, no
     # slide or fade animation. A programme starting before the new
     # viewport must also clip to the grid's left edge (x=0) rather than
-    # spill off-screen.
+    # spill off-screen. The cursor is on the row's only visible cell, so
+    # this is exercised directly on _move_cursor_horizontal (see the note
+    # on test_left_from_leftmost_cell_scrolls_viewport_one_slot).
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -685,7 +713,7 @@ def test_horizontal_viewport_jump_is_instant_and_clips_edge_cell(tmp_path):
         window._load_programmes()
         window._relayout()
 
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+        window._move_cursor_horizontal(-1)
 
         assert window._viewport_start == t0 - timedelta(minutes=30)
         edge_cell = window._row_cells[0][0]
@@ -856,6 +884,7 @@ def test_unsupported_m3u_url_past_cell_dialog_is_info_only(tmp_path):
         _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(now_snapshot), "Past Show")
         window._load_programmes()
         window._cursor_time = t0
+        window._zone = 'grid'
         window._relayout()
 
         window.onClick(CHANNEL_LIST_ID)
@@ -913,6 +942,7 @@ def test_ok_on_live_cell_opens_dialog_with_watch_live_action_and_dispatches(tmp_
                    guide.format_iso(now_snapshot + timedelta(minutes=10)), "Live Show")
         window._load_programmes()
         window._cursor_time = now_snapshot
+        window._zone = 'grid'
         window._relayout()
 
         window.onClick(CHANNEL_LIST_ID)
@@ -938,6 +968,7 @@ def test_ok_on_live_cell_with_window_dispatches_start_over_as_catchup(tmp_path):
         _programme(conn, eid, "x1", guide.format_iso(start), guide.format_iso(end), "Live Show")
         window._load_programmes()
         window._cursor_time = now_snapshot
+        window._zone = 'grid'
         window._relayout()
 
         window.onClick(CHANNEL_LIST_ID)
@@ -962,6 +993,7 @@ def test_ok_on_playable_past_cell_dispatches_play_catchup(tmp_path):
         _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(now_snapshot), "Past Show")
         window._load_programmes()
         window._cursor_time = t0
+        window._zone = 'grid'
         window._relayout()
 
         window.onClick(CHANNEL_LIST_ID)
@@ -1042,6 +1074,7 @@ def test_generation_change_deferred_under_modal_then_applied_after_dialog_closes
                    guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
         window._load_programmes()
         window._relayout()
+        window._zone = 'grid'
 
         class _BumpingDialog(_FakeDialog):
             result = None
@@ -1343,6 +1376,268 @@ def test_empty_favourites_filter_is_a_no_op_grid_no_exceptions(tmp_path):
         assert closed == [True]
     finally:
         conn.close()
+
+
+# -- Icon rail / focus zones (issue #46) ------------------------------------
+
+def test_opens_with_column_zone_focused_on_channel_list(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        assert window._zone == 'column'
+        assert window.getFocusId() == CHANNEL_LIST_ID
+        assert window.getFocusId() not in (
+            win_guide.RAIL_LIVETV_ID, win_guide.RAIL_CATCHUP_ID, win_guide.RAIL_SETTINGS_ID,
+        )
+    finally:
+        conn.close()
+
+
+def test_rail_selected_property_set_to_livetv(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        assert window.getProperty('rail_selected') == 'livetv'
+    finally:
+        conn.close()
+
+
+def test_left_from_column_moves_to_rail(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+        assert window._zone == 'rail'
+        assert window.getFocusId() == win_guide.RAIL_LIVETV_ID
+    finally:
+        conn.close()
+
+
+def test_left_on_rail_is_a_no_op(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+        assert window._zone == 'rail'
+        assert window.getFocusId() == win_guide.RAIL_LIVETV_ID
+    finally:
+        conn.close()
+
+
+def test_right_from_rail_returns_to_column(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+        assert window._zone == 'column'
+        assert window.getFocusId() == CHANNEL_LIST_ID
+    finally:
+        conn.close()
+
+
+def test_right_from_column_enters_grid_with_cell_highlighted_at_travel_axis(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
+        window._load_programmes()
+        window._relayout()
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
+
+        assert window._zone == 'grid'
+        assert window.getFocusId() == CHANNEL_LIST_ID
+        cell = window._row_cells[0][0]
+        image, _label, _desc = window._pool[0][cell['pool_index']]
+        assert image._color_diffuse == 'FF3A6EA5'
+    finally:
+        conn.close()
+
+
+def test_no_cell_highlighted_while_in_column_zone(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
+        window._load_programmes()
+        window._relayout()
+
+        for image, _label, _desc in window._pool[0]:
+            if image.isVisible():
+                assert image._color_diffuse != 'FF3A6EA5'
+    finally:
+        conn.close()
+
+
+def test_left_from_first_cell_in_row_moves_to_column_not_time_scroll(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
+        window._load_programmes()
+        window._relayout()
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # enter grid, first cell
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+
+        assert window._zone == 'column'
+        assert window._viewport_start == viewport_start
+    finally:
+        conn.close()
+
+
+def test_left_from_non_first_cell_still_moves_cursor(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start + timedelta(hours=1)),
+                   guide.format_iso(viewport_start + timedelta(hours=2)), "Show B")
+        window._load_programmes()
+        window._relayout()
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # grid, cell 0
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # cell 1 (Show B)
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+
+        assert window._zone == 'grid'
+        assert window._cursor_time == viewport_start
+    finally:
+        conn.close()
+
+
+def test_up_down_ignored_while_zone_is_rail(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        _channel(conn, pid, "b", "Beta", 1)
+        window = _window(conn)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+        list_control = window.getControl(CHANNEL_LIST_ID)
+        selected_before = list_control.getSelectedPosition()
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_DOWN))
+
+        assert list_control.getSelectedPosition() == selected_before
+    finally:
+        conn.close()
+
+
+def test_ok_on_column_row_plays_live_with_channel_snapshot(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+        assert window._zone == 'column'
+
+        window.onClick(CHANNEL_LIST_ID)
+
+        assert playback_cls.opened_with is not None
+        assert playback_cls.opened_with['snapshot']['channel_key'] == 'a'
+        assert dialog_cls.opened_with is None
+    finally:
+        conn.close()
+
+
+def test_ok_on_catchup_rail_opens_stubbed_catchup_browser_and_defers_generation_change(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+
+        calls = []
+
+        class _FakeCatchup(object):
+            @classmethod
+            def open(cls, **kwargs):
+                calls.append(kwargs)
+                conn.execute("UPDATE channel SET name = 'Alpha2' WHERE channel_key = 'a'")
+                _bump_generation(2)
+                _notify_refreshed(window)
+                return cls()
+
+        window.catchup_cls = _FakeCatchup
+        list_control = window.getControl(CHANNEL_LIST_ID)
+        assert list_control.getListItem(0).getLabel() == 'Alpha'
+
+        window.onClick(win_guide.RAIL_CATCHUP_ID)
+
+        assert calls and calls[0]['conn'] is conn
+        assert list_control.getListItem(0).getLabel() == 'Alpha2'
+    finally:
+        conn.close()
+
+
+def test_ok_on_settings_rail_opens_stubbed_providers_window(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+
+        calls = []
+
+        class _FakeProviders(object):
+            @classmethod
+            def open(cls, **kwargs):
+                calls.append(kwargs)
+                return cls()
+
+        window.providers_cls = _FakeProviders
+
+        window.onClick(win_guide.RAIL_SETTINGS_ID)
+
+        assert calls and calls[0]['conn'] is conn
+    finally:
+        conn.close()
+
+
+def test_skin_pins_rail_and_channel_list_horizontal_navigation_to_self():
+    tree = ET.parse(_SKIN_XML)
+    controls_by_id = {}
+    for control in tree.getroot().iter('control'):
+        control_id = control.get('id')
+        if control_id is not None:
+            controls_by_id[control_id] = control
+    for control_id in ('601', '602', '603', '500'):
+        control = controls_by_id[control_id]
+        assert control.find('onleft').text == control_id
+        assert control.find('onright').text == control_id
 
 
 def test_focus_channel_id_outside_filtered_rows_defaults_to_first_row(tmp_path):

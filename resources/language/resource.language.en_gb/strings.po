@@ -491,3 +491,15 @@ msgstr ""
 msgctxt "#32118"
 msgid "Select group"
 msgstr ""
+
+msgctxt "#32119"
+msgid "Live TV"
+msgstr ""
+
+msgctxt "#32120"
+msgid "Catch-up"
+msgstr ""
+
+msgctxt "#32121"
+msgid "Settings"
+msgstr ""

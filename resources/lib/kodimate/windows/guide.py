@@ -13,20 +13,27 @@ import xbmcgui
 
 from .. import catchup, channels, guide, ipc, log, osd, playback, providers
 from .base import BaseWindow
+from .catchup_browser import CatchupBrowserWindow
 from .playback import PlaybackWindow
 from .programme_info import ProgrammeInfoDialog
+from .providers import ProvidersWindow
 
 CHANNEL_LIST_ID = 500
+RAIL_LIVETV_ID = 601
+RAIL_CATCHUP_ID = 602
+RAIL_SETTINGS_ID = 603
 
 _STR_NO_INFO = 32083
 _STR_ALL_CHANNELS = 32038
 _STR_FAVOURITES = 32039
 _STR_SELECT_GROUP = 32118
 
+_RAIL_WIDTH = 120
 _LEFT_COL_WIDTH = 300
+_GRID_X = _RAIL_WIDTH + _LEFT_COL_WIDTH
 _HEADER_HEIGHT = 60
 _ROW_HEIGHT = 98
-_GRID_WIDTH = 1920 - _LEFT_COL_WIDTH
+_GRID_WIDTH = 1920 - _GRID_X
 _POOL_COLS = 28  # real EPG data can pack ~24 short programmes into a 3h window
 
 _HEADER_SLOTS = 6  # 3 hours in 30-minute slots
@@ -64,6 +71,8 @@ class GuideWindow(BaseWindow):
     _tz = None  # override in tests/subclasses to fix the local zone
     dialog_cls = ProgrammeInfoDialog
     playback_cls = PlaybackWindow
+    catchup_cls = CatchupBrowserWindow
+    providers_cls = ProvidersWindow
     group_id = None
     favourites = False
     focus_channel_id = None
@@ -77,7 +86,7 @@ class GuideWindow(BaseWindow):
                     self._refresh_in_place()
                 else:
                     self._relayout()
-            self.setFocusId(CHANNEL_LIST_ID)
+            self._apply_zone()
             return
 
         addon = xbmcaddon.Addon()
@@ -88,6 +97,9 @@ class GuideWindow(BaseWindow):
         self._group_id = self.group_id
         self._favourites = self.favourites
         self._provider_id = self.provider_id
+        self._zone = 'column'
+        self._panel_open = False
+        self._rail_focus_id = RAIL_LIVETV_ID
 
         self._channel_rows = self._query_rows()
         self._top_row = 0
@@ -119,9 +131,16 @@ class GuideWindow(BaseWindow):
         # above every cell, including the cursor cell.
         self._create_now_line()
         self._relayout()
-        self.setFocusId(CHANNEL_LIST_ID)
+        self.setProperty('rail_selected', 'livetv')
+        self._apply_zone()
         self._watcher = ipc.GenerationWatcher(self._on_generation_change)
         self._initialised = True
+
+    def _apply_zone(self):
+        if self._zone == 'rail':
+            self.setFocusId(self._rail_focus_id)
+        else:
+            self.setFocusId(CHANNEL_LIST_ID)
 
     def _on_generation_change(self, generation):
         with self._lock:
@@ -190,16 +209,18 @@ class GuideWindow(BaseWindow):
             self._open_group_picker()
             return
         if action_id == xbmcgui.ACTION_MOVE_LEFT:
-            self._move_cursor_horizontal(-1)
+            self._handle_left()
             return
         if action_id == xbmcgui.ACTION_MOVE_RIGHT:
-            self._move_cursor_horizontal(1)
+            self._handle_right()
             return
         if action_id in (xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN):
-            self._handle_vertical_move()
+            if self._zone != 'rail':
+                self._handle_vertical_move()
             return
         if action_id in (_ACTION_PAGE_UP, _ACTION_PAGE_DOWN):
-            self._handle_vertical_move()
+            if self._zone != 'rail':
+                self._handle_vertical_move()
             return
         if action_id == _ACTION_NEXT_ITEM:
             self._skip_viewport(guide.SKIP_HOURS)
@@ -211,8 +232,75 @@ class GuideWindow(BaseWindow):
             self._jump_to_now()
             return
 
+    def _handle_left(self):
+        if self._zone == 'grid':
+            focused_row = self._focused_row_index()
+            row_cells = self._row_cells[focused_row] if 0 <= focused_row < len(self._row_cells) else []
+            current_cell = self._find_cell(focused_row, self._cursor_time)
+            if current_cell is not None and row_cells and row_cells.index(current_cell) == 0:
+                self._zone, _ = guide.zone_transition('grid', 'left', self._panel_open)
+                self._relayout()
+            else:
+                self._move_cursor_horizontal(-1)
+            return
+        next_zone, _ = guide.zone_transition(self._zone, 'left', self._panel_open)
+        if next_zone != self._zone:
+            self._zone = next_zone
+            self._apply_zone()
+
+    def _handle_right(self):
+        if self._zone == 'grid':
+            self._move_cursor_horizontal(1)
+            return
+        if self._zone == 'rail':
+            self._rail_focus_id = self.getFocusId()
+        next_zone, _ = guide.zone_transition(self._zone, 'right', self._panel_open)
+        self._zone = next_zone
+        self._apply_zone()
+        if next_zone == 'grid':
+            self._relayout()
+
+    def _play_selected_channel(self):
+        channel_index = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
+        if not (0 <= channel_index < len(self._channel_rows)):
+            return
+        channel_row = self._channel_rows[channel_index]
+        snapshot = playback.load_snapshot(self.conn, channel_row['provider_id'], channel_row['channel_key'])
+        if snapshot is None:
+            return
+        self._enter_modal()
+        try:
+            self.playback_cls.open(conn=self.conn, snapshot=snapshot)
+        finally:
+            refreshed = self._exit_modal()
+        if not refreshed:
+            self._relayout()
+
+    def _open_catchup(self):
+        self._enter_modal()
+        try:
+            self.catchup_cls.open(conn=self.conn)
+        finally:
+            self._exit_modal()
+
+    def _open_providers(self):
+        self._enter_modal()
+        try:
+            self.providers_cls.open(conn=self.conn)
+        finally:
+            self._exit_modal()
+
     def onClick(self, control_id):
+        if control_id == RAIL_CATCHUP_ID:
+            self._open_catchup()
+            return
+        if control_id == RAIL_SETTINGS_ID:
+            self._open_providers()
+            return
         if control_id != CHANNEL_LIST_ID:
+            return
+        if self._zone == 'column':
+            self._play_selected_channel()
             return
         focused_row = self._focused_row_index()
         cell = self._find_cell(focused_row, self._cursor_time)
@@ -375,7 +463,7 @@ class GuideWindow(BaseWindow):
         visible = 0 <= minutes_from_view <= guide.VISIBLE_HOURS * 60
         self.now_line.setVisible(visible)
         if visible:
-            x = int(_LEFT_COL_WIDTH + minutes_from_view * px_per_min)
+            x = int(_GRID_X + minutes_from_view * px_per_min)
             self.now_line.setPosition(x, _HEADER_HEIGHT)
 
     def _update_header(self):
@@ -453,7 +541,7 @@ class GuideWindow(BaseWindow):
                     y = _HEADER_HEIGHT + row * _ROW_HEIGHT
                     row_pool = self._pool[row]
                     cursor_cell = guide.resolve_cursor(layout_cells, self._cursor_time) \
-                        if row == focused_row else None
+                        if row == focused_row and self._zone == 'grid' else None
                     for col, cell in enumerate(layout_cells):
                         if col >= _POOL_COLS:
                             log.log(
@@ -501,11 +589,11 @@ class GuideWindow(BaseWindow):
         image, label, desc_label = pool_entry
         text_color = self._label_color_for(cell, state, is_cursor)
         desc_color = self._desc_color_for(cell, state, is_cursor)
-        image.setPosition(cell['x'] + _LEFT_COL_WIDTH, y)
+        image.setPosition(cell['x'] + _GRID_X, y)
         image.setWidth(max(1, cell['width'] - 2))
         image.setHeight(_ROW_HEIGHT - 2)
         image.setColorDiffuse('FF3A6EA5' if is_cursor else 'FF202020')
-        label_x = cell['x'] + _LEFT_COL_WIDTH + 8
+        label_x = cell['x'] + _GRID_X + 8
         label_width = max(1, cell['width'] - 16)
         label.setPosition(label_x, y)
         label.setWidth(label_width)
@@ -584,6 +672,8 @@ class GuideWindow(BaseWindow):
         self._relayout()
 
     def _swap_cursor_cell(self, row, old_time, new_time):
+        if self._zone != 'grid':
+            return False
         old_cell = self._find_cell(row, old_time)
         new_cell = self._find_cell(row, new_time)
         if old_cell is None or new_cell is None:
@@ -633,6 +723,8 @@ class GuideWindow(BaseWindow):
     def _swap_cursor_row(self, old_row, new_row):
         # Rule B: the travel axis (self._cursor_time) is never changed by
         # Up/Down; only the target row's cell is resolved against it.
+        if self._zone != 'grid':
+            return False
         new_cells = self._row_cells[new_row] if 0 <= new_row < len(self._row_cells) else []
         new_cell = guide.move_cursor_vertical(new_cells, self._cursor_time)
         if new_cell is None:
