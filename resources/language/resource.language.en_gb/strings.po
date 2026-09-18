@@ -487,3 +487,7 @@ msgstr ""
 msgctxt "#32117"
 msgid "LIVE"
 msgstr ""
+
+msgctxt "#32118"
+msgid "Select group"
+msgstr ""

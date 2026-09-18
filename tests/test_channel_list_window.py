@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 
-from kodimate import db
+from kodimate import channels, db
 from kodimate.windows.channel_list import ChannelListWindow, GROUPS_LIST_ID, CHANNELS_LIST_ID, \
     TOGGLE_HIDDEN_ID
 import xbmcgui
@@ -653,5 +653,67 @@ def test_group_debounce_timer_is_noop_during_favourites_move(tmp_path, monkeypat
 
         channels_control = window.getControl(CHANNELS_LIST_ID)
         assert [item.getProperty('channel_key') for item in channels_control._items] == ['b', 'a']
+    finally:
+        conn.close()
+
+
+def test_show_info_opens_guide_prefiltered_to_selected_group_and_channel(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        p1, p2, g1 = _seed(conn)
+        window = _window(conn)
+        window.onClick(TOGGLE_HIDDEN_ID)  # reveal Beta too
+
+        groups_control = window.getControl(GROUPS_LIST_ID)
+        groups_control.selectItem(2)  # Sports
+        window.onClick(GROUPS_LIST_ID)
+        _select_channel(window, 'b')
+
+        opened = {}
+
+        class _StubGuide(object):
+            @classmethod
+            def open(cls, **kwargs):
+                opened.update(kwargs)
+
+        window.guide_cls = _StubGuide
+        window.onAction(xbmcgui.Action(11))
+
+        beta_id = channels.list_channels(conn, group_id=g1, show_hidden=True)[1]['id']
+        assert opened['conn'] is conn
+        assert opened['group_id'] == g1
+        assert opened['favourites'] is False
+        assert opened['focus_channel_id'] == beta_id
+    finally:
+        conn.close()
+
+
+def test_show_info_favourites_pane_passes_favourites_true(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        p1, p2, g1 = _seed(conn)
+        conn.execute(
+            "INSERT INTO channel_override (provider_id, channel_key, favourite) VALUES (?, 'a', 1)",
+            (p1,),
+        )
+        window = _window(conn)
+
+        groups_control = window.getControl(GROUPS_LIST_ID)
+        groups_control.selectItem(1)  # Favourites
+        window.onClick(GROUPS_LIST_ID)
+        _select_channel(window, 'a')
+
+        opened = {}
+
+        class _StubGuide(object):
+            @classmethod
+            def open(cls, **kwargs):
+                opened.update(kwargs)
+
+        window.guide_cls = _StubGuide
+        window.onAction(xbmcgui.Action(11))
+
+        assert opened['group_id'] is None
+        assert opened['favourites'] is True
     finally:
         conn.close()

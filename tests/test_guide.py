@@ -266,3 +266,38 @@ def test_clamp_viewport_floor_and_ceiling():
     assert guide.clamp_viewport(floor - timedelta(hours=5), now, None) == floor
     assert guide.clamp_viewport(ceiling + timedelta(hours=5), now, None) == ceiling
     assert guide.clamp_viewport(now, now, None) == now
+
+
+def test_filter_options_all_favourites_then_groups_in_order():
+    groups = [{'id': 5, 'provider_id': 1, 'name': 'Sport'}, {'id': 9, 'provider_id': 1, 'name': 'News'}]
+    options = guide.filter_options(groups, 'All channels', 'Favourites')
+    assert options == [
+        {'label': 'All channels', 'group_id': None, 'favourites': False},
+        {'label': 'Favourites', 'group_id': None, 'favourites': True},
+        {'label': 'Sport', 'group_id': 5, 'favourites': False},
+        {'label': 'News', 'group_id': 9, 'favourites': False},
+    ]
+
+
+def test_filter_label_for_all_favourites_and_group():
+    groups = [{'id': 5, 'provider_id': 1, 'name': 'Sport'}]
+    assert guide.filter_label(None, False, groups, 'All channels', 'Favourites') == 'All channels'
+    assert guide.filter_label(None, True, groups, 'All channels', 'Favourites') == 'Favourites'
+    assert guide.filter_label(5, False, groups, 'All channels', 'Favourites') == 'Sport'
+
+
+def test_filter_label_unknown_group_id_falls_back_to_all():
+    groups = [{'id': 5, 'provider_id': 1, 'name': 'Sport'}]
+    assert guide.filter_label(999, False, groups, 'All channels', 'Favourites') == 'All channels'
+
+
+def test_initial_cursor_index_finds_matching_row():
+    rows = [{'id': 1}, {'id': 2}, {'id': 3}]
+    assert guide.initial_cursor_index(rows, 2) == 1
+
+
+def test_initial_cursor_index_defaults_to_zero():
+    rows = [{'id': 1}, {'id': 2}]
+    assert guide.initial_cursor_index(rows, None) == 0
+    assert guide.initial_cursor_index(rows, 999) == 0
+    assert guide.initial_cursor_index([], 1) == 0

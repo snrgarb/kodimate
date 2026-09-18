@@ -19,6 +19,9 @@ from .programme_info import ProgrammeInfoDialog
 CHANNEL_LIST_ID = 500
 
 _STR_NO_INFO = 32083
+_STR_ALL_CHANNELS = 32038
+_STR_FAVOURITES = 32039
+_STR_SELECT_GROUP = 32118
 
 _LEFT_COL_WIDTH = 300
 _HEADER_HEIGHT = 60
@@ -61,6 +64,9 @@ class GuideWindow(BaseWindow):
     _tz = None  # override in tests/subclasses to fix the local zone
     dialog_cls = ProgrammeInfoDialog
     playback_cls = PlaybackWindow
+    group_id = None
+    favourites = False
+    focus_channel_id = None
 
     def onInit(self):
         if getattr(self, '_initialised', False):
@@ -78,7 +84,10 @@ class GuideWindow(BaseWindow):
         self._no_info_title = addon.getLocalizedString(_STR_NO_INFO)
         self._tex_cell = _abs_path(addon_path, _NOW_LINE_RELPATH)
 
-        self._channel_rows = channels.list_channels(self.conn)
+        self._group_id = self.group_id
+        self._favourites = self.favourites
+
+        self._channel_rows = self._query_rows()
         self._top_row = 0
         self._viewport_start = guide.round_down_30_local(datetime.utcnow(), self._tz)
         self._cursor_time = self._viewport_start
@@ -95,6 +104,12 @@ class GuideWindow(BaseWindow):
         self._lock = threading.RLock()
 
         self._populate_channel_list()
+        index = guide.initial_cursor_index(self._channel_rows, self.focus_channel_id)
+        if self._channel_rows:
+            self.getControl(CHANNEL_LIST_ID).selectItem(index)
+        self._top_row = guide.compute_top_row(0, index)
+        self._last_selected = index
+        self._update_filter_header()
         self._build_pool()
         self._load_programmes()
         # Created last (after the pool) so draw order -- which follows
@@ -135,7 +150,7 @@ class GuideWindow(BaseWindow):
         old_row = self._channel_rows[selected] if 0 <= selected < len(self._channel_rows) else None
         old_key = (old_row['provider_id'], old_row['channel_key']) if old_row else None
 
-        self._channel_rows = channels.list_channels(self.conn)
+        self._channel_rows = self._query_rows()
         self._populate_channel_list()
 
         new_index = 0
@@ -168,6 +183,9 @@ class GuideWindow(BaseWindow):
         action_id = action.getId()
         if action_id in (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU):
             self.close()
+            return
+        if action_id == xbmcgui.ACTION_CONTEXT_MENU:
+            self._open_group_picker()
             return
         if action_id == xbmcgui.ACTION_MOVE_LEFT:
             self._move_cursor_horizontal(-1)
@@ -255,6 +273,44 @@ class GuideWindow(BaseWindow):
         return None
 
     # -- setup -----------------------------------------------------------
+
+    def _query_rows(self):
+        return channels.list_channels(self.conn, group_id=self._group_id, favourites=self._favourites)
+
+    def _update_filter_header(self):
+        addon = xbmcaddon.Addon()
+        groups = channels.list_groups(self.conn)
+        label = guide.filter_label(
+            self._group_id, self._favourites, groups,
+            addon.getLocalizedString(_STR_ALL_CHANNELS), addon.getLocalizedString(_STR_FAVOURITES),
+        )
+        self.setProperty('guide_filter', label)
+
+    def _open_group_picker(self):
+        addon = xbmcaddon.Addon()
+        groups = channels.list_groups(self.conn)
+        options = guide.filter_options(
+            groups, addon.getLocalizedString(_STR_ALL_CHANNELS), addon.getLocalizedString(_STR_FAVOURITES)
+        )
+        labels = [option['label'] for option in options]
+        self._enter_modal()
+        try:
+            choice = xbmcgui.Dialog().select(addon.getLocalizedString(_STR_SELECT_GROUP), labels)
+        finally:
+            self._exit_modal()
+        if choice is None or choice < 0:
+            return
+        with self._lock:
+            selected = options[choice]
+            self._group_id = selected['group_id']
+            self._favourites = selected['favourites']
+            self._channel_rows = self._query_rows()
+            self._populate_channel_list()
+            self._top_row = 0
+            self._last_selected = 0
+            self._update_filter_header()
+            self._load_programmes()
+            self._relayout()
 
     def _populate_channel_list(self):
         control = self.getControl(CHANNEL_LIST_ID)

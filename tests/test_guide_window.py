@@ -1126,3 +1126,168 @@ def test_reentering_oninit_applies_deferred_refresh(tmp_path):
         assert list_control.getListItem(0).getLabel() == 'Alpha2'
     finally:
         conn.close()
+
+
+def test_default_filter_is_all_channels(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        assert window.getProperty('guide_filter') == 'String 32038'
+    finally:
+        conn.close()
+
+
+def test_group_filter_restricts_rows_and_sets_header(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
+            (pid,),
+        ).lastrowid
+        _channel(conn, pid, "a", "Alpha", 0)
+        cid = _channel(conn, pid, "b", "Beta", 1)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid))
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, group_id=gid)
+        window.onInit()
+        assert [row['name'] for row in window._channel_rows] == ['Beta']
+        assert window.getProperty('guide_filter') == 'Sports'
+    finally:
+        conn.close()
+
+
+def test_favourites_filter_restricts_rows_and_sets_header(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        _channel(conn, pid, "b", "Beta", 1)
+        conn.execute(
+            "INSERT INTO channel_override (provider_id, channel_key, favourite) VALUES (?, 'b', 1)",
+            (pid,),
+        )
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, favourites=True)
+        window.onInit()
+        assert [row['name'] for row in window._channel_rows] == ['Beta']
+        assert window.getProperty('guide_filter') == 'String 32039'
+    finally:
+        conn.close()
+
+
+def test_focus_channel_id_selects_initial_cursor(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        cid_b = _channel(conn, pid, "b", "Beta", 1)
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, focus_channel_id=cid_b)
+        window.onInit()
+        assert window.getControl(CHANNEL_LIST_ID).getSelectedPosition() == 1
+        assert window._last_selected == 1
+    finally:
+        conn.close()
+
+
+def test_group_picker_changes_filter_resets_cursor_keeps_viewport(tmp_path, monkeypatch):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
+            (pid,),
+        ).lastrowid
+        _channel(conn, pid, "a", "Alpha", 0)
+        cid = _channel(conn, pid, "b", "Beta", 1)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid))
+        window = _window(conn)
+        original_viewport = window._viewport_start
+        window.getControl(CHANNEL_LIST_ID).selectItem(1)
+
+        monkeypatch.setattr(xbmcgui.Dialog, 'select', lambda self, heading, options: 2)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_CONTEXT_MENU))
+
+        assert [row['name'] for row in window._channel_rows] == ['Beta']
+        assert window.getControl(CHANNEL_LIST_ID).getSelectedPosition() == 0
+        assert window._top_row == 0
+        assert window._viewport_start == original_viewport
+        assert window.getProperty('guide_filter') == 'Sports'
+    finally:
+        conn.close()
+
+
+def test_group_picker_cancel_leaves_filter_unchanged(tmp_path, monkeypatch):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        monkeypatch.setattr(xbmcgui.Dialog, 'select', lambda self, heading, options: -1)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_CONTEXT_MENU))
+        assert window._group_id is None
+        assert window._favourites is False
+        assert window.getProperty('guide_filter') == 'String 32038'
+    finally:
+        conn.close()
+
+
+def test_generation_change_keeps_group_filter(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
+            (pid,),
+        ).lastrowid
+        _channel(conn, pid, "a", "Alpha", 0)
+        cid = _channel(conn, pid, "b", "Beta", 1)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid))
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, group_id=gid)
+        window.onInit()
+        _bump_generation(1)
+        _notify_refreshed(window)
+        assert [row['name'] for row in window._channel_rows] == ['Beta']
+    finally:
+        conn.close()
+
+
+def test_empty_favourites_filter_is_a_no_op_grid_no_exceptions(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, favourites=True)
+        window.onInit()
+        assert window._channel_rows == []
+        assert window.getProperty('guide_filter') == 'String 32039'
+        for action_id in (xbmcgui.ACTION_MOVE_LEFT, xbmcgui.ACTION_MOVE_RIGHT,
+                           xbmcgui.ACTION_MOVE_UP, xbmcgui.ACTION_MOVE_DOWN):
+            window.onAction(xbmcgui.Action(action_id))
+        closed = []
+        window.close = lambda: closed.append(True)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
+        assert closed == [True]
+    finally:
+        conn.close()
+
+
+def test_focus_channel_id_outside_filtered_rows_defaults_to_first_row(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid_a = _channel(conn, pid, "a", "Alpha", 0)
+        _channel(conn, pid, "b", "Beta", 1)
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, favourites=True, focus_channel_id=cid_a)
+        window.onInit()
+        assert window._channel_rows == []
+        assert window.getControl(CHANNEL_LIST_ID).getSelectedPosition() == 0
+        assert window._top_row == 0
+    finally:
+        conn.close()

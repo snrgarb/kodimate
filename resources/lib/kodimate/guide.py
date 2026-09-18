@@ -182,3 +182,39 @@ def viewport_changed(prev_top_row, new_top_row, prev_viewport_start, new_viewpor
     gated on the list's top row or the time viewport actually changing,
     never on an in-viewport cursor move."""
     return prev_top_row != new_top_row or prev_viewport_start != new_viewport_start
+
+
+def filter_options(groups, all_label, favourites_label):
+    """Channel filter choices for the group picker: All channels,
+    Favourites, then one per group in the given order."""
+    options = [
+        {'label': all_label, 'group_id': None, 'favourites': False},
+        {'label': favourites_label, 'group_id': None, 'favourites': True},
+    ]
+    options.extend(
+        {'label': group['name'], 'group_id': group['id'], 'favourites': False}
+        for group in groups
+    )
+    return options
+
+
+def filter_label(group_id, favourites, groups, all_label, favourites_label):
+    """Header text for the active filter; an unknown group_id falls back
+    to all_label."""
+    if favourites:
+        return favourites_label
+    if group_id is None:
+        return all_label
+    for group in groups:
+        if group['id'] == group_id:
+            return group['name']
+    return all_label
+
+
+def initial_cursor_index(rows, focus_channel_id):
+    """Index of the row whose 'id' == focus_channel_id, else 0."""
+    if focus_channel_id is not None:
+        for index, row in enumerate(rows):
+            if row['id'] == focus_channel_id:
+                return index
+    return 0

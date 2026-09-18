@@ -8,11 +8,17 @@ import xbmcgui
 
 from .. import channels, guide, ipc, playback
 from .base import BaseWindow
+from .guide import GuideWindow
 from .playback import PlaybackWindow
 
 TOGGLE_HIDDEN_ID = 300
 GROUPS_LIST_ID = 200
 CHANNELS_LIST_ID = 201
+
+# Real Kodi's xbmcgui module does not export ACTION_SHOW_INFO; defined here
+# directly from Kodi's ActionIDs.h numeric value instead (see guide.py for
+# the same pattern with its own numeric action ids).
+_ACTION_SHOW_INFO = 11
 
 _STR_ALL_CHANNELS = 32038
 _STR_FAVOURITES = 32039
@@ -31,6 +37,7 @@ _GROUP_SELECTION_DEBOUNCE_SECONDS = 0.35
 class ChannelListWindow(BaseWindow):
     xmlFile = 'script-kodimate-channel-list.xml'
     now_fn = datetime.utcnow
+    guide_cls = GuideWindow
 
     def onInit(self):
         if getattr(self, '_initialised', False):
@@ -147,6 +154,9 @@ class ChannelListWindow(BaseWindow):
                 self._schedule_render_channels()
         elif action_id == xbmcgui.ACTION_CONTEXT_MENU and self.getFocusId() == CHANNELS_LIST_ID:
             self._context_menu()
+        elif action_id == _ACTION_SHOW_INFO and self.getFocusId() == CHANNELS_LIST_ID \
+                and self._move_key is None:
+            self._open_guide()
 
     def onClick(self, control_id):
         if control_id == TOGGLE_HIDDEN_ID:
@@ -177,6 +187,25 @@ class ChannelListWindow(BaseWindow):
                 PlaybackWindow.open(conn=self.conn, snapshot=snapshot)
             finally:
                 self._exit_modal()
+
+    def _open_guide(self):
+        group_item = self._selected_group_item()
+        kind = group_item.getProperty('kind') if group_item is not None else 'all'
+        group_id = int(group_item.getProperty('group_id')) if kind == 'group' else None
+        favourites = kind == 'favourites'
+
+        channel_item = self.getControl(CHANNELS_LIST_ID).getSelectedItem()
+        channel_id = channel_item.getProperty('channel_id') if channel_item is not None else ''
+        focus_channel_id = int(channel_id) if channel_id else None
+
+        self._enter_modal()
+        try:
+            self.guide_cls.open(
+                conn=self.conn, group_id=group_id, favourites=favourites,
+                focus_channel_id=focus_channel_id,
+            )
+        finally:
+            self._exit_modal()
 
     def _context_menu(self):
         item = self.getControl(CHANNELS_LIST_ID).getSelectedItem()
@@ -382,6 +411,7 @@ class ChannelListWindow(BaseWindow):
                 list_item.setProperty('favourite', '1' if row['favourite'] else '0')
                 list_item.setProperty('channel_key', row['channel_key'])
                 list_item.setProperty('provider_id', str(row['provider_id']))
+                list_item.setProperty('channel_id', str(row['id']))
                 list_item.setProperty('now_title', now_titles.get(row['id']) or '')
                 if row['logo_url']:
                     list_item.setArt({'icon': row['logo_url']})
