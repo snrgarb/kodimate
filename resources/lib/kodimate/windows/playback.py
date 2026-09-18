@@ -775,12 +775,16 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
 
     def _rebuild_at_target(self, target_epoch, unavailable):
-        """Find the programme covering `target_epoch` and either go live
-        (it's airing now), start a Catch-up session there (`target_epoch -
-        programme start` as the initial offset), or call `unavailable()`
-        when no playable programme covers it. Shared by a seek/big-step
-        commit that lands outside the player's buffer and a resume past the
-        buffer after a pause."""
+        """Find the programme covering `target_epoch` and start a Catch-up
+        session there (`target_epoch - programme start` as the initial
+        offset) -- Start Over semantics when the programme is still airing
+        (state 'live') -- or call `unavailable()` when no programme covers
+        it or it isn't playable (including a 'live' programme with no
+        Catch-up Window at all). Going live at/after the live edge is
+        decided earlier, by the caller's live-edge check; this only ever
+        rebuilds a Catch-up URL. Shared by a seek/big-step commit that
+        lands outside the player's buffer and a resume past the buffer
+        after a pause."""
         self._load_programmes()
         programme = self._programme_containing(target_epoch)
         window_days = self._catchup_window_days()
@@ -788,11 +792,9 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
         state = catchup.cell_state(
             programme['start'], programme['end'], window_days, now
         ) if programme is not None else None
-        if programme is None or state not in ('live', 'past_playable'):
+        playable = state == 'past_playable' or (state == 'live' and window_days)
+        if programme is None or not playable:
             unavailable()
-            return
-        if state == 'live':
-            self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
             return
         offset = target_epoch - _epoch(programme['start'])
         self._abort_current_session()
@@ -1111,6 +1113,8 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
                 channel_key = item.getProperty('channel_key')
                 self._close_list()
                 self._zap(provider_id, channel_key)
+            elif control_id == SEEK_ROW_ID:
+                self._toggle_pause()
             elif control_id == BTN_REWIND_ID:
                 self._seek_press(-1)
             elif control_id == BTN_PLAYPAUSE_ID:
@@ -1242,7 +1246,16 @@ class PlaybackWindow(xbmcgui.WindowXMLDialog):
             self._start_new_session()
             return
         if self.getProperty('bar_visible') == '1':
-            self._on_ok_bar_visible()
+            focus = self.getFocusId()
+            if focus == SEEK_ROW_ID:
+                # onClick(711) already fires for a real OK/click on this
+                # focused button; toggling here too would double-toggle.
+                pass
+            elif focus in _BUTTON_ROW_IDS:
+                # onClick(712-715) already handles these.
+                pass
+            else:
+                self._on_ok_bar_visible()
         else:
             self._show_bar(arm_hide=(self.getProperty('state') == 'playing'))
 

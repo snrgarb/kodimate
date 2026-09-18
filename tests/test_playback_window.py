@@ -1400,6 +1400,7 @@ def test_ok_on_bar_visible_opens_dialog_and_starts_catchup(tmp_path):
     window = _window(conn, snapshot, now_fn=FakeNow(now), dialog_cls=_Dialog)
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
     plays_before = len(window.player.plays)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_SELECT_ITEM))
@@ -1432,6 +1433,7 @@ def test_ok_on_bar_visible_watch_live_from_catchup(tmp_path):
     window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict, dialog_cls=_Dialog)
     window.onInit()
     window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_SELECT_ITEM))
 
@@ -1766,6 +1768,29 @@ def test_seek_outside_buffer_rebuilds_catchup_session(tmp_path):
     assert len(window.player.plays) == plays_before + 1
 
 
+def test_seek_left_on_unseekable_live_stream_starts_over_airing_programme(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)  # Show3 12:00-13:00 airing
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0  # unseekable live TS: no player buffer
+    window.player.time = 0
+    window.setFocusId(SEEK_ROW_ID)
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(0.75)
+
+    assert window.catchup is not None
+    assert window.catchup['title'] == 'Show3'
+    assert window.catchup['start'] == _epoch(datetime(2026, 1, 1, 12, 0))
+    # now (12:30) is 1800s into Show3 (12:00-13:00); a 10s rewind targets 1790s in.
+    assert window.catchup['offset'] == 1790
+    assert len(window.player.plays) == plays_before + 1
+
+
 def test_pause_cancels_pending_seek(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
@@ -1868,6 +1893,73 @@ def test_pause_toggles_player_and_property(tmp_path):
     assert window.getProperty('paused') == '1'
     assert window.player.pause_calls == 1
     assert window.getProperty('bar_visible') == '1'
+
+
+def test_ok_with_button_row_focus_does_not_open_dialog_or_double_toggle(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+
+    class _Dialog(object):
+        @classmethod
+        def open(cls, **kwargs):
+            raise AssertionError('dialog should not open with button-row focus')
+
+    window = _window(conn, snapshot, dialog_cls=_Dialog)
+    window.onInit()
+    window.session.on_av_started()
+    window.setFocusId(BTN_PLAYPAUSE_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_SELECT_ITEM))
+    window.onClick(BTN_PLAYPAUSE_ID)
+
+    assert window.getProperty('paused') == '1'
+    assert window.player.pause_calls == 1
+
+
+def test_ok_with_seek_row_focus_toggles_pause_once(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+
+    class _Dialog(object):
+        @classmethod
+        def open(cls, **kwargs):
+            raise AssertionError('dialog should not open with seek-row focus')
+
+    window = _window(conn, snapshot, dialog_cls=_Dialog)
+    window.onInit()
+    window.session.on_av_started()
+    window.setFocusId(SEEK_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_SELECT_ITEM))
+    window.onClick(SEEK_ROW_ID)
+
+    assert window.getProperty('paused') == '1'
+    assert window.player.pause_calls == 1
+
+
+def test_ok_with_programme_row_focus_opens_dialog(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)  # Show3 airing now
+
+    class _Dialog(object):
+        opened_with = None
+        result = None
+
+        @classmethod
+        def open(cls, **kwargs):
+            cls.opened_with = kwargs
+            return cls()
+
+    window = _window(conn, snapshot, now_fn=FakeNow(now), dialog_cls=_Dialog)
+    window.onInit()
+    window.session.on_av_started()
+    window.setFocusId(PROGRAMME_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_SELECT_ITEM))
+
+    assert _Dialog.opened_with is not None
+    assert _Dialog.opened_with['title'] == 'Show3'
 
 
 def test_resume_within_buffer_is_native_toggle(tmp_path):
