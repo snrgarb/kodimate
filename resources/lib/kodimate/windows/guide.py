@@ -26,7 +26,7 @@ _STR_ALL_CHANNELS = 32038
 _STR_FAVOURITES = 32039
 _STR_GROUPS = 32125
 
-_RAIL_WIDTH = 0
+_RAIL_WIDTH = 150
 _LEFT_COL_WIDTH = 300
 _GRID_X = _RAIL_WIDTH + _LEFT_COL_WIDTH
 _HEADER_HEIGHT = 60
@@ -101,7 +101,6 @@ class GuideWindow(BaseWindow):
         self._rail_focus_id = RAIL_LIVETV_ID
         self.setProperty('panel_open', '')
         self.setProperty('panel_heading', addon.getLocalizedString(_STR_GROUPS))
-        self.setProperty('rail_open', '')
 
         self._channel_rows = self._query_rows()
         self._top_row = 0
@@ -139,7 +138,6 @@ class GuideWindow(BaseWindow):
         self._initialised = True
 
     def _apply_zone(self):
-        self.setProperty('rail_open', '1' if self._zone == 'rail' else '')
         if self._zone == 'rail':
             self.setFocusId(self._rail_focus_id)
         elif self._zone == 'panel':

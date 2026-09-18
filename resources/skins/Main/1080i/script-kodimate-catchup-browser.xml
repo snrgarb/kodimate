@@ -11,8 +11,8 @@
         <control type="image">
             <posx>0</posx>
             <posy>60</posy>
-            <width>120</width>
-            <height>100</height>
+            <width>150</width>
+            <height>110</height>
             <texture>white.png</texture>
             <colordiffuse>ff2a4e75</colordiffuse>
             <visible>String.IsEqual(Window.Property(rail_selected),catchup)</visible>
@@ -20,8 +20,8 @@
         <control type="button" id="601">
             <posx>0</posx>
             <posy>60</posy>
-            <width>120</width>
-            <height>100</height>
+            <width>150</width>
+            <height>110</height>
             <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
             <texturenofocus>-</texturenofocus>
             <onleft>601</onleft>
@@ -30,8 +30,8 @@
             <ondown>602</ondown>
         </control>
         <control type="image">
-            <posx>36</posx>
-            <posy>86</posy>
+            <posx>51</posx>
+            <posy>76</posy>
             <width>48</width>
             <height>48</height>
             <texture>livetv.png</texture>
@@ -40,8 +40,8 @@
             <visible>!Control.HasFocus(601)</visible>
         </control>
         <control type="image">
-            <posx>36</posx>
-            <posy>86</posy>
+            <posx>51</posx>
+            <posy>76</posy>
             <width>48</width>
             <height>48</height>
             <texture>livetv.png</texture>
@@ -49,11 +49,35 @@
             <colordiffuse>ffffffff</colordiffuse>
             <visible>Control.HasFocus(601)</visible>
         </control>
+        <control type="label">
+            <posx>0</posx>
+            <posy>140</posy>
+            <width>150</width>
+            <height>28</height>
+            <label>$ADDON[script.kodimate 32119]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font12</font>
+            <textcolor>ffcccccc</textcolor>
+            <visible>!Control.HasFocus(601)</visible>
+        </control>
+        <control type="label">
+            <posx>0</posx>
+            <posy>140</posy>
+            <width>150</width>
+            <height>28</height>
+            <label>$ADDON[script.kodimate 32119]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font12</font>
+            <textcolor>ffffffff</textcolor>
+            <visible>Control.HasFocus(601)</visible>
+        </control>
         <control type="button" id="602">
             <posx>0</posx>
-            <posy>160</posy>
-            <width>120</width>
-            <height>100</height>
+            <posy>170</posy>
+            <width>150</width>
+            <height>110</height>
             <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
             <texturenofocus>-</texturenofocus>
             <onleft>602</onleft>
@@ -62,7 +86,7 @@
             <ondown>603</ondown>
         </control>
         <control type="image">
-            <posx>36</posx>
+            <posx>51</posx>
             <posy>186</posy>
             <width>48</width>
             <height>48</height>
@@ -72,7 +96,7 @@
             <visible>!Control.HasFocus(602)</visible>
         </control>
         <control type="image">
-            <posx>36</posx>
+            <posx>51</posx>
             <posy>186</posy>
             <width>48</width>
             <height>48</height>
@@ -81,11 +105,35 @@
             <colordiffuse>ffffffff</colordiffuse>
             <visible>Control.HasFocus(602)</visible>
         </control>
+        <control type="label">
+            <posx>0</posx>
+            <posy>250</posy>
+            <width>150</width>
+            <height>28</height>
+            <label>$ADDON[script.kodimate 32110]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font12</font>
+            <textcolor>ffcccccc</textcolor>
+            <visible>!Control.HasFocus(602)</visible>
+        </control>
+        <control type="label">
+            <posx>0</posx>
+            <posy>250</posy>
+            <width>150</width>
+            <height>28</height>
+            <label>$ADDON[script.kodimate 32110]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font12</font>
+            <textcolor>ffffffff</textcolor>
+            <visible>Control.HasFocus(602)</visible>
+        </control>
         <control type="button" id="603">
             <posx>0</posx>
-            <posy>260</posy>
-            <width>120</width>
-            <height>100</height>
+            <posy>280</posy>
+            <width>150</width>
+            <height>110</height>
             <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
             <texturenofocus>-</texturenofocus>
             <onleft>603</onleft>
@@ -94,8 +142,8 @@
             <ondown>601</ondown>
         </control>
         <control type="image">
-            <posx>36</posx>
-            <posy>286</posy>
+            <posx>51</posx>
+            <posy>296</posy>
             <width>48</width>
             <height>48</height>
             <texture>settings.png</texture>
@@ -104,8 +152,8 @@
             <visible>!Control.HasFocus(603)</visible>
         </control>
         <control type="image">
-            <posx>36</posx>
-            <posy>286</posy>
+            <posx>51</posx>
+            <posy>296</posy>
             <width>48</width>
             <height>48</height>
             <texture>settings.png</texture>
@@ -113,9 +161,33 @@
             <colordiffuse>ffffffff</colordiffuse>
             <visible>Control.HasFocus(603)</visible>
         </control>
+        <control type="label">
+            <posx>0</posx>
+            <posy>360</posy>
+            <width>150</width>
+            <height>28</height>
+            <label>$ADDON[script.kodimate 32116]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font12</font>
+            <textcolor>ffcccccc</textcolor>
+            <visible>!Control.HasFocus(603)</visible>
+        </control>
+        <control type="label">
+            <posx>0</posx>
+            <posy>360</posy>
+            <width>150</width>
+            <height>28</height>
+            <label>$ADDON[script.kodimate 32116]</label>
+            <align>center</align>
+            <aligny>center</aligny>
+            <font>font12</font>
+            <textcolor>ffffffff</textcolor>
+            <visible>Control.HasFocus(603)</visible>
+        </control>
 
         <control type="image">
-            <posx>140</posx>
+            <posx>170</posx>
             <posy>6</posy>
             <width>48</width>
             <height>48</height>
@@ -123,9 +195,9 @@
             <texture>$INFO[Window.Property(catchup_channel_logo)]</texture>
         </control>
         <control type="label">
-            <posx>200</posx>
+            <posx>230</posx>
             <posy>0</posy>
-            <width>1720</width>
+            <width>1690</width>
             <height>60</height>
             <label>$INFO[Window.Property(catchup_channel)]</label>
             <textcolor>ffffffff</textcolor>
@@ -134,9 +206,9 @@
         </control>
 
         <control type="label">
-            <posx>460</posx>
+            <posx>490</posx>
             <posy>60</posy>
-            <width>1460</width>
+            <width>1430</width>
             <height>60</height>
             <label>$INFO[Window.Property(catchup_day)]</label>
             <textcolor>ffffffff</textcolor>
@@ -145,7 +217,7 @@
         </control>
 
         <control type="list" id="200">
-            <posx>140</posx>
+            <posx>170</posx>
             <posy>60</posy>
             <width>300</width>
             <height>980</height>
@@ -274,9 +346,9 @@
             </focusedlayout>
         </control>
         <control type="list" id="201">
-            <posx>460</posx>
+            <posx>490</posx>
             <posy>120</posy>
-            <width>1460</width>
+            <width>1430</width>
             <height>920</height>
             <onup>201</onup>
             <ondown>201</ondown>
@@ -284,11 +356,11 @@
             <onright>201</onright>
             <onback>9000</onback>
             <scrolltime>0</scrolltime>
-            <itemlayout height="80" width="1460">
+            <itemlayout height="80" width="1430">
                 <control type="image">
                     <posx>0</posx>
                     <posy>0</posy>
-                    <width>1460</width>
+                    <width>1430</width>
                     <height>78</height>
                     <texture>white.png</texture>
                     <colordiffuse>ff202020</colordiffuse>
@@ -297,7 +369,7 @@
                 <control type="label">
                     <posx>0</posx>
                     <posy>15</posy>
-                    <width>1460</width>
+                    <width>1430</width>
                     <height>50</height>
                     <textcolor>ffaaaaaa</textcolor>
                     <label>$INFO[ListItem.Label]</label>
@@ -317,14 +389,14 @@
                 <control type="label">
                     <posx>170</posx>
                     <posy>6</posy>
-                    <width>1090</width>
+                    <width>1060</width>
                     <height>40</height>
                     <textcolor>ffcccccc</textcolor>
                     <label>$INFO[ListItem.Label]</label>
                     <visible>!String.IsEqual(ListItem.Property(header),1) + !String.IsEqual(ListItem.Property(playable),0)</visible>
                 </control>
                 <control type="label">
-                    <posx>1260</posx>
+                    <posx>1230</posx>
                     <posy>6</posy>
                     <width>188</width>
                     <height>40</height>
@@ -345,14 +417,14 @@
                 <control type="label">
                     <posx>170</posx>
                     <posy>6</posy>
-                    <width>1090</width>
+                    <width>1060</width>
                     <height>40</height>
                     <textcolor>ff808080</textcolor>
                     <label>$INFO[ListItem.Label]</label>
                     <visible>!String.IsEqual(ListItem.Property(header),1) + String.IsEqual(ListItem.Property(playable),0)</visible>
                 </control>
                 <control type="label">
-                    <posx>1260</posx>
+                    <posx>1230</posx>
                     <posy>6</posy>
                     <width>188</width>
                     <height>40</height>
@@ -364,7 +436,7 @@
                 <control type="label">
                     <posx>12</posx>
                     <posy>44</posy>
-                    <width>1436</width>
+                    <width>1406</width>
                     <height>34</height>
                     <font>font12</font>
                     <textcolor>ff8a8a8a</textcolor>
@@ -374,7 +446,7 @@
                 <control type="label">
                     <posx>12</posx>
                     <posy>44</posy>
-                    <width>1436</width>
+                    <width>1406</width>
                     <height>34</height>
                     <font>font12</font>
                     <textcolor>ff606060</textcolor>
@@ -382,11 +454,11 @@
                     <visible>!String.IsEqual(ListItem.Property(header),1) + String.IsEqual(ListItem.Property(playable),0)</visible>
                 </control>
             </itemlayout>
-            <focusedlayout height="80" width="1460">
+            <focusedlayout height="80" width="1430">
                 <control type="image">
                     <posx>0</posx>
                     <posy>0</posy>
-                    <width>1460</width>
+                    <width>1430</width>
                     <height>78</height>
                     <texture>white.png</texture>
                     <colordiffuse>ff3a6ea5</colordiffuse>
@@ -395,7 +467,7 @@
                 <control type="image">
                     <posx>0</posx>
                     <posy>0</posy>
-                    <width>1460</width>
+                    <width>1430</width>
                     <height>78</height>
                     <texture>white.png</texture>
                     <colordiffuse>ff2c3e50</colordiffuse>
@@ -404,7 +476,7 @@
                 <control type="label">
                     <posx>0</posx>
                     <posy>15</posy>
-                    <width>1460</width>
+                    <width>1430</width>
                     <height>50</height>
                     <textcolor>ffaaaaaa</textcolor>
                     <label>$INFO[ListItem.Label]</label>
@@ -424,14 +496,14 @@
                 <control type="label">
                     <posx>170</posx>
                     <posy>6</posy>
-                    <width>1090</width>
+                    <width>1060</width>
                     <height>40</height>
                     <textcolor>ffffffff</textcolor>
                     <label>$INFO[ListItem.Label]</label>
                     <visible>!String.IsEqual(ListItem.Property(header),1) + !String.IsEqual(ListItem.Property(playable),0)</visible>
                 </control>
                 <control type="label">
-                    <posx>1260</posx>
+                    <posx>1230</posx>
                     <posy>6</posy>
                     <width>188</width>
                     <height>40</height>
@@ -452,14 +524,14 @@
                 <control type="label">
                     <posx>170</posx>
                     <posy>6</posy>
-                    <width>1090</width>
+                    <width>1060</width>
                     <height>40</height>
                     <textcolor>ff808080</textcolor>
                     <label>$INFO[ListItem.Label]</label>
                     <visible>!String.IsEqual(ListItem.Property(header),1) + String.IsEqual(ListItem.Property(playable),0)</visible>
                 </control>
                 <control type="label">
-                    <posx>1260</posx>
+                    <posx>1230</posx>
                     <posy>6</posy>
                     <width>188</width>
                     <height>40</height>
@@ -471,7 +543,7 @@
                 <control type="label">
                     <posx>12</posx>
                     <posy>44</posy>
-                    <width>1436</width>
+                    <width>1406</width>
                     <height>34</height>
                     <font>font12</font>
                     <textcolor>ff8a8a8a</textcolor>
@@ -481,7 +553,7 @@
                 <control type="label">
                     <posx>12</posx>
                     <posy>44</posy>
-                    <width>1436</width>
+                    <width>1406</width>
                     <height>34</height>
                     <font>font12</font>
                     <textcolor>ff606060</textcolor>

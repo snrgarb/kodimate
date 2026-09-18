@@ -128,7 +128,7 @@ def test_cell_proportional_to_duration(tmp_path):
         window._relayout()
         cells = window._row_cells[0]
         assert cells[0]['title'] == 'Show A'
-        assert cells[0]['width'] == _third_of_grid(1620)
+        assert cells[0]['width'] == _third_of_grid(1470)
         # The remaining two-thirds of the viewport is a filler cell.
         assert cells[1]['filler'] is True
     finally:
@@ -1350,7 +1350,6 @@ def test_opens_with_column_zone_focused_on_channel_list(tmp_path):
         assert window.getFocusId() not in (
             win_guide.RAIL_LIVETV_ID, win_guide.RAIL_CATCHUP_ID, win_guide.RAIL_SETTINGS_ID,
         )
-        assert window.getProperty('rail_open') == ''
     finally:
         conn.close()
 
@@ -1404,7 +1403,6 @@ def test_left_from_panel_reaches_rail_panel_stays_open(tmp_path):
         assert window._zone == 'rail'
         assert window.getFocusId() == win_guide.RAIL_LIVETV_ID
         assert window.getProperty('panel_open') == '1'
-        assert window.getProperty('rail_open') == '1'
     finally:
         conn.close()
 
@@ -1423,7 +1421,35 @@ def test_right_from_rail_returns_to_panel_when_open(tmp_path):
         assert window._zone == 'panel'
         assert window.getFocusId() == win_guide.PANEL_LIST_ID
         assert window.getProperty('panel_open') == '1'
-        assert window.getProperty('rail_open') == ''
+    finally:
+        conn.close()
+
+
+def test_opening_groups_drawer_does_not_move_grid_cells(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        t0 = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(t0),
+                   guide.format_iso(t0 + timedelta(hours=1)), "Show A")
+        window._load_programmes()
+        window._relayout()
+        cell_image, _cell_label, _cell_desc = window._pool[0][0]
+        x_before = cell_image.getX()
+
+        window._open_panel()
+        window._relayout()
+
+        cell_image, _cell_label, _cell_desc = window._pool[0][0]
+        assert cell_image.getX() == x_before
+        assert window.getProperty('panel_open') == '1'
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
+
+        assert window.getProperty('panel_open') == ''
     finally:
         conn.close()
 
@@ -1945,6 +1971,13 @@ def test_skin_pins_rail_and_channel_list_horizontal_navigation_to_self():
         control = controls_by_id[control_id]
         assert control.find('onleft').text == control_id
         assert control.find('onright').text == control_id
+
+
+def test_skin_has_no_rail_open_and_dims_behind_panel():
+    with open(_SKIN_XML) as f:
+        xml_text = f.read()
+    assert 'rail_open' not in xml_text
+    assert xml_text.count('panel_open') >= 2
 
 
 def test_focus_channel_id_outside_filtered_rows_defaults_to_first_row(tmp_path):
