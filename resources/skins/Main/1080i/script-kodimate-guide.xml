@@ -737,30 +737,46 @@
         </control>
 
         <!-- Remote-hint bar (issue #56): sits directly under the last
-             channel row (966..1080), a pill-icon + key + verb per slot. -->
+             channel row (966..1046), a pill-icon + key + verb per slot,
+             spaced by one flat horizontal grouplist (Kodi grouplists do
+             not size to nested-grouplist children, so slots are direct
+             children here: icon group, key/verb label, spacer image;
+             each carrying its own hintN_icon visibility so a hidden slot
+             (and its spacer) collapses instead of leaving a gap). -->
         <control type="group">
             <visible>!String.IsEmpty(Window.Property(hint_bar)) + !String.IsEqual(Window.Property(panel_open),1)</visible>
             <control type="image">
                 <posx>150</posx>
                 <posy>966</posy>
                 <width>1770</width>
-                <height>114</height>
+                <height>80</height>
                 <texture>white.png</texture>
                 <colordiffuse>ff181818</colordiffuse>
             </control>
+            <control type="grouplist">
+                <posx>150</posx>
+                <posy>966</posy>
+                <width>1770</width>
+                <height>80</height>
+                <orientation>horizontal</orientation>
+                <itemgap>16</itemgap>
+                <align>center</align>
+                <usecontrolcoords>false</usecontrolcoords>
             <control type="group">
+                <width>48</width>
+                <height>80</height>
                 <visible>!String.IsEmpty(Window.Property(hint1_icon))</visible>
                 <control type="image">
-                    <posx>170</posx>
-                    <posy>999</posy>
+                    <posx>0</posx>
+                    <posy>16</posy>
                     <width>48</width>
                     <height>48</height>
                     <texture>circle.png</texture>
                     <colordiffuse>ff3a3a3a</colordiffuse>
                 </control>
                 <control type="label">
-                    <posx>170</posx>
-                    <posy>999</posy>
+                    <posx>0</posx>
+                    <posy>16</posy>
                     <width>48</width>
                     <height>48</height>
                     <label>$INFO[Window.Property(hint1_icon)]</label>
@@ -769,31 +785,53 @@
                     <aligny>center</aligny>
                     <textcolor>ffffffff</textcolor>
                 </control>
-                <control type="label">
-                    <posx>234</posx>
-                    <posy>966</posy>
-                    <width>300</width>
-                    <height>114</height>
-                    <label>[B]$INFO[Window.Property(hint1_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint1_verb)][/COLOR]</label>
-                    <font>font13</font>
-                    <align>left</align>
-                    <aligny>center</aligny>
-                    <textcolor>ffffffff</textcolor>
-                </control>
+            </control>
+            <control type="label">
+                <width min="40" max="420">auto</width>
+                <height>80</height>
+                <visible>!String.IsEmpty(Window.Property(hint1_icon))</visible>
+                <label>[B]$INFO[Window.Property(hint1_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint1_verb)][/COLOR]</label>
+                <font>font13</font>
+                <align>left</align>
+                <aligny>center</aligny>
+                <textcolor>ffffffff</textcolor>
+            </control>
+            <control type="image">
+                <width>24</width>
+                <height>80</height>
+                <texture>white.png</texture>
+                <colordiffuse>00000000</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint1_icon)) + !String.IsEmpty(Window.Property(hint2_icon))</visible>
+            </control>
+            <control type="image">
+                <width>4</width>
+                <height>80</height>
+                <texture>hint_divider.png</texture>
+                <colordiffuse>ff4a4a4a</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint1_icon)) + !String.IsEmpty(Window.Property(hint2_icon))</visible>
+            </control>
+            <control type="image">
+                <width>24</width>
+                <height>80</height>
+                <texture>white.png</texture>
+                <colordiffuse>00000000</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint1_icon)) + !String.IsEmpty(Window.Property(hint2_icon))</visible>
             </control>
             <control type="group">
+                <width>48</width>
+                <height>80</height>
                 <visible>!String.IsEmpty(Window.Property(hint2_icon))</visible>
                 <control type="image">
-                    <posx>515</posx>
-                    <posy>999</posy>
+                    <posx>0</posx>
+                    <posy>16</posy>
                     <width>48</width>
                     <height>48</height>
                     <texture>circle.png</texture>
                     <colordiffuse>ff3a3a3a</colordiffuse>
                 </control>
                 <control type="label">
-                    <posx>515</posx>
-                    <posy>999</posy>
+                    <posx>0</posx>
+                    <posy>16</posy>
                     <width>48</width>
                     <height>48</height>
                     <label>$INFO[Window.Property(hint2_icon)]</label>
@@ -802,31 +840,53 @@
                     <aligny>center</aligny>
                     <textcolor>ffffffff</textcolor>
                 </control>
-                <control type="label">
-                    <posx>579</posx>
-                    <posy>966</posy>
-                    <width>300</width>
-                    <height>114</height>
-                    <label>[B]$INFO[Window.Property(hint2_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint2_verb)][/COLOR]</label>
-                    <font>font13</font>
-                    <align>left</align>
-                    <aligny>center</aligny>
-                    <textcolor>ffffffff</textcolor>
-                </control>
+            </control>
+            <control type="label">
+                <width min="40" max="420">auto</width>
+                <height>80</height>
+                <visible>!String.IsEmpty(Window.Property(hint2_icon))</visible>
+                <label>[B]$INFO[Window.Property(hint2_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint2_verb)][/COLOR]</label>
+                <font>font13</font>
+                <align>left</align>
+                <aligny>center</aligny>
+                <textcolor>ffffffff</textcolor>
+            </control>
+            <control type="image">
+                <width>24</width>
+                <height>80</height>
+                <texture>white.png</texture>
+                <colordiffuse>00000000</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint2_icon)) + !String.IsEmpty(Window.Property(hint3_icon))</visible>
+            </control>
+            <control type="image">
+                <width>4</width>
+                <height>80</height>
+                <texture>hint_divider.png</texture>
+                <colordiffuse>ff4a4a4a</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint2_icon)) + !String.IsEmpty(Window.Property(hint3_icon))</visible>
+            </control>
+            <control type="image">
+                <width>24</width>
+                <height>80</height>
+                <texture>white.png</texture>
+                <colordiffuse>00000000</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint2_icon)) + !String.IsEmpty(Window.Property(hint3_icon))</visible>
             </control>
             <control type="group">
+                <width>48</width>
+                <height>80</height>
                 <visible>!String.IsEmpty(Window.Property(hint3_icon))</visible>
                 <control type="image">
-                    <posx>860</posx>
-                    <posy>999</posy>
+                    <posx>0</posx>
+                    <posy>16</posy>
                     <width>48</width>
                     <height>48</height>
                     <texture>circle.png</texture>
                     <colordiffuse>ff3a3a3a</colordiffuse>
                 </control>
                 <control type="label">
-                    <posx>860</posx>
-                    <posy>999</posy>
+                    <posx>0</posx>
+                    <posy>16</posy>
                     <width>48</width>
                     <height>48</height>
                     <label>$INFO[Window.Property(hint3_icon)]</label>
@@ -835,31 +895,53 @@
                     <aligny>center</aligny>
                     <textcolor>ffffffff</textcolor>
                 </control>
-                <control type="label">
-                    <posx>924</posx>
-                    <posy>966</posy>
-                    <width>300</width>
-                    <height>114</height>
-                    <label>[B]$INFO[Window.Property(hint3_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint3_verb)][/COLOR]</label>
-                    <font>font13</font>
-                    <align>left</align>
-                    <aligny>center</aligny>
-                    <textcolor>ffffffff</textcolor>
-                </control>
+            </control>
+            <control type="label">
+                <width min="40" max="420">auto</width>
+                <height>80</height>
+                <visible>!String.IsEmpty(Window.Property(hint3_icon))</visible>
+                <label>[B]$INFO[Window.Property(hint3_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint3_verb)][/COLOR]</label>
+                <font>font13</font>
+                <align>left</align>
+                <aligny>center</aligny>
+                <textcolor>ffffffff</textcolor>
+            </control>
+            <control type="image">
+                <width>24</width>
+                <height>80</height>
+                <texture>white.png</texture>
+                <colordiffuse>00000000</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint3_icon)) + !String.IsEmpty(Window.Property(hint4_icon))</visible>
+            </control>
+            <control type="image">
+                <width>4</width>
+                <height>80</height>
+                <texture>hint_divider.png</texture>
+                <colordiffuse>ff4a4a4a</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint3_icon)) + !String.IsEmpty(Window.Property(hint4_icon))</visible>
+            </control>
+            <control type="image">
+                <width>24</width>
+                <height>80</height>
+                <texture>white.png</texture>
+                <colordiffuse>00000000</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint3_icon)) + !String.IsEmpty(Window.Property(hint4_icon))</visible>
             </control>
             <control type="group">
+                <width>48</width>
+                <height>80</height>
                 <visible>!String.IsEmpty(Window.Property(hint4_icon))</visible>
                 <control type="image">
-                    <posx>1205</posx>
-                    <posy>999</posy>
+                    <posx>0</posx>
+                    <posy>16</posy>
                     <width>48</width>
                     <height>48</height>
                     <texture>circle.png</texture>
                     <colordiffuse>ff3a3a3a</colordiffuse>
                 </control>
                 <control type="label">
-                    <posx>1205</posx>
-                    <posy>999</posy>
+                    <posx>0</posx>
+                    <posy>16</posy>
                     <width>48</width>
                     <height>48</height>
                     <label>$INFO[Window.Property(hint4_icon)]</label>
@@ -868,31 +950,53 @@
                     <aligny>center</aligny>
                     <textcolor>ffffffff</textcolor>
                 </control>
-                <control type="label">
-                    <posx>1269</posx>
-                    <posy>966</posy>
-                    <width>300</width>
-                    <height>114</height>
-                    <label>[B]$INFO[Window.Property(hint4_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint4_verb)][/COLOR]</label>
-                    <font>font13</font>
-                    <align>left</align>
-                    <aligny>center</aligny>
-                    <textcolor>ffffffff</textcolor>
-                </control>
+            </control>
+            <control type="label">
+                <width min="40" max="420">auto</width>
+                <height>80</height>
+                <visible>!String.IsEmpty(Window.Property(hint4_icon))</visible>
+                <label>[B]$INFO[Window.Property(hint4_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint4_verb)][/COLOR]</label>
+                <font>font13</font>
+                <align>left</align>
+                <aligny>center</aligny>
+                <textcolor>ffffffff</textcolor>
+            </control>
+            <control type="image">
+                <width>24</width>
+                <height>80</height>
+                <texture>white.png</texture>
+                <colordiffuse>00000000</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint4_icon)) + !String.IsEmpty(Window.Property(hint5_icon))</visible>
+            </control>
+            <control type="image">
+                <width>4</width>
+                <height>80</height>
+                <texture>hint_divider.png</texture>
+                <colordiffuse>ff4a4a4a</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint4_icon)) + !String.IsEmpty(Window.Property(hint5_icon))</visible>
+            </control>
+            <control type="image">
+                <width>24</width>
+                <height>80</height>
+                <texture>white.png</texture>
+                <colordiffuse>00000000</colordiffuse>
+                <visible>!String.IsEmpty(Window.Property(hint4_icon)) + !String.IsEmpty(Window.Property(hint5_icon))</visible>
             </control>
             <control type="group">
+                <width>48</width>
+                <height>80</height>
                 <visible>!String.IsEmpty(Window.Property(hint5_icon))</visible>
                 <control type="image">
-                    <posx>1550</posx>
-                    <posy>999</posy>
+                    <posx>0</posx>
+                    <posy>16</posy>
                     <width>48</width>
                     <height>48</height>
                     <texture>circle.png</texture>
                     <colordiffuse>ff3a3a3a</colordiffuse>
                 </control>
                 <control type="label">
-                    <posx>1550</posx>
-                    <posy>999</posy>
+                    <posx>0</posx>
+                    <posy>16</posy>
                     <width>48</width>
                     <height>48</height>
                     <label>$INFO[Window.Property(hint5_icon)]</label>
@@ -901,17 +1005,17 @@
                     <aligny>center</aligny>
                     <textcolor>ffffffff</textcolor>
                 </control>
-                <control type="label">
-                    <posx>1614</posx>
-                    <posy>966</posy>
-                    <width>300</width>
-                    <height>114</height>
-                    <label>[B]$INFO[Window.Property(hint5_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint5_verb)][/COLOR]</label>
-                    <font>font13</font>
-                    <align>left</align>
-                    <aligny>center</aligny>
-                    <textcolor>ffffffff</textcolor>
-                </control>
+            </control>
+            <control type="label">
+                <width min="40" max="420">auto</width>
+                <height>80</height>
+                <visible>!String.IsEmpty(Window.Property(hint5_icon))</visible>
+                <label>[B]$INFO[Window.Property(hint5_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint5_verb)][/COLOR]</label>
+                <font>font13</font>
+                <align>left</align>
+                <aligny>center</aligny>
+                <textcolor>ffffffff</textcolor>
+            </control>
             </control>
         </control>
 
