@@ -741,3 +741,27 @@ def test_header_now_slot_at_viewport_end_is_none():
 def test_header_now_slot_before_viewport_is_none():
     viewport_start = datetime(2026, 1, 1, 12, 0)
     assert guide.header_now_slot(viewport_start, datetime(2026, 1, 1, 11, 59)) is None
+
+
+# -- Remote-hint bar (issue #56) ----------------------------------------------
+
+def test_visible_rows_accounts_for_hint_bar_budget():
+    assert guide.visible_rows(740, 98) == 7
+
+
+def test_hint_text_column_zone():
+    assert guide.hint_text('column', str) == (
+        u'OK 32131 · ← 32132 · → 32133 · Info 32134 · 32136 32135'
+    )
+
+
+def test_hint_text_grid_zone():
+    assert guide.hint_text('grid', str) == u'OK 32131 · ←→ 32133 · Info 32134'
+
+
+def test_hint_text_rail_zone():
+    assert guide.hint_text('rail', str) == u'OK 32137'
+
+
+def test_hint_text_panel_zone_is_empty():
+    assert guide.hint_text('panel', str) == ''

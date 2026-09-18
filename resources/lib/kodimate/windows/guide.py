@@ -33,13 +33,15 @@ _LEFT_COL_WIDTH = 300
 _GRID_X = _RAIL_WIDTH + _LEFT_COL_WIDTH
 _STRIP_HEIGHT = 220
 _HEADER_HEIGHT = 60
+_HINT_BAR_HEIGHT = 60
 _ROW_HEIGHT = 98
 _GRID_WIDTH = 1920 - _GRID_X
 _POOL_COLS = 28  # real EPG data can pack ~24 short programmes into a 3h window
 
-# Visible row count derives from the height left over below the strip and
-# the sticky time header, replacing guide.VISIBLE_ROWS's fixed constant.
-_VISIBLE_ROWS = guide.visible_rows(1080 - _STRIP_HEIGHT - _HEADER_HEIGHT, _ROW_HEIGHT)
+# Visible row count derives from the height left over below the strip, the
+# sticky time header and the remote-hint bar, replacing guide.VISIBLE_ROWS's
+# fixed constant.
+_VISIBLE_ROWS = guide.visible_rows(1080 - _STRIP_HEIGHT - _HEADER_HEIGHT - _HINT_BAR_HEIGHT, _ROW_HEIGHT)
 
 _STRIP_PROGRESS_FILL_ID = 531
 _STRIP_PROGRESS_WIDTH = 300  # matches the skin's row-3 progress track width
@@ -78,6 +80,12 @@ _ACTION_PAGE_DOWN = 6
 _ACTION_NEXT_ITEM = 14
 _ACTION_PREV_ITEM = 15
 _ACTION_REMOTE_0 = 58
+_ACTION_SHOW_INFO = 11
+
+# Kodi's default keymaps deliver a held OK as ACTION_CONTEXT_MENU (there is
+# no dedicated long-press-select action id); the context-menu action from
+# #48 remains the fallback on remotes without long press.
+_ACTION_LONG_PRESS_OK = xbmcgui.ACTION_CONTEXT_MENU
 
 
 def _colored(title, color):
@@ -164,6 +172,8 @@ class GuideWindow(BaseWindow):
             self.setFocusId(PANEL_LIST_ID)
         else:
             self.setFocusId(CHANNEL_LIST_ID)
+        addon = xbmcaddon.Addon()
+        self.setProperty('hint_bar', guide.hint_text(self._zone, addon.getLocalizedString))
 
     def _on_generation_change(self, generation):
         with self._lock:
@@ -175,6 +185,7 @@ class GuideWindow(BaseWindow):
     def _enter_modal(self):
         with self._lock:
             self._modal_depth += 1
+        self.setProperty('hint_bar', '')
 
     def _exit_modal(self):
         # Never called with the lock held across a modal open() -- callers
@@ -280,6 +291,12 @@ class GuideWindow(BaseWindow):
             return
         if action_id == _ACTION_REMOTE_0:
             self._jump_to_now()
+            return
+        if action_id == _ACTION_SHOW_INFO:
+            self._handle_info()
+            return
+        if action_id == _ACTION_LONG_PRESS_OK:
+            self._toggle_favourite()
             return
 
     def _handle_left(self):
@@ -395,23 +412,28 @@ class GuideWindow(BaseWindow):
         if self._zone == 'column':
             self._play_selected_channel()
             return
-        focused_row = self._focused_row_index()
-        cell = self._find_cell(focused_row, self._cursor_time)
-        if cell is None or cell.get('filler'):
+        found = self._focused_grid_cell()
+        if found is None:
             return
-        channel_index = self._top_row + focused_row
+        channel_index, cell = found
+        self._open_programme_info(channel_index, cell)
+
+    def _open_programme_info(self, channel_index, programme):
+        """Open the shared Programme info dialog for `programme` (a cell or
+        a plain channel-programme dict, both carrying start/end/title/
+        description) and dispatch to playback per the dialog's result."""
         if not (0 <= channel_index < len(self._channel_rows)):
             return
         channel_row = self._channel_rows[channel_index]
         window_days = self._window_days_for_channel(channel_index)
         now = datetime.utcnow()
-        state = catchup.cell_state(cell['start'], cell['end'], window_days, now)
+        state = catchup.cell_state(programme['start'], programme['end'], window_days, now)
         self._enter_modal()
         try:
             dialog = self.dialog_cls.open(
-                title=cell['title'],
-                times=osd.format_times(cell['start'], cell['end'], self._tz),
-                description=cell.get('description') or '',
+                title=programme['title'],
+                times=osd.format_times(programme['start'], programme['end'], self._tz),
+                description=programme.get('description') or '',
                 actions=catchup.actions_for(state, start_over_ok=bool(window_days)),
             )
             result = dialog.result
@@ -426,18 +448,68 @@ class GuideWindow(BaseWindow):
                         self.playback_cls.open(
                             conn=self.conn, snapshot=snapshot,
                             catchup={
-                                'start': _epoch(cell['start']),
-                                'end': _epoch(cell['end']),
+                                'start': _epoch(programme['start']),
+                                'end': _epoch(programme['end']),
                                 'now': _epoch(now),
-                                'catchup_id': self._catchup_id_for_cell(channel_index, cell),
-                                'title': cell['title'],
-                                'start_dt': cell['start'],
-                                'end_dt': cell['end'],
+                                'catchup_id': self._catchup_id_for_cell(channel_index, programme),
+                                'title': programme['title'],
+                                'start_dt': programme['start'],
+                                'end_dt': programme['end'],
                             },
                         )
         finally:
             refreshed = self._exit_modal()
         if not refreshed:
+            self._relayout()
+        self._apply_zone()
+
+    def _handle_info(self):
+        if self._zone == 'column':
+            channel_index = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
+            if not (0 <= channel_index < len(self._channel_rows)):
+                return
+            now = datetime.utcnow()
+            programme = next(
+                (p for p in self._channel_programmes(channel_index) if p['start'] <= now < p['end']), None
+            )
+            if programme is None:
+                return
+            self._open_programme_info(channel_index, programme)
+            return
+        if self._zone == 'grid':
+            found = self._focused_grid_cell()
+            if found is None:
+                return
+            channel_index, cell = found
+            self._open_programme_info(channel_index, cell)
+
+    def _focused_grid_cell(self):
+        """(channel_index, cell) for the focused grid row's cursor cell, or
+        None when there is no row, no cell, or the cell is a filler."""
+        focused_row = self._focused_row_index()
+        cell = self._find_cell(focused_row, self._cursor_time)
+        if cell is None or cell.get('filler'):
+            return None
+        return self._top_row + focused_row, cell
+
+    def _toggle_favourite(self):
+        if self._zone != 'column':
+            return
+        selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
+        if not (0 <= selected < len(self._channel_rows)):
+            return
+        row = self._channel_rows[selected]
+        with self._lock:
+            channels.set_favourite(self.conn, row['provider_id'], row['channel_key'], not row['favourite'])
+            self._channel_rows = self._query_rows()
+            self._populate_channel_list()
+            new_index = min(selected, len(self._channel_rows) - 1) if self._channel_rows else 0
+            if self._channel_rows:
+                self.getControl(CHANNEL_LIST_ID).selectItem(new_index)
+            self._last_selected = new_index
+            max_top = max(0, len(self._channel_rows) - _VISIBLE_ROWS)
+            self._top_row = max(0, min(self._top_row, max_top))
+            self._load_programmes()
             self._relayout()
         self._apply_zone()
 
@@ -550,6 +622,7 @@ class GuideWindow(BaseWindow):
             item.setProperty(
                 'playing', '1' if (row['provider_id'], row['channel_key']) == playing_key else '0'
             )
+            item.setProperty('favourite', '1' if row['favourite'] else '0')
             items.append(item)
         control.addItems(items)
         if items:

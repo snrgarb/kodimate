@@ -407,6 +407,42 @@ def visible_rows(available_height, row_height):
     return max(1, int(available_height // row_height))
 
 
+# String ids for the remote-hint bar's verb fragments (issue #56); kept as
+# constants here so hint_text stays a pure function of `get_string`.
+STR_HINT_WATCH = 32131
+STR_HINT_GROUPS = 32132
+STR_HINT_TIME = 32133
+STR_HINT_DETAILS = 32134
+STR_HINT_FAVOURITE = 32135
+STR_HINT_LONG_PRESS = 32136
+STR_HINT_OPEN = 32137
+
+
+def hint_text(zone, get_string):
+    """Remote-hint bar text for the given focus zone; each fragment names
+    only what that zone's keys actually do (empty for 'panel', which hides
+    the bar while the Groups drawer is open)."""
+    if zone == 'column':
+        fragments = [
+            u'OK %s' % get_string(STR_HINT_WATCH),
+            u'← %s' % get_string(STR_HINT_GROUPS),
+            u'→ %s' % get_string(STR_HINT_TIME),
+            u'Info %s' % get_string(STR_HINT_DETAILS),
+            u'%s %s' % (get_string(STR_HINT_LONG_PRESS), get_string(STR_HINT_FAVOURITE)),
+        ]
+    elif zone == 'grid':
+        fragments = [
+            u'OK %s' % get_string(STR_HINT_WATCH),
+            u'←→ %s' % get_string(STR_HINT_TIME),
+            u'Info %s' % get_string(STR_HINT_DETAILS),
+        ]
+    elif zone == 'rail':
+        fragments = [u'OK %s' % get_string(STR_HINT_OPEN)]
+    else:
+        return u''
+    return u' · '.join(fragments)
+
+
 def date_label(at_time, now, today_label, tz=None):
     """"Today, 18 Sep" when at_time's local date matches now's local date,
     else "Thu, 18 Sep"."""

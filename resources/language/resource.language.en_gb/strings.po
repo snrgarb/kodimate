@@ -535,3 +535,31 @@ msgstr ""
 msgctxt "#32130"
 msgid "Today"
 msgstr ""
+
+msgctxt "#32131"
+msgid "Watch"
+msgstr ""
+
+msgctxt "#32132"
+msgid "Groups"
+msgstr ""
+
+msgctxt "#32133"
+msgid "Time"
+msgstr ""
+
+msgctxt "#32134"
+msgid "Details"
+msgstr ""
+
+msgctxt "#32135"
+msgid "Favourite"
+msgstr ""
+
+msgctxt "#32136"
+msgid "Long press"
+msgstr ""
+
+msgctxt "#32137"
+msgid "Open"
+msgstr ""

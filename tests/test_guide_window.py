@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from kodimate import autoplay, db, guide
+from kodimate import autoplay, channels, db, guide
 from kodimate.windows import guide as win_guide
 from kodimate.windows.guide import GuideWindow, CHANNEL_LIST_ID
 import xbmc
@@ -2493,6 +2493,219 @@ def test_playing_property_all_zero_when_no_last_channel_stored(tmp_path):
         window = _window(conn)
         control = window.getControl(CHANNEL_LIST_ID)
         assert control.getListItem(0).getProperty('playing') == '0'
+    finally:
+        conn.close()
+
+
+# -- Remote-hint bar, Info action, long-press Favourite (issue #56) ---------
+
+def test_hint_bar_matches_column_zone_after_init(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        addon = xbmcaddon.Addon()
+        assert window.getProperty('hint_bar') == guide.hint_text('column', addon.getLocalizedString)
+    finally:
+        conn.close()
+
+
+def test_hint_bar_matches_grid_zone_after_right(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        window._handle_right()
+        addon = xbmcaddon.Addon()
+        assert window.getProperty('hint_bar') == guide.hint_text('grid', addon.getLocalizedString)
+    finally:
+        conn.close()
+
+
+def test_hint_bar_empty_while_groups_drawer_open(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        window._handle_left()
+        assert window.getProperty('hint_bar') == ''
+    finally:
+        conn.close()
+
+
+def test_hint_bar_restored_after_closing_drawer(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        window._handle_left()
+        window._handle_back()
+        addon = xbmcaddon.Addon()
+        assert window.getProperty('hint_bar') == guide.hint_text('column', addon.getLocalizedString)
+    finally:
+        conn.close()
+
+
+def test_hint_bar_hidden_during_modal_and_restored_after(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+        captured = {}
+
+        class _Playback(_FakePlaybackWindow):
+            @classmethod
+            def open(cls, **kwargs):
+                captured['hint_bar'] = window.getProperty('hint_bar')
+                cls.opened_with = kwargs
+                return cls()
+
+        window.playback_cls = _Playback
+
+        window.onClick(CHANNEL_LIST_ID)
+
+        assert captured['hint_bar'] == ''
+        addon = xbmcaddon.Addon()
+        assert window.getProperty('hint_bar') == guide.hint_text('column', addon.getLocalizedString)
+    finally:
+        conn.close()
+
+
+def test_skin_hint_bar_property_appears_in_skin():
+    with open(_SKIN_XML) as f:
+        xml_text = f.read()
+    assert 'Window.Property(hint_bar)' in xml_text
+
+
+def test_info_on_column_row_opens_dialog_for_current_programme(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+        now_snapshot = datetime.utcnow()
+        _programme(conn, eid, "x1", guide.format_iso(now_snapshot - timedelta(minutes=10)),
+                   guide.format_iso(now_snapshot + timedelta(minutes=10)), "Live Show", "A description")
+        window._load_programmes()
+
+        window.onAction(xbmcgui.Action(win_guide._ACTION_SHOW_INFO))
+
+        assert dialog_cls.opened_with is not None
+        assert dialog_cls.opened_with['title'] == 'Live Show'
+        assert dialog_cls.opened_with['description'] == 'A description'
+    finally:
+        conn.close()
+
+
+def test_info_on_cell_opens_dialog_for_that_cells_programme(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+        t0 = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(t0 + timedelta(hours=1)),
+                   "Now Show")
+        _programme(conn, eid, "x1", guide.format_iso(t0 + timedelta(hours=1)),
+                   guide.format_iso(t0 + timedelta(hours=2)), "Future Show")
+        window._load_programmes()
+        window._zone = 'grid'
+        window._relayout()
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # cell 0 -> cell 1 (Future Show)
+
+        window.onAction(xbmcgui.Action(win_guide._ACTION_SHOW_INFO))
+
+        assert dialog_cls.opened_with is not None
+        assert dialog_cls.opened_with['title'] == 'Future Show'
+    finally:
+        conn.close()
+
+
+def test_info_on_row_with_no_current_programme_opens_nothing(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+
+        window.onAction(xbmcgui.Action(win_guide._ACTION_SHOW_INFO))
+
+        assert dialog_cls.opened_with is None
+    finally:
+        conn.close()
+
+
+def test_info_on_filler_cell_opens_no_dialog(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+        window._zone = 'grid'
+        window._relayout()
+
+        window.onAction(xbmcgui.Action(win_guide._ACTION_SHOW_INFO))
+
+        assert dialog_cls.opened_with is None
+    finally:
+        conn.close()
+
+
+def test_long_press_ok_toggles_favourite_and_updates_list_item(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+        control = window.getControl(CHANNEL_LIST_ID)
+        assert control.getListItem(0).getProperty('favourite') == '0'
+
+        window.onAction(xbmcgui.Action(win_guide._ACTION_LONG_PRESS_OK))
+
+        rows = channels.list_channels(conn)
+        assert rows[0]['favourite'] is True
+        control = window.getControl(CHANNEL_LIST_ID)
+        assert control.getListItem(0).getProperty('favourite') == '1'
+        assert control.getSelectedPosition() == 0
+
+        window.onAction(xbmcgui.Action(win_guide._ACTION_LONG_PRESS_OK))
+
+        rows = channels.list_channels(conn)
+        assert rows[0]['favourite'] is False
+        control = window.getControl(CHANNEL_LIST_ID)
+        assert control.getListItem(0).getProperty('favourite') == '0'
+        assert control.getSelectedPosition() == 0
+    finally:
+        conn.close()
+
+
+def test_long_press_favourite_removes_row_under_active_favourites_filter(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        _channel(conn, pid, "b", "Beta", 1)
+        channels.set_favourite(conn, pid, "a", True)
+        channels.set_favourite(conn, pid, "b", True)
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, favourites=True)
+        window.onInit()
+        window.getControl(CHANNEL_LIST_ID).selectItem(1)
+
+        window.onAction(xbmcgui.Action(win_guide._ACTION_LONG_PRESS_OK))
+
+        control = window.getControl(CHANNEL_LIST_ID)
+        assert len(window._channel_rows) == 1
+        assert control.getSelectedPosition() == 0
+        addon = xbmcaddon.Addon()
+        assert window.getProperty('hint_bar') == guide.hint_text('column', addon.getLocalizedString)
     finally:
         conn.close()
 
