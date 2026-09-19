@@ -292,6 +292,21 @@ def filter_label(group_id, favourites, groups, all_label, favourites_label,
     return all_label
 
 
+def channel_panel_rows(channel_rows, playing_key):
+    """Rows for the panel's channel list (issue #57): one dict per channel
+    row, in the same order, with {'id','number','name','logo','playing'}.
+    `playing_key` is the (provider_id, channel_key) pair of the currently
+    playing channel, or None."""
+    return [
+        {
+            'id': row['id'], 'number': row['number'], 'name': row['name'],
+            'logo': row.get('logo_url') or '',
+            'playing': (row['provider_id'], row['channel_key']) == playing_key,
+        }
+        for row in channel_rows
+    ]
+
+
 def initial_cursor_index(rows, focus_channel_id):
     """Index of the row whose 'id' == focus_channel_id, else 0."""
     if focus_channel_id is not None:

@@ -396,6 +396,29 @@ def test_filter_label_group_id_wins_over_provider_id():
     ) == 'Sport'
 
 
+def test_channel_panel_rows_preserves_order_and_flags_playing_row():
+    channel_rows = [
+        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo_url': 'http://x/a.png',
+         'provider_id': 1, 'channel_key': 'a'},
+        {'id': 2, 'number': 2, 'name': 'Beta', 'logo_url': None,
+         'provider_id': 1, 'channel_key': 'b'},
+    ]
+    rows = guide.channel_panel_rows(channel_rows, (1, 'b'))
+    assert rows == [
+        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo': 'http://x/a.png', 'playing': False},
+        {'id': 2, 'number': 2, 'name': 'Beta', 'logo': '', 'playing': True},
+    ]
+
+
+def test_channel_panel_rows_none_playing_key_flags_nothing():
+    channel_rows = [
+        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo_url': None,
+         'provider_id': 1, 'channel_key': 'a'},
+    ]
+    rows = guide.channel_panel_rows(channel_rows, None)
+    assert rows[0]['playing'] is False
+
+
 def test_initial_cursor_index_finds_matching_row():
     rows = [{'id': 1}, {'id': 2}, {'id': 3}]
     assert guide.initial_cursor_index(rows, 2) == 1

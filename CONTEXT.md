@@ -65,7 +65,7 @@ The always-visible strip of destinations (Live TV, Catch-up, Settings) at the ed
 _Avoid_: sidebar, home menu
 
 **Groups panel**:
-The overlay drawer that slides out on Left from the Live TV view's channel column, over the channel column, dimming the rest of the view (except the rail) while open; listing each Provider's Groups under a collapsible header, plus a flat All channels and Favourites at the top and a show-hidden toggle at the foot. OK or Right on a row applies it, closes the panel, and returns focus to the channel column; Back closes it without changing the filter.
+The overlay drawer that slides out on Left from the Live TV view's channel column, over the channel column, dimming the rest of the view (except the rail) while open. Its header shows the active filter's name with a filter glyph; below it lists the active filter's Channels (number, logo, name). OK on a Channel row focuses that Channel in the channel column and closes the panel. OK on the header opens the Groups list: each Provider's Groups under a collapsible header, plus a flat All channels and Favourites at the top and a show-hidden toggle at the foot. Picking a Group re-lists the panel's Channels for that filter without closing it. Back from the Groups list returns to the Channel list (panel stays open); Back from the Channel list closes the panel without changing the filter.
 _Avoid_: group picker, Groups pane
 Accepted alternate: **Groups drawer**.
 
