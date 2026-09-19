@@ -201,9 +201,7 @@
             <!-- Preview slot: inset 20px from the strip's left edge (issue
                  #66 arrangement; issue #50 mini player still lands in this
                  slot). A dark backing sits under the image/placeholder in
-                 case the texture is transparent or fails to load. A LIVE
-                 badge overlays its
-                 top-left corner. -->
+                 case the texture is transparent or fails to load. -->
             <control type="image">
                 <posx>555</posx>
                 <posy>17</posy>
@@ -220,27 +218,6 @@
                 <texture fallback="channel-placeholder.png">$INFO[Window.Property(strip_image)]</texture>
                 <aspectratio>keep</aspectratio>
                 <visible>!Player.HasVideo</visible>
-            </control>
-            <control type="image">
-                <posx>563</posx>
-                <posy>25</posy>
-                <width>90</width>
-                <height>36</height>
-                <texture>white.png</texture>
-                <colordiffuse>ffd32f2f</colordiffuse>
-                <visible>String.IsEqual(Window.Property(strip_live),1)</visible>
-            </control>
-            <control type="label">
-                <posx>563</posx>
-                <posy>25</posy>
-                <width>90</width>
-                <height>36</height>
-                <label>$ADDON[script.kodimate 32126]</label>
-                <font>font12</font>
-                <align>center</align>
-                <aligny>center</aligny>
-                <textcolor>ffffffff</textcolor>
-                <visible>String.IsEqual(Window.Property(strip_live),1)</visible>
             </control>
 
             <!-- Row 1 (y 20-70): channel logo, number + name, badges
