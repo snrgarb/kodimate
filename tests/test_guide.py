@@ -396,27 +396,6 @@ def test_filter_label_group_id_wins_over_provider_id():
     ) == 'Sport'
 
 
-def test_channel_panel_rows_preserves_order_and_flags_playing_row():
-    channel_rows = [
-        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo_url': 'http://x/a.png',
-         'provider_id': 1, 'channel_key': 'a'},
-        {'id': 2, 'number': 2, 'name': 'Beta', 'logo_url': None,
-         'provider_id': 1, 'channel_key': 'b'},
-    ]
-    rows = guide.channel_panel_rows(channel_rows, (1, 'b'))
-    assert rows == [
-        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo': 'http://x/a.png', 'playing': False},
-        {'id': 2, 'number': 2, 'name': 'Beta', 'logo': '', 'playing': True},
-    ]
-
-
-def test_channel_panel_rows_none_playing_key_flags_nothing():
-    channel_rows = [
-        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo_url': None,
-         'provider_id': 1, 'channel_key': 'a'},
-    ]
-    rows = guide.channel_panel_rows(channel_rows, None)
-    assert rows[0]['playing'] is False
 
 
 def test_initial_cursor_index_finds_matching_row():
@@ -436,85 +415,62 @@ def test_initial_cursor_index_defaults_to_zero():
 import pytest
 
 
-@pytest.mark.parametrize('panel_open, expected', [
-    (False, ('rail', None)),
-    (True, ('rail', None)),
-])
-def test_zone_transition_rail_left(panel_open, expected):
-    assert guide.zone_transition('rail', 'left', panel_open) == expected
+def test_zone_transition_rail_left():
+    assert guide.zone_transition('rail', 'left') == 'rail'
 
 
-def test_zone_transition_rail_right_panel_closed():
-    assert guide.zone_transition('rail', 'right', False) == ('column', None)
+def test_zone_transition_rail_right():
+    assert guide.zone_transition('rail', 'right') == 'panel'
 
 
-def test_zone_transition_rail_right_panel_open():
-    assert guide.zone_transition('rail', 'right', True) == ('panel', None)
+def test_zone_transition_panel_left():
+    assert guide.zone_transition('panel', 'left') == 'rail'
 
 
-@pytest.mark.parametrize('panel_open', [False, True])
-def test_zone_transition_panel_left(panel_open):
-    assert guide.zone_transition('panel', 'left', panel_open) == ('rail', None)
+def test_zone_transition_panel_right():
+    assert guide.zone_transition('panel', 'right') == 'column'
 
 
-@pytest.mark.parametrize('panel_open', [False, True])
-def test_zone_transition_panel_right(panel_open):
-    assert guide.zone_transition('panel', 'right', panel_open) == ('column', 'close')
+def test_zone_transition_column_left():
+    assert guide.zone_transition('column', 'left') == 'panel'
 
 
-@pytest.mark.parametrize('panel_open, expected', [
-    (False, ('panel', 'open')),
-    (True, ('panel', None)),
-])
-def test_zone_transition_column_left(panel_open, expected):
-    assert guide.zone_transition('column', 'left', panel_open) == expected
+def test_zone_transition_column_right():
+    assert guide.zone_transition('column', 'right') == 'grid'
 
 
-@pytest.mark.parametrize('panel_open', [False, True])
-def test_zone_transition_column_right(panel_open):
-    assert guide.zone_transition('column', 'right', panel_open) == ('grid', None)
+def test_zone_transition_grid_left():
+    assert guide.zone_transition('grid', 'left') == 'column'
 
 
-@pytest.mark.parametrize('panel_open', [False, True])
-def test_zone_transition_grid_left(panel_open):
-    assert guide.zone_transition('grid', 'left', panel_open) == ('column', None)
-
-
-@pytest.mark.parametrize('panel_open', [False, True])
-def test_zone_transition_grid_right(panel_open):
-    assert guide.zone_transition('grid', 'right', panel_open) == ('grid', None)
+def test_zone_transition_grid_right():
+    assert guide.zone_transition('grid', 'right') == 'grid'
 
 
 def test_zone_transition_unknown_zone_raises():
     with pytest.raises(ValueError):
-        guide.zone_transition('bogus', 'left', False)
+        guide.zone_transition('bogus', 'left')
 
 
 def test_zone_transition_unknown_action_raises():
     with pytest.raises(ValueError):
-        guide.zone_transition('rail', 'up', False)
+        guide.zone_transition('rail', 'up')
 
 
 # -- back_target (issue #46 follow-up) --------------------------------------
 
 def test_back_target_grid_moves_to_column():
-    assert guide.back_target('grid', False) == 'column'
-    assert guide.back_target('grid', True) == 'column'
+    assert guide.back_target('grid') == 'column'
 
 
 @pytest.mark.parametrize('zone', ['column', 'rail', 'panel'])
-def test_back_target_closes_when_panel_not_open(zone):
-    assert guide.back_target(zone, False) == 'close'
-
-
-@pytest.mark.parametrize('zone', ['column', 'rail', 'panel'])
-def test_back_target_closes_panel_when_panel_open(zone):
-    assert guide.back_target(zone, True) == 'close_panel'
+def test_back_target_closes(zone):
+    assert guide.back_target(zone) == 'close'
 
 
 def test_back_target_unknown_zone_raises():
     with pytest.raises(ValueError):
-        guide.back_target('bogus', False)
+        guide.back_target('bogus')
 
 
 # -- strip_values (issue #54) -----------------------------------------------
@@ -791,8 +747,8 @@ def test_hint_text_rail_zone():
     assert guide.hint_text('rail', str) == u'OK 32137'
 
 
-def test_hint_text_panel_zone_is_empty():
-    assert guide.hint_text('panel', str) == ''
+def test_hint_text_panel_zone():
+    assert guide.hint_text('panel', str) == u'OK 32138'
 
 
 def test_hint_slots_column():
@@ -816,8 +772,10 @@ def test_hint_slots_grid():
     ]
 
 
-def test_hint_slots_panel_zone_is_empty():
-    assert guide.hint_slots('panel', str) == []
+def test_hint_slots_panel():
+    assert guide.hint_slots('panel', str) == [
+        {'icon': u'OK', 'key': u'', 'verb': '32138', 'texture': u'hint_ok.png'},
+    ]
 
 
 def test_dim_color_scales_rgb_keeps_alpha():

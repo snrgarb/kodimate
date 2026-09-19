@@ -292,21 +292,6 @@ def filter_label(group_id, favourites, groups, all_label, favourites_label,
     return all_label
 
 
-def channel_panel_rows(channel_rows, playing_key):
-    """Rows for the panel's channel list (issue #57): one dict per channel
-    row, in the same order, with {'id','number','name','logo','playing'}.
-    `playing_key` is the (provider_id, channel_key) pair of the currently
-    playing channel, or None."""
-    return [
-        {
-            'id': row['id'], 'number': row['number'], 'name': row['name'],
-            'logo': row.get('logo_url') or '',
-            'playing': (row['provider_id'], row['channel_key']) == playing_key,
-        }
-        for row in channel_rows
-    ]
-
-
 def initial_cursor_index(rows, focus_channel_id):
     """Index of the row whose 'id' == focus_channel_id, else 0."""
     if focus_channel_id is not None:
@@ -319,42 +304,31 @@ def initial_cursor_index(rows, focus_channel_id):
 ZONES = ('rail', 'panel', 'column', 'grid')
 
 _ZONE_TRANSITIONS = {
-    ('rail', 'left', False): ('rail', None),
-    ('rail', 'left', True): ('rail', None),
-    ('rail', 'right', False): ('column', None),
-    ('rail', 'right', True): ('panel', None),
-    ('panel', 'left', False): ('rail', None),
-    ('panel', 'left', True): ('rail', None),
-    ('panel', 'right', False): ('column', 'close'),
-    ('panel', 'right', True): ('column', 'close'),
-    ('column', 'left', False): ('panel', 'open'),
-    ('column', 'left', True): ('panel', None),
-    ('column', 'right', False): ('grid', None),
-    ('column', 'right', True): ('grid', None),
-    ('grid', 'left', False): ('column', None),
-    ('grid', 'left', True): ('column', None),
-    ('grid', 'right', False): ('grid', None),
-    ('grid', 'right', True): ('grid', None),
+    ('rail', 'left'): 'rail',
+    ('rail', 'right'): 'panel',
+    ('panel', 'left'): 'rail',
+    ('panel', 'right'): 'column',
+    ('column', 'left'): 'panel',
+    ('column', 'right'): 'grid',
+    ('grid', 'left'): 'column',
+    ('grid', 'right'): 'grid',
 }
 
 
-def zone_transition(zone, action, panel_open):
-    """(next_zone, panel_change) for Left/Right from `zone`, where
-    panel_change is None, 'open' or 'close'."""
+def zone_transition(zone, action):
+    """Next zone for Left/Right from `zone`: rail<->panel<->column<->grid,
+    with rail and grid staying put at their ends."""
     if zone not in ZONES or action not in ('left', 'right'):
         raise ValueError("invalid zone/action: %r/%r" % (zone, action))
-    return _ZONE_TRANSITIONS[(zone, action, panel_open)]
+    return _ZONE_TRANSITIONS[(zone, action)]
 
 
-def back_target(zone, panel_open):
+def back_target(zone):
     """Back's next state: 'column' (from 'grid', un-highlighting the
-    cursor without closing), 'close_panel' (the Groups panel is open --
-    closes just the panel), or 'close' (close the window)."""
+    cursor without closing) or 'close' (close the window)."""
     if zone not in ZONES:
         raise ValueError("invalid zone: %r" % (zone,))
-    if zone == 'grid':
-        return 'column'
-    return 'close_panel' if panel_open else 'close'
+    return 'column' if zone == 'grid' else 'close'
 
 
 def is_hd_name(name):
@@ -451,8 +425,7 @@ STR_HINT_CHANNELS = 32138
 def hint_slots(zone, get_string):
     """Remote-hint bar slots for the given focus zone: up to five dicts of
     {'icon', 'key', 'verb'}, one per key this zone's Left/Right/OK/Info/
-    long-press actually does (empty list for 'panel', which hides the bar
-    while the Groups drawer is open)."""
+    long-press actually does."""
     if zone == 'column':
         return [
             {'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_WATCH), 'texture': u'hint_ok.png'},
@@ -470,6 +443,8 @@ def hint_slots(zone, get_string):
         ]
     if zone == 'rail':
         return [{'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_OPEN), 'texture': u'hint_ok.png'}]
+    if zone == 'panel':
+        return [{'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_CHANNELS), 'texture': u'hint_ok.png'}]
     return []
 
 

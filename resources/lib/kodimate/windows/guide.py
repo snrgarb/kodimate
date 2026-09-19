@@ -20,8 +20,6 @@ from .rail import RAIL_LIVETV_ID, RAIL_CATCHUP_ID, RAIL_SETTINGS_ID  # noqa: F40
 
 CHANNEL_LIST_ID = 500
 PANEL_LIST_ID = 520
-PANEL_HEADER_ID = 521
-PANEL_CHANNELS_ID = 522
 
 _STR_NO_INFO = 32083
 _STR_ALL_CHANNELS = 32038
@@ -31,8 +29,9 @@ _STR_REMAINING = 32129
 _STR_TODAY = 32130
 
 _RAIL_WIDTH = 150
+_PANEL_WIDTH = 460
 _LEFT_COL_WIDTH = 300
-_GRID_X = _RAIL_WIDTH + _LEFT_COL_WIDTH
+_GRID_X = _RAIL_WIDTH + _PANEL_WIDTH + _LEFT_COL_WIDTH
 _STRIP_HEIGHT = 220
 _HEADER_HEIGHT = 60
 _HINT_BAR_HEIGHT = 60
@@ -73,12 +72,6 @@ _DESC_CURSOR_TEXT_COLOR = 'FFE0E0E0'
 _DESC_PAST_TEXT_COLOR = 'FF606060'
 
 _TITLE_HEIGHT = 40
-
-# The Groups drawer (skin posx 150, width 460) sits above the grid while
-# open; grid cells that would otherwise render under it are clipped to its
-# right edge and dimmed rather than drawn at full brightness on top of it.
-_DRAWER_RIGHT_EDGE = 150 + 460
-_DRAWER_DIM_FACTOR = 0.45
 
 # Real Kodi's xbmcgui module does not export these action-id constants (only
 # xbmcgui.ACTION_MOVE_LEFT/RIGHT/UP/DOWN, ACTION_NAV_BACK, ACTION_PREVIOUS_MENU
@@ -132,13 +125,9 @@ class GuideWindow(BaseWindow):
         self._favourites = self.favourites
         self._provider_id = self.provider_id
         self._zone = 'column'
-        self._panel_open = False
-        self._panel_mode = ''
         self._collapsed = set()
         self._panel_rows = []
         self._rail_focus_id = RAIL_LIVETV_ID
-        self.setProperty('panel_open', '')
-        self.setProperty('panel_mode', '')
         self.setProperty('panel_heading', addon.getLocalizedString(_STR_GROUPS))
 
         self._channel_rows = self._query_rows()
@@ -164,6 +153,7 @@ class GuideWindow(BaseWindow):
         self._top_row = guide.compute_top_row(0, index, visible_rows=_VISIBLE_ROWS)
         self._last_selected = index
         self._update_filter_header()
+        self._render_panel()
         self._build_pool()
         self._load_programmes()
         # Created last (after the pool) so draw order -- which follows
@@ -180,7 +170,7 @@ class GuideWindow(BaseWindow):
         if self._zone == 'rail':
             self.setFocusId(self._rail_focus_id)
         elif self._zone == 'panel':
-            self.setFocusId(PANEL_CHANNELS_ID if self._panel_mode == 'channels' else PANEL_LIST_ID)
+            self.setFocusId(PANEL_LIST_ID)
         else:
             self.setFocusId(CHANNEL_LIST_ID)
         addon = xbmcaddon.Addon()
@@ -270,16 +260,11 @@ class GuideWindow(BaseWindow):
         self._update_filter_header()
         self._load_programmes()
         self._relayout()
-        if self._panel_open:
-            if self._panel_mode == 'groups':
-                if fell_back:
-                    self._render_panel()
-                else:
-                    selected_panel = self.getControl(PANEL_LIST_ID).getSelectedPosition()
-                    self._render_panel(keep_index=selected_panel)
-            else:
-                selected_channels = self.getControl(PANEL_CHANNELS_ID).getSelectedPosition()
-                self._render_channel_panel(keep_index=selected_channels)
+        if fell_back:
+            self._render_panel()
+        else:
+            selected_panel = self.getControl(PANEL_LIST_ID).getSelectedPosition()
+            self._render_panel(keep_index=selected_panel)
 
     def close(self):
         with self._lock:
@@ -327,29 +312,20 @@ class GuideWindow(BaseWindow):
         if self._zone == 'grid':
             self._move_cursor_horizontal(-1)
             return
-        next_zone, panel_change = guide.zone_transition(self._zone, 'left', self._panel_open)
-        if panel_change == 'open':
-            self._open_panel()
+        next_zone = guide.zone_transition(self._zone, 'left')
+        if next_zone == self._zone:
             return
-        if next_zone != self._zone:
+        with self._lock:
+            if next_zone == 'panel':
+                self._render_panel()
             self._zone = next_zone
-            self._apply_zone()
+        self._apply_zone()
 
     def _handle_back(self):
-        if self._zone == 'panel' and self._panel_mode == 'groups':
-            self._return_to_channels_mode()
-            return
-        target = guide.back_target(self._zone, self._panel_open)
+        target = guide.back_target(self._zone)
         if target == 'column':
             self._zone = 'column'
             self._relayout()
-            self._apply_zone()
-            return
-        if target == 'close_panel':
-            with self._lock:
-                self._close_panel()
-                self._zone = 'column'
-                self._relayout()
             self._apply_zone()
             return
         self.close()
@@ -361,17 +337,16 @@ class GuideWindow(BaseWindow):
         if self._zone == 'rail':
             self._rail_focus_id = self.getFocusId()
         if self._zone == 'panel':
-            if self._panel_mode == 'channels':
-                self._select_channel_from_panel()
-                return
             row = self._selected_panel_row()
-            filter_state = guide.picked_filter(row) if row is not None else None
-            if filter_state is not None:
-                self._apply_filter(filter_state)
-            else:
-                self._return_to_channels_mode()
+            if row is None:
+                return
+            if row['kind'] == 'provider':
+                self._zone = 'column'
+                self._apply_zone()
+                return
+            self._apply_filter(guide.picked_filter(row))
             return
-        next_zone, _ = guide.zone_transition(self._zone, 'right', self._panel_open)
+        next_zone = guide.zone_transition(self._zone, 'right')
         self._zone = next_zone
         self._apply_zone()
         if next_zone == 'grid':
@@ -421,28 +396,18 @@ class GuideWindow(BaseWindow):
             self._rail_focus_id = control_id
             self._open_settings()
             return
-        if control_id == PANEL_HEADER_ID:
-            with self._lock:
-                self._render_panel()
-                self._panel_mode = 'groups'
-                self.setProperty('panel_mode', 'groups')
-                self.setProperty('panel_heading', xbmcaddon.Addon().getLocalizedString(_STR_GROUPS))
-            self.setFocusId(PANEL_LIST_ID)
-            return
-        if control_id == PANEL_CHANNELS_ID:
-            self._select_channel_from_panel()
-            return
         if control_id == PANEL_LIST_ID:
             row = self._selected_panel_row()
             if row is None:
                 return
             if row['kind'] == 'provider':
-                selected = self.getControl(PANEL_LIST_ID).getSelectedPosition()
-                if row['provider_id'] in self._collapsed:
-                    self._collapsed.discard(row['provider_id'])
-                else:
-                    self._collapsed.add(row['provider_id'])
-                self._render_panel(keep_index=selected)
+                with self._lock:
+                    selected = self.getControl(PANEL_LIST_ID).getSelectedPosition()
+                    if row['provider_id'] in self._collapsed:
+                        self._collapsed.discard(row['provider_id'])
+                    else:
+                        self._collapsed.add(row['provider_id'])
+                    self._render_panel(keep_index=selected)
                 self.setFocusId(PANEL_LIST_ID)
                 return
             self._apply_filter(guide.picked_filter(row))
@@ -586,8 +551,6 @@ class GuideWindow(BaseWindow):
             provider_id=self._provider_id, providers=provider_rows,
         )
         self.setProperty('guide_filter', label)
-        if self._panel_mode != 'groups':
-            self.setProperty('panel_heading', label)
 
     def _selected_panel_row(self):
         position = self.getControl(PANEL_LIST_ID).getSelectedPosition()
@@ -622,62 +585,6 @@ class GuideWindow(BaseWindow):
             index = selected_index if keep_index is None else min(keep_index, len(items) - 1)
             control.selectItem(index)
 
-    def _render_channel_panel(self, keep_index=None):
-        playing_key = autoplay.last_channel_key_pair(self.conn)
-        rows = guide.channel_panel_rows(self._channel_rows, playing_key)
-        control = self.getControl(PANEL_CHANNELS_ID)
-        control.reset()
-        items = []
-        for row in rows:
-            item = xbmcgui.ListItem(label=row['name'])
-            item.setProperty('number', str(row['number']))
-            item.setProperty('logo', row['logo'])
-            item.setProperty('playing', '1' if row['playing'] else '0')
-            items.append(item)
-        control.addItems(items)
-        if items:
-            index = 0 if keep_index is None else max(0, min(keep_index, len(items) - 1))
-            control.selectItem(index)
-
-    def _select_channel_from_panel(self):
-        with self._lock:
-            index = self.getControl(PANEL_CHANNELS_ID).getSelectedPosition()
-            if self._channel_rows and 0 <= index < len(self._channel_rows):
-                self.getControl(CHANNEL_LIST_ID).selectItem(index)
-                self._last_selected = index
-            self._close_panel()
-            self._zone = 'column'
-            self._relayout()
-        self._apply_zone()
-
-    def _return_to_channels_mode(self):
-        with self._lock:
-            selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
-            self._render_channel_panel(keep_index=selected)
-            self._panel_mode = 'channels'
-            self.setProperty('panel_mode', 'channels')
-            self.setProperty('panel_heading', self.getProperty('guide_filter'))
-        self._apply_zone()
-
-    def _open_panel(self):
-        with self._lock:
-            selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
-            self._render_channel_panel(keep_index=selected)
-            self._panel_mode = 'channels'
-            self.setProperty('panel_mode', 'channels')
-            self._panel_open = True
-            self.setProperty('panel_open', '1')
-            self._zone = 'panel'
-            self._relayout()
-        self._apply_zone()
-
-    def _close_panel(self):
-        with self._lock:
-            self._panel_open = False
-            self.setProperty('panel_open', '')
-            self._panel_mode = ''
-            self.setProperty('panel_mode', '')
-
     def _apply_filter(self, filter_state):
         with self._lock:
             self._group_id = filter_state['group_id']
@@ -687,12 +594,12 @@ class GuideWindow(BaseWindow):
             self._populate_channel_list()
             self._top_row = 0
             self._last_selected = 0
-            self._panel_mode = 'channels'
-            self.setProperty('panel_mode', 'channels')
             self._update_filter_header()
             self._load_programmes()
+            self._zone = 'column'
             self._relayout()
-            self._render_channel_panel(keep_index=0)
+            selected_panel = self.getControl(PANEL_LIST_ID).getSelectedPosition()
+            self._render_panel(keep_index=selected_panel)
         self._apply_zone()
 
     def _populate_channel_list(self):
@@ -763,8 +670,6 @@ class GuideWindow(BaseWindow):
         px_per_min = _GRID_WIDTH / float(guide.VISIBLE_HOURS * 60)
         visible = 0 <= minutes_from_view <= guide.VISIBLE_HOURS * 60
         x = int(_GRID_X + minutes_from_view * px_per_min) if visible else None
-        if visible and self._panel_open and x < _DRAWER_RIGHT_EDGE:
-            visible = False
         self.now_line.setVisible(visible)
         if visible:
             self.now_line.setPosition(x, _STRIP_HEIGHT + _HEADER_HEIGHT)
@@ -974,14 +879,6 @@ class GuideWindow(BaseWindow):
         cell_color = _CURSOR_CELL_COLOR if is_cursor else _CELL_COLOR
         x = cell['x'] + _GRID_X
         width = max(1, cell['width'] - 2)
-        if self._panel_open:
-            clipped = _clip_for_drawer(x, width)
-            if clipped is None:
-                return False
-            x, width = clipped
-            cell_color = guide.dim_color(cell_color, _DRAWER_DIM_FACTOR)
-            text_color = guide.dim_color(text_color, _DRAWER_DIM_FACTOR)
-            desc_color = guide.dim_color(desc_color, _DRAWER_DIM_FACTOR)
         image.setPosition(x, y)
         image.setWidth(width)
         image.setHeight(_ROW_HEIGHT - 2)
@@ -1001,11 +898,6 @@ class GuideWindow(BaseWindow):
     def _set_cell_progress(self, progress_image, cell, y):
         width = max(1, int((cell['width'] - 2) * cell['progress']))
         x = cell['x'] + _GRID_X
-        if self._panel_open:
-            clipped = _clip_for_drawer(x, width)
-            if clipped is None:
-                return False
-            x, width = clipped
         progress_image.setPosition(x, y + _ROW_HEIGHT - 2 - _PROGRESS_HEIGHT)
         progress_image.setWidth(width)
         return True
@@ -1162,17 +1054,6 @@ class GuideWindow(BaseWindow):
             _colored(new_cell['description'], _DESC_CURSOR_TEXT_COLOR) if new_cell['description'] else ''
         )
         return True
-
-
-def _clip_for_drawer(x, width):
-    """(x, width) clipped to the region right of the open Groups drawer, or
-    None when the span is entirely hidden behind it."""
-    right = x + width
-    if right <= _DRAWER_RIGHT_EDGE:
-        return None
-    if x < _DRAWER_RIGHT_EDGE:
-        return _DRAWER_RIGHT_EDGE, right - _DRAWER_RIGHT_EDGE
-    return x, width
 
 
 def _abs_path(addon_path, relpath):
