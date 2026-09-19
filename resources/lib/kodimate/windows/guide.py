@@ -31,14 +31,14 @@ _STR_REMAINING = 32129
 _STR_TODAY = 32130
 
 _RAIL_WIDTH = 150
-_PANEL_WIDTH = 460
-_LEFT_COL_WIDTH = 300
+_PANEL_WIDTH = 385
+_LEFT_COL_WIDTH = 150
 _GRID_X = _RAIL_WIDTH + _PANEL_WIDTH + _LEFT_COL_WIDTH
 _STRIP_HEIGHT = 220
 _HEADER_HEIGHT = 60
 _HINT_BAR_HEIGHT = 60
 _HINT_SLOT_COUNT = 5
-_ROW_HEIGHT = 98
+_ROW_HEIGHT = 66
 _GRID_WIDTH = 1920 - _GRID_X
 _POOL_COLS = 28  # real EPG data can pack ~24 short programmes into a 3h window
 
@@ -56,7 +56,7 @@ _SLOT_MINUTES = 30
 _NOW_BADGE_IMAGE_ID = 516
 _NOW_BADGE_LABEL_ID = 517
 _NOW_BADGE_WIDTH = 80
-_NOW_BADGE_Y = 250
+_NOW_BADGE_Y = _STRIP_HEIGHT
 
 _NOW_LINE_RELPATH = 'resources/skins/Main/media/white.png'
 
@@ -73,7 +73,7 @@ _DESC_TEXT_COLOR = 'FF8A8A8A'
 _DESC_CURSOR_TEXT_COLOR = 'FFE0E0E0'
 _DESC_PAST_TEXT_COLOR = 'FF606060'
 
-_TITLE_HEIGHT = 40
+_TITLE_HEIGHT = 34
 
 # Real Kodi's xbmcgui module does not export these action-id constants (only
 # xbmcgui.ACTION_MOVE_LEFT/RIGHT/UP/DOWN, ACTION_NAV_BACK, ACTION_PREVIOUS_MENU
@@ -675,6 +675,7 @@ class GuideWindow(BaseWindow):
         for index, row in enumerate(self._channel_rows):
             item = xbmcgui.ListItem(label=row['name'])
             item.setProperty('number', str(row['number']))
+            item.setProperty('logo', row.get('logo_url') or '')
             window_days = self._window_days_for_channel(index)
             item.setProperty('catchup', '1' if window_days else '0')
             item.setProperty(
@@ -957,7 +958,8 @@ class GuideWindow(BaseWindow):
         desc_label.setPosition(label_x, y + _TITLE_HEIGHT)
         desc_label.setWidth(label_width)
         desc_label.setHeight(_ROW_HEIGHT - _TITLE_HEIGHT)
-        desc_label.setLabel(_colored(cell['description'], desc_color) if cell['description'] else '')
+        time_range = guide.cell_time_range(cell, self._tz)
+        desc_label.setLabel(_colored(time_range, desc_color) if time_range else '')
         return True
 
     def _set_cell_progress(self, progress_image, cell, y):
@@ -1053,12 +1055,14 @@ class GuideWindow(BaseWindow):
             self._cell_title(old_cell, old_state), self._label_color_for(old_cell, old_state, False)
         ))
         old_desc_color = self._desc_color_for(old_cell, old_state, False)
-        old_pool[2].setLabel(_colored(old_cell['description'], old_desc_color) if old_cell['description'] else '')
+        old_time_range = guide.cell_time_range(old_cell, self._tz)
+        old_pool[2].setLabel(_colored(old_time_range, old_desc_color) if old_time_range else '')
         new_pool = self._pool[row][new_cell['pool_index']]
         new_pool[0].setColorDiffuse(_CURSOR_CELL_COLOR)
         new_pool[1].setLabel(_colored(self._cell_title(new_cell, new_state), _CURSOR_TEXT_COLOR))
+        new_time_range = guide.cell_time_range(new_cell, self._tz)
         new_pool[2].setLabel(
-            _colored(new_cell['description'], _DESC_CURSOR_TEXT_COLOR) if new_cell['description'] else ''
+            _colored(new_time_range, _DESC_CURSOR_TEXT_COLOR) if new_time_range else ''
         )
         return True
 
@@ -1109,14 +1113,16 @@ class GuideWindow(BaseWindow):
                 self._cell_title(old_cell, old_state), self._label_color_for(old_cell, old_state, False)
             ))
             old_desc_color = self._desc_color_for(old_cell, old_state, False)
+            old_time_range = guide.cell_time_range(old_cell, self._tz)
             old_pool[2].setLabel(
-                _colored(old_cell['description'], old_desc_color) if old_cell['description'] else ''
+                _colored(old_time_range, old_desc_color) if old_time_range else ''
             )
         new_pool = self._pool[new_row][new_cell['pool_index']]
         new_pool[0].setColorDiffuse(_CURSOR_CELL_COLOR)
         new_pool[1].setLabel(_colored(self._cell_title(new_cell, new_state), _CURSOR_TEXT_COLOR))
+        new_time_range = guide.cell_time_range(new_cell, self._tz)
         new_pool[2].setLabel(
-            _colored(new_cell['description'], _DESC_CURSOR_TEXT_COLOR) if new_cell['description'] else ''
+            _colored(new_time_range, _DESC_CURSOR_TEXT_COLOR) if new_time_range else ''
         )
         return True
 

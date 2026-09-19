@@ -583,6 +583,24 @@ def test_strip_values_duration_formatting_whole_hours():
     assert values['times'] == '12:00 - 14:00 (2h)'
 
 
+# -- cell_time_range (issue #65) ----------------------------------------------
+
+def test_cell_time_range_real_cell():
+    cell = {'start': datetime(2026, 1, 1, 12, 0), 'end': datetime(2026, 1, 1, 13, 0), 'filler': False}
+    assert guide.cell_time_range(cell, tz=timezone.utc) == '12:00 - 13:00'
+
+
+def test_cell_time_range_filler_cell_is_empty():
+    cell = {'start': datetime(2026, 1, 1, 12, 0), 'end': datetime(2026, 1, 1, 13, 0), 'filler': True}
+    assert guide.cell_time_range(cell, tz=timezone.utc) == ''
+
+
+def test_cell_time_range_crossing_local_midnight():
+    tz = timezone(timedelta(hours=2))
+    cell = {'start': datetime(2026, 1, 1, 21, 30), 'end': datetime(2026, 1, 1, 22, 30), 'filler': False}
+    assert guide.cell_time_range(cell, tz=tz) == '23:30 - 00:30'
+
+
 # -- is_hd_name (issue #54) --------------------------------------------------
 
 def test_is_hd_name_true_for_hd_suffix():
@@ -615,6 +633,10 @@ def test_visible_rows_floor_divides_available_height():
 
 def test_visible_rows_at_least_one():
     assert guide.visible_rows(50, 98) == 1
+
+
+def test_visible_rows_dense_row_height_fits_eleven_rows():
+    assert guide.visible_rows(740, 66) == 11
 
 
 # -- date_label (issue #54) ---------------------------------------------------

@@ -406,6 +406,16 @@ def strip_values(programmes, at_time, now, no_info_title, tz=None):
     }
 
 
+def cell_time_range(cell, tz=None):
+    """Local "HH:MM - HH:MM" for a cell_layout cell's programme start/end,
+    or '' for a filler cell."""
+    if cell['filler']:
+        return ''
+    start_local = utc_to_local(cell['start'], tz)
+    end_local = utc_to_local(cell['end'], tz)
+    return '%s - %s' % (start_local.strftime('%H:%M'), end_local.strftime('%H:%M'))
+
+
 def visible_rows(available_height, row_height):
     """Number of whole rows that fit in available_height, at least 1."""
     return max(1, int(available_height // row_height))

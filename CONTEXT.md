@@ -77,7 +77,7 @@ The EPG grid inside the Live TV view, showing Channels down the side against a s
 _Avoid_: EPG grid, TV guide
 
 **Channel column**:
-The Guide's list of Channels, one per row with number, logo, and name; together with the programme cells it forms the Guide grid.
+The Guide's list of Channels, one per row with number and a logo tile (placeholder when the Channel has no logo); the name lives in the Channel panel and the Programme detail strip; together with the programme cells it forms the Guide grid.
 _Avoid_: Channel list (its name before the Guide and the channel list merged into the Live TV view)
 
 **Programme detail strip**:

@@ -128,7 +128,7 @@ def test_cell_proportional_to_duration(tmp_path):
         window._relayout()
         cells = window._row_cells[0]
         assert cells[0]['title'] == 'Show A'
-        assert cells[0]['width'] == _third_of_grid(1010)
+        assert cells[0]['width'] == _third_of_grid(win_guide._GRID_WIDTH)
         # The remaining two-thirds of the viewport is a filler cell.
         assert cells[1]['filler'] is True
     finally:
@@ -373,13 +373,17 @@ def test_past_cell_is_dimmed_but_cursor_cell_is_not(tmp_path):
         current_image, current_label, current_desc = window._pool[0][1]
         assert past_label.getLabel() == '[COLOR FF808080]Past Show[/COLOR]'
         assert current_label.getLabel() == '[COLOR FFFFFFFF]Current Show[/COLOR]'
-        assert past_desc.getLabel() == ''
-        assert current_desc.getLabel() == ''
+        past_range = guide.cell_time_range({'start': t0, 'end': now_snapshot, 'filler': False}, window._tz)
+        current_range = guide.cell_time_range(
+            {'start': now_snapshot, 'end': t0 + timedelta(hours=2), 'filler': False}, window._tz,
+        )
+        assert past_desc.getLabel() == '[COLOR FF606060]%s[/COLOR]' % past_range
+        assert current_desc.getLabel() == '[COLOR FFE0E0E0]%s[/COLOR]' % current_range
     finally:
         conn.close()
 
 
-def test_cell_shows_description_below_title_with_colour_by_state(tmp_path):
+def test_cell_shows_time_range_below_title_with_colour_by_state(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -400,8 +404,12 @@ def test_cell_shows_description_below_title_with_colour_by_state(tmp_path):
 
         _past_image, _past_label, past_desc = window._pool[0][0]
         _current_image, _current_label, current_desc = window._pool[0][1]
-        assert past_desc.getLabel() == '[COLOR FF606060]About the past show[/COLOR]'
-        assert current_desc.getLabel() == '[COLOR FFE0E0E0]About the current show[/COLOR]'
+        past_range = guide.cell_time_range({'start': t0, 'end': now_snapshot, 'filler': False}, window._tz)
+        current_range = guide.cell_time_range(
+            {'start': now_snapshot, 'end': t0 + timedelta(hours=2), 'filler': False}, window._tz,
+        )
+        assert past_desc.getLabel() == '[COLOR FF606060]%s[/COLOR]' % past_range
+        assert current_desc.getLabel() == '[COLOR FFE0E0E0]%s[/COLOR]' % current_range
     finally:
         conn.close()
 
@@ -815,6 +823,22 @@ def test_channel_list_item_catchup_property_reflects_catchup_days(tmp_path):
         items = window.getControl(CHANNEL_LIST_ID)._items
         assert items[0].getProperty('catchup') == '1'
         assert items[1].getProperty('catchup') == '0'
+    finally:
+        conn.close()
+
+
+def test_channel_list_item_carries_logo_property(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        _channel(conn, pid, "b", "Beta", 1, epg_channel_id="x2")
+        conn.execute("UPDATE channel SET logo_url = ? WHERE id = ?", ("http://x/alpha.png", cid))
+        window = _window(conn)
+
+        items = window.getControl(CHANNEL_LIST_ID)._items
+        assert items[0].getProperty('logo') == 'http://x/alpha.png'
+        assert items[1].getProperty('logo') == ''
     finally:
         conn.close()
 
@@ -2590,6 +2614,23 @@ def test_header_now_slot_and_label_set_when_now_in_viewport(tmp_path):
         expected_slot = guide.header_now_slot(window._viewport_start, now)
         assert window.getProperty('guide_header_now') == str(expected_slot)
         assert window.getProperty('guide_now_label') == guide.utc_to_local(now, window._tz).strftime('%H:%M')
+    finally:
+        conn.close()
+
+
+def test_now_badge_sits_in_time_row_centred_on_now_line(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window(conn)
+
+        badge_image = window.getControl(win_guide._NOW_BADGE_IMAGE_ID)
+        badge_label = window.getControl(win_guide._NOW_BADGE_LABEL_ID)
+        assert badge_image.getY() == win_guide._STRIP_HEIGHT
+        assert badge_label.getY() == win_guide._STRIP_HEIGHT
+        assert badge_image.getX() == window.now_line.getX() - win_guide._NOW_BADGE_WIDTH // 2
+        assert badge_label.getX() == window.now_line.getX() - win_guide._NOW_BADGE_WIDTH // 2
     finally:
         conn.close()
 
