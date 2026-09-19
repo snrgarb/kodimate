@@ -59,6 +59,13 @@ def viewport_end(viewport_start):
     return viewport_start + timedelta(hours=VISIBLE_HOURS)
 
 
+def _elapsed_fraction(seg_start, seg_end, now):
+    if not (seg_start <= now < seg_end):
+        return None
+    total = (seg_end - seg_start).total_seconds()
+    return (now - seg_start).total_seconds() / total
+
+
 def cell_layout(programmes, viewport_start, grid_width, no_info_title, now=None):
     """Cells for one channel row's programmes, clipped to the 3-hour
     viewport starting at viewport_start and positioned proportionally to
@@ -84,10 +91,9 @@ def cell_layout(programmes, viewport_start, grid_width, no_info_title, now=None)
         return int(round(x)), int(round(width))
 
     def _progress(seg_start, seg_end):
-        if now is None or not (seg_start <= now < seg_end):
+        if now is None:
             return None
-        total = (seg_end - seg_start).total_seconds()
-        return (now - seg_start).total_seconds() / total
+        return _elapsed_fraction(seg_start, seg_end, now)
 
     def _filler(seg_start, seg_end):
         x, width = _rect(seg_start, seg_end)
@@ -142,10 +148,7 @@ def cell_progress(cell, now, viewport_start, viewport_end):
         return None
     seg_start = max(cell['start'], viewport_start)
     seg_end = min(cell['end'], viewport_end)
-    if not (seg_start <= now < seg_end):
-        return None
-    total = (seg_end - seg_start).total_seconds()
-    return (now - seg_start).total_seconds() / total
+    return _elapsed_fraction(seg_start, seg_end, now)
 
 
 def header_now_slot(viewport_start, now):

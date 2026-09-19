@@ -118,6 +118,8 @@ class GuideWindow(BaseWindow):
                 else:
                     self._relayout()
             self._apply_zone()
+            if not self._closed:
+                self._arm_now_tick()
             return
 
         addon = xbmcaddon.Addon()

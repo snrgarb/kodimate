@@ -3158,3 +3158,23 @@ def test_now_tick_stops_on_close(tmp_path, monkeypatch):
         assert window.now_line.getX() == before_now_x
     finally:
         conn.close()
+
+
+def test_reentrant_oninit_rearms_lost_now_tick(tmp_path, monkeypatch):
+    conn = _conn(tmp_path)
+    try:
+        monkeypatch.setattr(win_guide, 'datetime', _FakeDatetime)
+        _FakeDatetime._now = datetime(2026, 1, 1, 12, 0)
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window_with_scheduler(conn)
+
+        window._now_tick_timer.cancel()
+        window._now_tick_timer = None
+        assert window.scheduler.pending_count() == 0
+
+        window.onInit()
+
+        assert window.scheduler.pending_count() == 1
+    finally:
+        conn.close()
