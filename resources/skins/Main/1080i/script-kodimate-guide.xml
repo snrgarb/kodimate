@@ -992,6 +992,7 @@
                 <onleft>521</onleft>
                 <onright>521</onright>
                 <onup>521</onup>
+                <ondown condition="String.IsEqual(Window.Property(panel_mode),groups)">520</ondown>
                 <ondown>522</ondown>
             </control>
             <control type="image">
