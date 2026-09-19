@@ -134,6 +134,20 @@ def cell_layout(programmes, viewport_start, grid_width, no_info_title, now=None)
     return cells
 
 
+def cell_progress(cell, now, viewport_start, viewport_end):
+    """Progress fraction (0..1) for a cell_layout cell at `now`, matching
+    cell_layout's own progress rule: None when now is outside the
+    viewport-clipped [start, end) or the cell is a filler."""
+    if cell['filler']:
+        return None
+    seg_start = max(cell['start'], viewport_start)
+    seg_end = min(cell['end'], viewport_end)
+    if not (seg_start <= now < seg_end):
+        return None
+    total = (seg_end - seg_start).total_seconds()
+    return (now - seg_start).total_seconds() / total
+
+
 def header_now_slot(viewport_start, now):
     """Header slot index (0..5, 30-minute slots) containing now within the
     3-hour viewport starting at viewport_start, or None when now is

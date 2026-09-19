@@ -16,6 +16,50 @@ _SKIN_XML = os.path.join(
 )
 
 
+class FakeScheduler(object):
+    def __init__(self):
+        self._pending = []
+        self._now = 0
+
+    def __call__(self, delay_seconds, fn):
+        entry = {'due': self._now + delay_seconds, 'fn': fn, 'cancelled': False}
+        self._pending.append(entry)
+        return _Handle(entry)
+
+    def advance(self, seconds):
+        self._now += seconds
+        due = [e for e in self._pending if not e['cancelled'] and e['due'] <= self._now]
+        self._pending = [e for e in self._pending if e not in due]
+        for entry in due:
+            entry['fn']()
+
+    def pending_count(self):
+        return len([e for e in self._pending if not e['cancelled']])
+
+
+class _Handle(object):
+    def __init__(self, entry):
+        self._entry = entry
+
+    def cancel(self):
+        self._entry['cancelled'] = True
+
+
+class _FakeDatetime(datetime):
+    _now = None
+
+    @classmethod
+    def utcnow(cls):
+        return cls._now
+
+
+def _window_with_scheduler(conn):
+    window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i', conn=conn)
+    window.scheduler = FakeScheduler()
+    window.onInit()
+    return window
+
+
 @pytest.fixture(autouse=True)
 def _clear_db_generation():
     xbmcgui._window_properties.pop(10000, None)
@@ -2959,3 +3003,158 @@ def test_long_press_favourite_removes_row_under_active_favourites_filter(tmp_pat
         conn.close()
 
 
+
+
+def test_now_tick_moves_marker_without_relayout(tmp_path, monkeypatch):
+    conn = _conn(tmp_path)
+    try:
+        monkeypatch.setattr(win_guide, 'datetime', _FakeDatetime)
+        _FakeDatetime._now = datetime(2026, 1, 1, 12, 0)
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window_with_scheduler(conn)
+
+        before_now_x = window.now_line.getX()
+        before_badge_x = window.getControl(win_guide._NOW_BADGE_IMAGE_ID).getX()
+        before_label = window.getProperty('guide_now_label')
+        before_header_now = window.getProperty('guide_header_now')
+        before_viewport = window._viewport_start
+        before_cursor = window._cursor_time
+        before_selected = window.getControl(CHANNEL_LIST_ID).getSelectedPosition()
+
+        _FakeDatetime._now = before_viewport + timedelta(minutes=31)
+        relayout_calls = []
+        monkeypatch.setattr(window, '_relayout', lambda: relayout_calls.append(1))
+
+        window._on_now_tick()
+
+        after_now_x = window.now_line.getX()
+        after_badge_x = window.getControl(win_guide._NOW_BADGE_IMAGE_ID).getX()
+        assert after_now_x > before_now_x
+        assert after_badge_x > before_badge_x
+        assert window.getProperty('guide_now_label') != before_label
+        assert window.getProperty('guide_header_now') != before_header_now
+        assert relayout_calls == []
+        assert window._viewport_start == before_viewport
+        assert window._cursor_time == before_cursor
+        assert window.getControl(CHANNEL_LIST_ID).getSelectedPosition() == before_selected
+    finally:
+        conn.close()
+
+
+def test_now_tick_updates_cell_progress(tmp_path, monkeypatch):
+    conn = _conn(tmp_path)
+    try:
+        monkeypatch.setattr(win_guide, 'datetime', _FakeDatetime)
+        _FakeDatetime._now = datetime(2026, 1, 1, 12, 0)
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Ongoing-ch", 0, epg_channel_id="x1")
+        _channel(conn, pid, "b", "Ending-ch", 1, epg_channel_id="x2")
+        _channel(conn, pid, "c", "Starting-ch", 2, epg_channel_id="x3")
+        eid = _epg_source(conn, pid)
+        window = _window_with_scheduler(conn)
+        t0 = window._viewport_start
+
+        _programme(conn, eid, "x1", guide.format_iso(t0), guide.format_iso(t0 + timedelta(hours=1)), "Ongoing")
+        _programme(conn, eid, "x2", guide.format_iso(t0 + timedelta(minutes=-30)),
+                   guide.format_iso(t0 + timedelta(minutes=5)), "Ending")
+        _programme(conn, eid, "x3", guide.format_iso(t0 + timedelta(minutes=5)),
+                   guide.format_iso(t0 + timedelta(minutes=40)), "Starting")
+        window._load_programmes()
+        window._relayout()
+
+        def _cell_progress_control(row, title):
+            for cell in window._row_cells[row]:
+                if cell['title'] == title:
+                    return window._progress_pool[row][cell['pool_index']]
+            raise AssertionError('cell not found: %s' % title)
+
+        ongoing_before = _cell_progress_control(0, 'Ongoing').getWidth()
+
+        _FakeDatetime._now = t0 + timedelta(minutes=10)
+        window._on_now_tick()
+
+        ongoing_after = _cell_progress_control(0, 'Ongoing')
+        assert ongoing_after.getWidth() > ongoing_before
+
+        ending_control = _cell_progress_control(1, 'Ending')
+        assert ending_control.isVisible() is False
+
+        starting_control = _cell_progress_control(2, 'Starting')
+        assert starting_control.isVisible() is True
+        assert starting_control.getWidth() > 1
+    finally:
+        conn.close()
+
+
+def test_now_tick_hides_marker_when_now_leaves_viewport(tmp_path, monkeypatch):
+    conn = _conn(tmp_path)
+    try:
+        monkeypatch.setattr(win_guide, 'datetime', _FakeDatetime)
+        _FakeDatetime._now = datetime(2026, 1, 1, 12, 0)
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window_with_scheduler(conn)
+
+        _FakeDatetime._now = guide.viewport_end(window._viewport_start) + timedelta(minutes=1)
+        window._on_now_tick()
+
+        assert window.now_line.isVisible() is False
+        assert window.getProperty('guide_now_label') == ''
+        assert window.getProperty('guide_header_now') == ''
+    finally:
+        conn.close()
+
+
+def test_now_tick_paused_during_modal(tmp_path, monkeypatch):
+    conn = _conn(tmp_path)
+    try:
+        monkeypatch.setattr(win_guide, 'datetime', _FakeDatetime)
+        _FakeDatetime._now = datetime(2026, 1, 1, 12, 0)
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window_with_scheduler(conn)
+
+        before_label = window.getProperty('guide_now_label')
+        before_header_now = window.getProperty('guide_header_now')
+        before_now_x = window.now_line.getX()
+
+        window._enter_modal()
+        _FakeDatetime._now = window._viewport_start + timedelta(minutes=31)
+        window.scheduler.advance(60)
+
+        assert window.scheduler.pending_count() == 0
+        assert window.getProperty('guide_now_label') == before_label
+        assert window.getProperty('guide_header_now') == before_header_now
+        assert window.now_line.getX() == before_now_x
+
+        window._exit_modal()
+        assert window.scheduler.pending_count() == 1
+    finally:
+        conn.close()
+
+
+def test_now_tick_stops_on_close(tmp_path, monkeypatch):
+    conn = _conn(tmp_path)
+    try:
+        monkeypatch.setattr(win_guide, 'datetime', _FakeDatetime)
+        _FakeDatetime._now = datetime(2026, 1, 1, 12, 0)
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0)
+        window = _window_with_scheduler(conn)
+
+        before_label = window.getProperty('guide_now_label')
+        before_header_now = window.getProperty('guide_header_now')
+        before_now_x = window.now_line.getX()
+
+        window.close()
+        assert window.scheduler.pending_count() == 0
+
+        _FakeDatetime._now = window._viewport_start + timedelta(minutes=31)
+        window._on_now_tick()
+
+        assert window.getProperty('guide_now_label') == before_label
+        assert window.getProperty('guide_header_now') == before_header_now
+        assert window.now_line.getX() == before_now_x
+    finally:
+        conn.close()

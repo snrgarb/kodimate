@@ -846,3 +846,38 @@ def test_dim_color_scales_rgb_keeps_alpha():
 
 def test_dim_color_clamps_at_255():
     assert guide.dim_color('FFFFFFFF', 2.0) == 'FFFFFFFF'
+
+
+def test_cell_progress_fraction_within_span():
+    cell = {'start': datetime(2026, 1, 1, 12, 0), 'end': datetime(2026, 1, 1, 13, 0), 'filler': False}
+    now = datetime(2026, 1, 1, 12, 30)
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    viewport_end = datetime(2026, 1, 1, 15, 0)
+    assert guide.cell_progress(cell, now, viewport_start, viewport_end) == 0.5
+
+
+def test_cell_progress_none_at_or_after_end():
+    cell = {'start': datetime(2026, 1, 1, 12, 0), 'end': datetime(2026, 1, 1, 13, 0), 'filler': False}
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    viewport_end = datetime(2026, 1, 1, 15, 0)
+    assert guide.cell_progress(cell, datetime(2026, 1, 1, 13, 0), viewport_start, viewport_end) is None
+    assert guide.cell_progress(cell, datetime(2026, 1, 1, 13, 30), viewport_start, viewport_end) is None
+
+
+def test_cell_progress_none_for_filler():
+    cell = {'start': datetime(2026, 1, 1, 12, 0), 'end': datetime(2026, 1, 1, 13, 0), 'filler': True}
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    viewport_end = datetime(2026, 1, 1, 15, 0)
+    assert guide.cell_progress(cell, datetime(2026, 1, 1, 12, 30), viewport_start, viewport_end) is None
+
+
+def test_cell_progress_matches_cell_layout_when_start_precedes_viewport():
+    viewport_start = datetime(2026, 1, 1, 12, 0)
+    now = datetime(2026, 1, 1, 12, 30)
+    programmes = [{'title': 'Ongoing', 'start': datetime(2026, 1, 1, 10, 0),
+                   'end': datetime(2026, 1, 1, 13, 0)}]
+    cells = guide.cell_layout(programmes, viewport_start, 1440, 'No info', now=now)
+    cell = cells[0]
+    fraction = guide.cell_progress(cell, now, viewport_start, guide.viewport_end(viewport_start))
+    assert fraction == cell['progress']
+    assert fraction == 0.5

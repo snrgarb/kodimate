@@ -57,6 +57,7 @@ _NOW_BADGE_IMAGE_ID = 516
 _NOW_BADGE_LABEL_ID = 517
 _NOW_BADGE_WIDTH = 80
 _NOW_BADGE_Y = _STRIP_HEIGHT
+_NOW_TICK_SECONDS = 60
 
 _NOW_LINE_RELPATH = 'resources/skins/Main/media/white.png'
 
@@ -106,6 +107,7 @@ class GuideWindow(BaseWindow):
     favourites = False
     focus_channel_id = None
     provider_id = None
+    scheduler = None
 
     def onInit(self):
         if getattr(self, '_initialised', False):
@@ -145,6 +147,7 @@ class GuideWindow(BaseWindow):
         self._render_pending = False
         self._closed = False
         self._watcher = None
+        self._now_tick_timer = None
         # Guards _modal_depth/_render_pending/_closed and every render below:
         # GenerationWatcher.onNotification runs on Kodi's Monitor thread
         # while the UI thread may be inside onAction/onClick.
@@ -168,6 +171,9 @@ class GuideWindow(BaseWindow):
         self.setProperty('rail_selected', 'livetv')
         self._apply_zone()
         self._watcher = ipc.GenerationWatcher(self._on_generation_change)
+        if self.scheduler is None:
+            self.scheduler = playback.timer_scheduler
+        self._arm_now_tick()
         self._initialised = True
 
     def _apply_zone(self):
@@ -206,10 +212,12 @@ class GuideWindow(BaseWindow):
         # take it only to bump/drop _modal_depth, not while doModal() blocks.
         with self._lock:
             self._modal_depth -= 1
-            if self._modal_depth <= 0 and self._render_pending:
-                self._render_pending = False
-                self._refresh_in_place()
-                return True
+            if self._modal_depth <= 0:
+                self._arm_now_tick()
+                if self._render_pending:
+                    self._render_pending = False
+                    self._refresh_in_place()
+                    return True
         return False
 
     def _filter_still_valid(self):
@@ -278,6 +286,8 @@ class GuideWindow(BaseWindow):
             self._closed = True
             if getattr(self, '_watcher', None) is not None:
                 self._watcher.stop()
+            if getattr(self, '_now_tick_timer', None) is not None:
+                self._now_tick_timer.cancel()
         super(GuideWindow, self).close()
 
     def onAction(self, action):
@@ -753,6 +763,38 @@ class GuideWindow(BaseWindow):
         self.setProperty(
             'guide_now_label', guide.utc_to_local(now, self._tz).strftime('%H:%M') if slot is not None else ''
         )
+
+    def _arm_now_tick(self):
+        if self._now_tick_timer is not None:
+            self._now_tick_timer.cancel()
+        if not self._closed:
+            self._now_tick_timer = self.scheduler(_NOW_TICK_SECONDS, self._on_now_tick)
+
+    def _on_now_tick(self):
+        with self._lock:
+            if self._closed:
+                return
+            if self._modal_depth > 0:
+                return
+            self._refresh_now_marker()
+            self._arm_now_tick()
+
+    def _refresh_now_marker(self):
+        self._update_now_line()
+        self._update_header()
+        now = datetime.utcnow()
+        for row, cells in enumerate(self._row_cells):
+            row_progress = self._progress_pool[row]
+            y = _STRIP_HEIGHT + _HEADER_HEIGHT + row * _ROW_HEIGHT
+            for cell in cells:
+                progress_image = row_progress[cell['pool_index']]
+                fraction = guide.cell_progress(cell, now, self._viewport_start,
+                                                guide.viewport_end(self._viewport_start))
+                if fraction is None:
+                    progress_image.setVisible(False)
+                else:
+                    self._set_cell_progress(progress_image, dict(cell, progress=fraction), y)
+                    progress_image.setVisible(True)
 
     def _update_strip(self):
         addon = xbmcaddon.Addon()
