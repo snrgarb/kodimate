@@ -20,6 +20,8 @@ from .rail import RAIL_LIVETV_ID, RAIL_CATCHUP_ID, RAIL_SETTINGS_ID  # noqa: F40
 
 CHANNEL_LIST_ID = 500
 PANEL_LIST_ID = 520
+PANEL_HEADER_ID = 521
+PANEL_CHANNELS_ID = 522
 
 _STR_NO_INFO = 32083
 _STR_ALL_CHANNELS = 32038
@@ -125,9 +127,11 @@ class GuideWindow(BaseWindow):
         self._favourites = self.favourites
         self._provider_id = self.provider_id
         self._zone = 'column'
+        self._panel_mode = 'channels'
         self._collapsed = set()
         self._panel_rows = []
         self._rail_focus_id = RAIL_LIVETV_ID
+        self.setProperty('panel_mode', 'channels')
         self.setProperty('panel_heading', addon.getLocalizedString(_STR_GROUPS))
 
         self._channel_rows = self._query_rows()
@@ -153,7 +157,7 @@ class GuideWindow(BaseWindow):
         self._top_row = guide.compute_top_row(0, index, visible_rows=_VISIBLE_ROWS)
         self._last_selected = index
         self._update_filter_header()
-        self._render_panel()
+        self._render_channel_panel(keep_index=index)
         self._build_pool()
         self._load_programmes()
         # Created last (after the pool) so draw order -- which follows
@@ -170,13 +174,13 @@ class GuideWindow(BaseWindow):
         if self._zone == 'rail':
             self.setFocusId(self._rail_focus_id)
         elif self._zone == 'panel':
-            self.setFocusId(PANEL_LIST_ID)
+            self.setFocusId(PANEL_CHANNELS_ID if self._panel_mode == 'channels' else PANEL_LIST_ID)
         else:
             self.setFocusId(CHANNEL_LIST_ID)
         addon = xbmcaddon.Addon()
         get_string = addon.getLocalizedString
-        self.setProperty('hint_bar', guide.hint_text(self._zone, get_string))
-        slots = guide.hint_slots(self._zone, get_string)
+        self.setProperty('hint_bar', guide.hint_text(self._zone, get_string, self._panel_mode))
+        slots = guide.hint_slots(self._zone, get_string, self._panel_mode)
         for i in range(_HINT_SLOT_COUNT):
             slot = slots[i] if i < len(slots) else {'icon': '', 'key': '', 'verb': '', 'texture': ''}
             n = i + 1
@@ -260,7 +264,10 @@ class GuideWindow(BaseWindow):
         self._update_filter_header()
         self._load_programmes()
         self._relayout()
-        if fell_back:
+        if self._panel_mode == 'channels':
+            selected_channels = self.getControl(PANEL_CHANNELS_ID).getSelectedPosition()
+            self._render_channel_panel(keep_index=selected_channels)
+        elif fell_back:
             self._render_panel()
         else:
             selected_panel = self.getControl(PANEL_LIST_ID).getSelectedPosition()
@@ -317,11 +324,17 @@ class GuideWindow(BaseWindow):
             return
         with self._lock:
             if next_zone == 'panel':
-                self._render_panel()
+                selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
+                self._panel_mode = 'channels'
+                self.setProperty('panel_mode', 'channels')
+                self._render_channel_panel(keep_index=selected)
             self._zone = next_zone
         self._apply_zone()
 
     def _handle_back(self):
+        if self._zone == 'panel' and self._panel_mode == 'groups':
+            self._return_to_channels_mode()
+            return
         target = guide.back_target(self._zone)
         if target == 'column':
             self._zone = 'column'
@@ -337,12 +350,14 @@ class GuideWindow(BaseWindow):
         if self._zone == 'rail':
             self._rail_focus_id = self.getFocusId()
         if self._zone == 'panel':
+            if self._panel_mode == 'channels':
+                self._select_channel_from_panel()
+                return
             row = self._selected_panel_row()
             if row is None:
                 return
             if row['kind'] == 'provider':
-                self._zone = 'column'
-                self._apply_zone()
+                self._return_to_channels_mode()
                 return
             self._apply_filter(guide.picked_filter(row))
             return
@@ -395,6 +410,17 @@ class GuideWindow(BaseWindow):
         if control_id == RAIL_SETTINGS_ID:
             self._rail_focus_id = control_id
             self._open_settings()
+            return
+        if control_id == PANEL_HEADER_ID:
+            with self._lock:
+                self._panel_mode = 'groups'
+                self.setProperty('panel_mode', 'groups')
+                self.setProperty('panel_heading', xbmcaddon.Addon().getLocalizedString(_STR_GROUPS))
+                self._render_panel()
+            self._apply_zone()
+            return
+        if control_id == PANEL_CHANNELS_ID:
+            self._select_channel_from_panel()
             return
         if control_id == PANEL_LIST_ID:
             row = self._selected_panel_row()
@@ -551,6 +577,8 @@ class GuideWindow(BaseWindow):
             provider_id=self._provider_id, providers=provider_rows,
         )
         self.setProperty('guide_filter', label)
+        if self._panel_mode != 'groups':
+            self.setProperty('panel_heading', label)
 
     def _selected_panel_row(self):
         position = self.getControl(PANEL_LIST_ID).getSelectedPosition()
@@ -585,6 +613,43 @@ class GuideWindow(BaseWindow):
             index = selected_index if keep_index is None else min(keep_index, len(items) - 1)
             control.selectItem(index)
 
+    def _render_channel_panel(self, keep_index=None):
+        playing_key = autoplay.last_channel_key_pair(self.conn)
+        rows = guide.channel_panel_rows(self._channel_rows, playing_key)
+        control = self.getControl(PANEL_CHANNELS_ID)
+        control.reset()
+        items = []
+        for row in rows:
+            item = xbmcgui.ListItem(label=row['name'])
+            item.setProperty('number', str(row['number']))
+            item.setProperty('logo', row['logo'])
+            item.setProperty('playing', '1' if row['playing'] else '0')
+            items.append(item)
+        control.addItems(items)
+        if items:
+            index = 0 if keep_index is None else max(0, min(keep_index, len(items) - 1))
+            control.selectItem(index)
+
+    def _select_channel_from_panel(self):
+        with self._lock:
+            index = self.getControl(PANEL_CHANNELS_ID).getSelectedPosition()
+            if self._channel_rows and 0 <= index < len(self._channel_rows):
+                self.getControl(CHANNEL_LIST_ID).selectItem(index)
+                self._zone = 'column'
+                self._handle_vertical_move()
+            else:
+                self._zone = 'column'
+        self._apply_zone()
+
+    def _return_to_channels_mode(self):
+        with self._lock:
+            selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
+            self._panel_mode = 'channels'
+            self.setProperty('panel_mode', 'channels')
+            self.setProperty('panel_heading', self.getProperty('guide_filter'))
+            self._render_channel_panel(keep_index=selected)
+        self._apply_zone()
+
     def _apply_filter(self, filter_state):
         with self._lock:
             self._group_id = filter_state['group_id']
@@ -594,12 +659,12 @@ class GuideWindow(BaseWindow):
             self._populate_channel_list()
             self._top_row = 0
             self._last_selected = 0
+            self._panel_mode = 'channels'
+            self.setProperty('panel_mode', 'channels')
             self._update_filter_header()
             self._load_programmes()
-            self._zone = 'column'
             self._relayout()
-            selected_panel = self.getControl(PANEL_LIST_ID).getSelectedPosition()
-            self._render_panel(keep_index=selected_panel)
+            self._render_channel_panel(keep_index=0)
         self._apply_zone()
 
     def _populate_channel_list(self):

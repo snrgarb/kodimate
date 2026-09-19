@@ -57,17 +57,20 @@ _Avoid_: Category
 The number shown and used for zapping a Channel. Comes from the Provider (tvg-chno / Xtream num) if present, otherwise from Provider order; the user may override it, and Providers may have number offsets applied. Numbers are labels, not keys: duplicates are allowed. Number-entry Zapping selects the first Channel in list order (Provider order, then Channel order within Provider).
 
 **Live TV view**:
-The screen the addon opens into after startup autoplay: an Icon rail, a permanent channel list panel (the Groups panel) beside it, the Guide, and a Programme detail strip above it. Replaces the former separate channel list and home menu.
+The screen the addon opens into after startup autoplay: an Icon rail, a permanent Channel panel beside it, the Guide, and a Programme detail strip above it. Replaces the former separate channel list and home menu.
 _Avoid_: channel list, home screen, main menu
 
 **Icon rail**:
 The always-visible strip of destinations (Live TV, Catch-up, Settings) at the edge of the Live TV view. Highlights the current destination and never steals focus when the view opens. 150 px wide, icons with labels beneath, never hidden or slid.
 _Avoid_: sidebar, home menu
 
-**Groups panel**:
-The permanent, full-height panel between the Icon rail and the Guide (no slide-out, no dim layer): a static "Groups" header, then a list of All channels, Favourites, and each Provider's Groups under a collapsible header, plus a show-hidden toggle at the foot. OK or Right on a row applies that filter (re-populating the Channel column) and moves focus to the Channel column; OK on a Provider header toggles its collapse; Right on a Provider header moves focus to the Channel column without changing the filter. Back closes the Live TV view.
+**Channel panel**:
+The permanent, full-height panel between the Icon rail and the Guide (no slide-out, no dim layer): a header reading the active filter's name (All channels, Favourites, or a Group) with a filter glyph, and rows listing that filter's Channels (number, logo tile, name), the focused row filled blue and the playing row marked by the blue accent, like the Channel column. OK on the header opens the Groups picker in place of the channel rows. OK or Right on a channel row jumps to that Channel's row in the Channel column. Back on the channel rows closes the Live TV view.
+_Avoid_: Groups panel, Groups drawer, channel list
+
+**Groups picker**:
+The in-panel list of All channels, Favourites and each Provider's Groups under collapsible Provider headers, shown in the Channel panel's rect in place of the channel rows. OK or Right on a row applies that filter, updating the header, the panel rows and the Guide together, and returns to the channel rows with focus staying in the panel. OK on a Provider header toggles its collapse; Right on a Provider header, or Back, returns to the channel rows without changing the filter.
 _Avoid_: group picker, Groups pane, channels mode
-Accepted alternate: **Groups drawer** (its earlier, superseded slide-out form).
 
 **Guide**:
 The EPG grid inside the Live TV view, showing Channels down the side against a scrolling timeline of Programmes.
@@ -82,7 +85,7 @@ The strip across the top of the Live TV view showing the focused Channel's logo 
 _Avoid_: Now strip
 
 **Remote-hint bar**:
-The bar along the bottom of the Live TV view listing what OK, Back, Left/Right, Info and long-press do in the current focus zone; shown only while browsing, hidden while Playback is up.
+The bar along the bottom of the Live TV view listing what OK, Back, Left/Right, Info and long-press do in the current focus zone; shown only while browsing, hidden while Playback is up. Reads "OK Channels" in the Channel panel's channels mode, "OK Groups" in the Groups picker, and the Channel column's second hint reads "← Groups".
 
 **Programme**:
 One scheduled broadcast on a Channel, keyed by its EPG Source channel id and start time, with title, subtitle, description, start, end, icon, category, and catch-up id, sourced from XMLTV or Xtream EPG.

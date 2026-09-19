@@ -398,6 +398,29 @@ def test_filter_label_group_id_wins_over_provider_id():
 
 
 
+def test_channel_panel_rows_preserves_order_and_flags_playing_row():
+    channel_rows = [
+        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo_url': 'http://x/a.png',
+         'provider_id': 1, 'channel_key': 'a'},
+        {'id': 2, 'number': 2, 'name': 'Beta', 'logo_url': None,
+         'provider_id': 1, 'channel_key': 'b'},
+    ]
+    rows = guide.channel_panel_rows(channel_rows, (1, 'b'))
+    assert rows == [
+        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo': 'http://x/a.png', 'playing': False},
+        {'id': 2, 'number': 2, 'name': 'Beta', 'logo': '', 'playing': True},
+    ]
+
+
+def test_channel_panel_rows_none_playing_key_flags_nothing():
+    channel_rows = [
+        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo_url': None,
+         'provider_id': 1, 'channel_key': 'a'},
+    ]
+    rows = guide.channel_panel_rows(channel_rows, None)
+    assert rows[0]['playing'] is False
+
+
 def test_initial_cursor_index_finds_matching_row():
     rows = [{'id': 1}, {'id': 2}, {'id': 3}]
     assert guide.initial_cursor_index(rows, 2) == 1
@@ -776,6 +799,23 @@ def test_hint_slots_panel():
     assert guide.hint_slots('panel', str) == [
         {'icon': u'OK', 'key': u'', 'verb': '32138', 'texture': u'hint_ok.png'},
     ]
+
+
+def test_hint_slots_panel_channels_mode_explicit():
+    assert guide.hint_slots('panel', str, 'channels') == [
+        {'icon': u'OK', 'key': u'', 'verb': '32138', 'texture': u'hint_ok.png'},
+    ]
+
+
+def test_hint_slots_panel_groups_mode():
+    assert guide.hint_slots('panel', str, 'groups') == [
+        {'icon': u'OK', 'key': u'', 'verb': '32132', 'texture': u'hint_ok.png'},
+    ]
+
+
+def test_hint_slots_column_second_slot_is_left_groups():
+    slots = guide.hint_slots('column', str)
+    assert slots[1] == {'icon': u'←', 'key': u'', 'verb': '32132', 'texture': u'hint_left.png'}
 
 
 def test_dim_color_scales_rgb_keeps_alpha():
