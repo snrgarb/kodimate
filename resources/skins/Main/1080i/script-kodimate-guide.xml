@@ -1050,7 +1050,26 @@
                         <width>460</width>
                         <height>60</height>
                         <texture>white.png</texture>
+                        <colordiffuse>ff2a2a2a</colordiffuse>
+                        <visible>!Control.HasFocus(522)</visible>
+                    </control>
+                    <control type="image">
+                        <posx>0</posx>
+                        <posy>0</posy>
+                        <width>460</width>
+                        <height>60</height>
+                        <texture>white.png</texture>
                         <colordiffuse>ff3a6ea5</colordiffuse>
+                        <visible>Control.HasFocus(522)</visible>
+                    </control>
+                    <control type="image">
+                        <posx>0</posx>
+                        <posy>0</posy>
+                        <width>4</width>
+                        <height>60</height>
+                        <texture>white.png</texture>
+                        <colordiffuse>ff3a6ea5</colordiffuse>
+                        <visible>String.IsEqual(ListItem.Property(playing),1) + !Control.HasFocus(522)</visible>
                     </control>
                     <control type="image">
                         <posx>0</posx>
@@ -1059,7 +1078,7 @@
                         <height>60</height>
                         <texture>white.png</texture>
                         <colordiffuse>ffffffff</colordiffuse>
-                        <visible>String.IsEqual(ListItem.Property(playing),1)</visible>
+                        <visible>String.IsEqual(ListItem.Property(playing),1) + Control.HasFocus(522)</visible>
                     </control>
                     <control type="image">
                         <posx>12</posx>
@@ -1155,7 +1174,17 @@
                         <width>460</width>
                         <height>60</height>
                         <texture>white.png</texture>
+                        <colordiffuse>ff2a2a2a</colordiffuse>
+                        <visible>!Control.HasFocus(520)</visible>
+                    </control>
+                    <control type="image">
+                        <posx>0</posx>
+                        <posy>0</posy>
+                        <width>460</width>
+                        <height>60</height>
+                        <texture>white.png</texture>
                         <colordiffuse>ff3a6ea5</colordiffuse>
+                        <visible>Control.HasFocus(520)</visible>
                     </control>
                     <control type="label">
                         <posx>40</posx>
