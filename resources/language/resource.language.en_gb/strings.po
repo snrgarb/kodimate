@@ -563,3 +563,7 @@ msgstr ""
 msgctxt "#32137"
 msgid "Open"
 msgstr ""
+
+msgctxt "#32138"
+msgid "Channels"
+msgstr ""

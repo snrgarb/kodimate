@@ -430,6 +430,7 @@ STR_HINT_DETAILS = 32134
 STR_HINT_FAVOURITE = 32135
 STR_HINT_LONG_PRESS = 32136
 STR_HINT_OPEN = 32137
+STR_HINT_CHANNELS = 32138
 
 
 def hint_slots(zone, get_string):
@@ -448,6 +449,7 @@ def hint_slots(zone, get_string):
     if zone == 'grid':
         return [
             {'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_WATCH), 'texture': u'hint_ok.png'},
+            {'icon': u'↩', 'key': u'', 'verb': get_string(STR_HINT_CHANNELS), 'texture': u'hint_back.png'},
             {'icon': u'↔', 'key': u'', 'verb': get_string(STR_HINT_TIME), 'texture': u'hint_lr.png'},
             {'icon': u'i', 'key': u'Info', 'verb': get_string(STR_HINT_DETAILS), 'texture': u'hint_info.png'},
         ]

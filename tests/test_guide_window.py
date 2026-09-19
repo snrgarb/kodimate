@@ -2612,16 +2612,18 @@ def test_hint_bar_slot_properties_after_init(tmp_path):
         conn.close()
 
 
-def test_hint_bar_slot4_cleared_in_grid_zone(tmp_path):
+def test_hint_bar_slot5_cleared_in_grid_zone(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
         _channel(conn, pid, "a", "Alpha", 0)
         window = _window(conn)
         window._handle_right()
-        assert window.getProperty('hint4_key') == ''
-        assert window.getProperty('hint4_icon') == ''
-        assert window.getProperty('hint4_texture') == ''
+        assert window.getProperty('hint2_texture') == 'hint_back.png'
+        assert window.getProperty('hint4_texture') == 'hint_info.png'
+        assert window.getProperty('hint5_key') == ''
+        assert window.getProperty('hint5_icon') == ''
+        assert window.getProperty('hint5_texture') == ''
     finally:
         conn.close()
 
@@ -2640,7 +2642,7 @@ def test_skin_hint_textures_exist():
     )
     for name in (
         'hint_ok.png', 'hint_left.png', 'hint_right.png',
-        'hint_lr.png', 'hint_info.png', 'hint_star.png',
+        'hint_lr.png', 'hint_info.png', 'hint_star.png', 'hint_back.png',
     ):
         assert os.path.isfile(os.path.join(media_dir, name)), name
 

@@ -758,7 +758,10 @@ def test_hint_text_column_zone():
 def test_hint_text_grid_zone():
     # The grid's Left/Right hint is one bidirectional glyph (↔), not the
     # column zone's two separate arrows -- updated for issue #56 follow-up.
-    assert guide.hint_text('grid', str) == u'OK 32131 · ↔ 32133 · Info 32134'
+    # Back (↩) returns focus to the channel column -- added as a follow-up.
+    assert guide.hint_text('grid', str) == (
+        u'OK 32131 · ↩ 32138 · ↔ 32133 · Info 32134'
+    )
 
 
 def test_hint_text_rail_zone():
@@ -784,6 +787,7 @@ def test_hint_slots_grid():
     slots = guide.hint_slots('grid', str)
     assert slots == [
         {'icon': u'OK', 'key': u'', 'verb': '32131', 'texture': u'hint_ok.png'},
+        {'icon': u'↩', 'key': u'', 'verb': '32138', 'texture': u'hint_back.png'},
         {'icon': u'↔', 'key': u'', 'verb': '32133', 'texture': u'hint_lr.png'},
         {'icon': u'i', 'key': u'Info', 'verb': '32134', 'texture': u'hint_info.png'},
     ]
