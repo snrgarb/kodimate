@@ -332,6 +332,7 @@ class GuideWindow(BaseWindow):
         if target == 'column':
             self._zone = 'column'
             self._relayout()
+            self._apply_zone()
             return
         if target == 'close_panel':
             with self._lock:

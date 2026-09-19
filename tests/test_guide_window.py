@@ -1791,6 +1791,8 @@ def test_back_from_grid_moves_to_column_without_closing(tmp_path):
         cell = window._row_cells[0][0]
         image, _label, _desc = window._pool[0][cell['pool_index']]
         assert image._color_diffuse != 'FF3A6EA5'
+        assert window.getProperty('hint4_texture') == 'hint_info.png'
+        assert window.getProperty('hint5_texture') == 'hint_star.png'
     finally:
         conn.close()
 
