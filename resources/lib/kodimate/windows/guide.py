@@ -536,7 +536,7 @@ class GuideWindow(BaseWindow):
         return self._top_row + focused_row, cell
 
     def _toggle_favourite(self):
-        if self._zone != 'column':
+        if self._zone not in ('column', 'grid'):
             return
         selected = self.getControl(CHANNEL_LIST_ID).getSelectedPosition()
         if not (0 <= selected < len(self._channel_rows)):

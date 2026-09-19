@@ -480,9 +480,9 @@ def hint_slots(zone, get_string, panel_mode='channels'):
     if zone == 'grid':
         return [
             {'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_WATCH), 'texture': u'hint_ok.png'},
-            {'icon': u'↩', 'key': u'', 'verb': get_string(STR_HINT_CHANNELS), 'texture': u'hint_back.png'},
             {'icon': u'↔', 'key': u'', 'verb': get_string(STR_HINT_TIME), 'texture': u'hint_lr.png'},
             {'icon': u'i', 'key': u'Info', 'verb': get_string(STR_HINT_DETAILS), 'texture': u'hint_info.png'},
+            {'icon': u'★', 'key': get_string(STR_HINT_LONG_PRESS), 'verb': get_string(STR_HINT_FAVOURITE), 'texture': u'hint_star.png'},
         ]
     if zone == 'rail':
         return [{'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_OPEN), 'texture': u'hint_ok.png'}]

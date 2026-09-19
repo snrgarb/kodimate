@@ -2847,8 +2847,9 @@ def test_hint_bar_slot5_cleared_in_grid_zone(tmp_path):
         _channel(conn, pid, "a", "Alpha", 0)
         window = _window(conn)
         window._handle_right()
-        assert window.getProperty('hint2_texture') == 'hint_back.png'
-        assert window.getProperty('hint4_texture') == 'hint_info.png'
+        assert window.getProperty('hint2_texture') == 'hint_lr.png'
+        assert window.getProperty('hint3_texture') == 'hint_info.png'
+        assert window.getProperty('hint4_texture') == 'hint_star.png'
         assert window.getProperty('hint5_key') == ''
         assert window.getProperty('hint5_icon') == ''
         assert window.getProperty('hint5_texture') == ''
@@ -2975,6 +2976,31 @@ def test_long_press_ok_toggles_favourite_and_updates_list_item(tmp_path):
         control = window.getControl(CHANNEL_LIST_ID)
         assert control.getListItem(0).getProperty('favourite') == '0'
         assert control.getSelectedPosition() == 0
+    finally:
+        conn.close()
+
+
+def test_long_press_ok_toggles_favourite_for_grid_row(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
+        window._load_programmes()
+        window._relayout()
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # column -> grid, cell 0
+
+        window.onAction(xbmcgui.Action(win_guide._ACTION_LONG_PRESS_OK))
+
+        rows = channels.list_channels(conn)
+        assert rows[0]['favourite'] is True
+        control = window.getControl(CHANNEL_LIST_ID)
+        assert control.getListItem(0).getProperty('favourite') == '1'
+        assert window._zone == 'grid'
     finally:
         conn.close()
 
