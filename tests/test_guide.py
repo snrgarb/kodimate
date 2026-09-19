@@ -772,20 +772,20 @@ def test_hint_text_panel_zone_is_empty():
 def test_hint_slots_column():
     slots = guide.hint_slots('column', str)
     assert slots == [
-        {'icon': u'OK', 'key': u'', 'verb': '32131'},
-        {'icon': u'←', 'key': u'', 'verb': '32132'},
-        {'icon': u'→', 'key': u'', 'verb': '32133'},
-        {'icon': u'i', 'key': u'Info', 'verb': '32134'},
-        {'icon': u'★', 'key': '32136', 'verb': '32135'},
+        {'icon': u'OK', 'key': u'', 'verb': '32131', 'texture': u'hint_ok.png'},
+        {'icon': u'←', 'key': u'', 'verb': '32132', 'texture': u'hint_left.png'},
+        {'icon': u'→', 'key': u'', 'verb': '32133', 'texture': u'hint_right.png'},
+        {'icon': u'i', 'key': u'Info', 'verb': '32134', 'texture': u'hint_info.png'},
+        {'icon': u'★', 'key': '32136', 'verb': '32135', 'texture': u'hint_star.png'},
     ]
 
 
 def test_hint_slots_grid():
     slots = guide.hint_slots('grid', str)
     assert slots == [
-        {'icon': u'OK', 'key': u'', 'verb': '32131'},
-        {'icon': u'↔', 'key': u'', 'verb': '32133'},
-        {'icon': u'i', 'key': u'Info', 'verb': '32134'},
+        {'icon': u'OK', 'key': u'', 'verb': '32131', 'texture': u'hint_ok.png'},
+        {'icon': u'↔', 'key': u'', 'verb': '32133', 'texture': u'hint_lr.png'},
+        {'icon': u'i', 'key': u'Info', 'verb': '32134', 'texture': u'hint_info.png'},
     ]
 
 

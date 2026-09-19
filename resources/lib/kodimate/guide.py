@@ -439,20 +439,20 @@ def hint_slots(zone, get_string):
     while the Groups drawer is open)."""
     if zone == 'column':
         return [
-            {'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_WATCH)},
-            {'icon': u'←', 'key': u'', 'verb': get_string(STR_HINT_GROUPS)},
-            {'icon': u'→', 'key': u'', 'verb': get_string(STR_HINT_TIME)},
-            {'icon': u'i', 'key': u'Info', 'verb': get_string(STR_HINT_DETAILS)},
-            {'icon': u'★', 'key': get_string(STR_HINT_LONG_PRESS), 'verb': get_string(STR_HINT_FAVOURITE)},
+            {'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_WATCH), 'texture': u'hint_ok.png'},
+            {'icon': u'←', 'key': u'', 'verb': get_string(STR_HINT_GROUPS), 'texture': u'hint_left.png'},
+            {'icon': u'→', 'key': u'', 'verb': get_string(STR_HINT_TIME), 'texture': u'hint_right.png'},
+            {'icon': u'i', 'key': u'Info', 'verb': get_string(STR_HINT_DETAILS), 'texture': u'hint_info.png'},
+            {'icon': u'★', 'key': get_string(STR_HINT_LONG_PRESS), 'verb': get_string(STR_HINT_FAVOURITE), 'texture': u'hint_star.png'},
         ]
     if zone == 'grid':
         return [
-            {'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_WATCH)},
-            {'icon': u'↔', 'key': u'', 'verb': get_string(STR_HINT_TIME)},
-            {'icon': u'i', 'key': u'Info', 'verb': get_string(STR_HINT_DETAILS)},
+            {'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_WATCH), 'texture': u'hint_ok.png'},
+            {'icon': u'↔', 'key': u'', 'verb': get_string(STR_HINT_TIME), 'texture': u'hint_lr.png'},
+            {'icon': u'i', 'key': u'Info', 'verb': get_string(STR_HINT_DETAILS), 'texture': u'hint_info.png'},
         ]
     if zone == 'rail':
-        return [{'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_OPEN)}]
+        return [{'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_OPEN), 'texture': u'hint_ok.png'}]
     return []
 
 

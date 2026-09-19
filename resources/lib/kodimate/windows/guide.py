@@ -184,11 +184,12 @@ class GuideWindow(BaseWindow):
         self.setProperty('hint_bar', guide.hint_text(self._zone, get_string))
         slots = guide.hint_slots(self._zone, get_string)
         for i in range(_HINT_SLOT_COUNT):
-            slot = slots[i] if i < len(slots) else {'icon': '', 'key': '', 'verb': ''}
+            slot = slots[i] if i < len(slots) else {'icon': '', 'key': '', 'verb': '', 'texture': ''}
             n = i + 1
             self.setProperty('hint%d_icon' % n, slot['icon'])
             self.setProperty('hint%d_key' % n, slot['key'])
             self.setProperty('hint%d_verb' % n, slot['verb'])
+            self.setProperty('hint%d_texture' % n, slot.get('texture', ''))
 
     def _on_generation_change(self, generation):
         with self._lock:

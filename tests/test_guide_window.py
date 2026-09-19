@@ -2603,7 +2603,9 @@ def test_hint_bar_slot_properties_after_init(tmp_path):
         assert window.getProperty('hint1_icon') == 'OK'
         assert window.getProperty('hint1_key') == ''
         assert window.getProperty('hint1_verb') == addon.getLocalizedString(guide.STR_HINT_WATCH)
+        assert window.getProperty('hint1_texture') == 'hint_ok.png'
         assert window.getProperty('hint5_key') == addon.getLocalizedString(guide.STR_HINT_LONG_PRESS)
+        assert window.getProperty('hint5_texture') == 'hint_star.png'
     finally:
         conn.close()
 
@@ -2617,6 +2619,7 @@ def test_hint_bar_slot4_cleared_in_grid_zone(tmp_path):
         window._handle_right()
         assert window.getProperty('hint4_key') == ''
         assert window.getProperty('hint4_icon') == ''
+        assert window.getProperty('hint4_texture') == ''
     finally:
         conn.close()
 
@@ -2625,8 +2628,19 @@ def test_skin_hint_slot_properties_appear_in_skin():
     with open(_SKIN_XML) as f:
         xml_text = f.read()
     for n in range(1, 6):
-        for suffix in ('icon', 'key', 'verb'):
+        for suffix in ('texture', 'key', 'verb'):
             assert 'Window.Property(hint%d_%s)' % (n, suffix) in xml_text
+
+
+def test_skin_hint_textures_exist():
+    media_dir = os.path.join(
+        os.path.dirname(_SKIN_XML), '..', 'media',
+    )
+    for name in (
+        'hint_ok.png', 'hint_left.png', 'hint_right.png',
+        'hint_lr.png', 'hint_info.png', 'hint_star.png',
+    ):
+        assert os.path.isfile(os.path.join(media_dir, name)), name
 
 
 def test_info_on_column_row_opens_dialog_for_current_programme(tmp_path):
