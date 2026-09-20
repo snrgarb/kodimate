@@ -1002,12 +1002,12 @@
                 <ondown>520</ondown>
                 <onback>9000</onback>
                 <scrolltime>0</scrolltime>
-                <itemlayout width="385" height="60">
+                <itemlayout width="385" height="48">
                     <control type="image">
                         <posx>0</posx>
                         <posy>0</posy>
                         <width>4</width>
-                        <height>60</height>
+                        <height>48</height>
                         <texture>white.png</texture>
                         <colordiffuse>ff3a6ea5</colordiffuse>
                         <visible>String.IsEqual(ListItem.Property(active),1)</visible>
@@ -1016,7 +1016,7 @@
                         <posx>40</posx>
                         <posy>0</posy>
                         <width>335</width>
-                        <height>60</height>
+                        <height>48</height>
                         <label>$INFO[ListItem.Label]</label>
                         <font>font10</font>
                         <textcolor>ffcccccc</textcolor>
@@ -1028,7 +1028,7 @@
                         <posx>12</posx>
                         <posy>0</posy>
                         <width>363</width>
-                        <height>60</height>
+                        <height>48</height>
                         <label>$INFO[ListItem.Label]</label>
                         <font>font10</font>
                         <textcolor>ffffffff</textcolor>
@@ -1040,7 +1040,7 @@
                         <posx>345</posx>
                         <posy>0</posy>
                         <width>30</width>
-                        <height>60</height>
+                        <height>48</height>
                         <label>+</label>
                         <font>font10</font>
                         <textcolor>ffffffff</textcolor>
@@ -1052,7 +1052,7 @@
                         <posx>345</posx>
                         <posy>0</posy>
                         <width>30</width>
-                        <height>60</height>
+                        <height>48</height>
                         <label>-</label>
                         <font>font10</font>
                         <textcolor>ffffffff</textcolor>
@@ -1061,12 +1061,12 @@
                         <visible>String.IsEqual(ListItem.Property(kind),provider) + String.IsEqual(ListItem.Property(collapsed),0)</visible>
                     </control>
                 </itemlayout>
-                <focusedlayout width="385" height="60">
+                <focusedlayout width="385" height="48">
                     <control type="image">
                         <posx>0</posx>
                         <posy>0</posy>
                         <width>385</width>
-                        <height>60</height>
+                        <height>48</height>
                         <texture>white.png</texture>
                         <colordiffuse>ff2a2a2a</colordiffuse>
                         <visible>!Control.HasFocus(520)</visible>
@@ -1075,7 +1075,7 @@
                         <posx>0</posx>
                         <posy>0</posy>
                         <width>385</width>
-                        <height>60</height>
+                        <height>48</height>
                         <texture>white.png</texture>
                         <colordiffuse>ff3a6ea5</colordiffuse>
                         <visible>Control.HasFocus(520)</visible>
@@ -1084,7 +1084,7 @@
                         <posx>40</posx>
                         <posy>0</posy>
                         <width>335</width>
-                        <height>60</height>
+                        <height>48</height>
                         <label>$INFO[ListItem.Label]</label>
                         <font>font10</font>
                         <textcolor>ffffffff</textcolor>
@@ -1096,7 +1096,7 @@
                         <posx>12</posx>
                         <posy>0</posy>
                         <width>363</width>
-                        <height>60</height>
+                        <height>48</height>
                         <label>$INFO[ListItem.Label]</label>
                         <font>font10</font>
                         <textcolor>ffffffff</textcolor>
@@ -1108,7 +1108,7 @@
                         <posx>345</posx>
                         <posy>0</posy>
                         <width>30</width>
-                        <height>60</height>
+                        <height>48</height>
                         <label>+</label>
                         <font>font10</font>
                         <textcolor>ffffffff</textcolor>
@@ -1120,7 +1120,7 @@
                         <posx>345</posx>
                         <posy>0</posy>
                         <width>30</width>
-                        <height>60</height>
+                        <height>48</height>
                         <label>-</label>
                         <font>font10</font>
                         <textcolor>ffffffff</textcolor>
