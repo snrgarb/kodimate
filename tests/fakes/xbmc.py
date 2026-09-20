@@ -9,6 +9,15 @@ executebuiltin_calls = []
 play_calls = []
 _info_labels = {}
 _jsonrpc_results = {}
+_conditions = {}
+
+
+def set_condition(name, value):
+    _conditions[name] = value
+
+
+def getCondVisibility(condition):
+    return bool(_conditions.get(condition, False))
 
 
 def log(msg, level=LOGINFO):

@@ -979,6 +979,20 @@ class PlaybackWindow(xbmcgui.WindowXML):
                         % self.snapshot['provider_name'])
         self._rebuild_at_target(target_epoch, unavailable, direction)
 
+    def _player_paused(self):
+        try:
+            return bool(xbmc.getCondVisibility('Player.Paused'))
+        except Exception:
+            return None
+
+    def _set_player_paused(self, desired):
+        if self._player_paused() == desired:
+            return
+        try:
+            self.player.pause()
+        except Exception:
+            pass
+
     def _toggle_pause(self):
         with self._lock:
             if not self._playing or self._list_open:
@@ -996,10 +1010,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
                 self._behind_at_pause = self._behind_live_seconds()
                 self._paused = True
                 self._paused_at = self.now_fn()
-                try:
-                    self.player.pause()
-                except Exception:
-                    pass
+                self._set_player_paused(True)
                 self.setProperty('paused', '1')
                 self._update_behind_live()
                 self._show_bar(arm_hide=False)
@@ -1017,10 +1028,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
             if native_resume:
                 if self.catchup is None and total_seconds <= 0:
                     self._live_lag_seconds = behind_now
-                try:
-                    self.player.pause()
-                except Exception:
-                    pass
+                self._set_player_paused(False)
                 self._update_behind_live()
                 self._show_bar(arm_hide=True)
                 return

@@ -17,8 +17,10 @@ import xbmcgui
 @pytest.fixture(autouse=True)
 def _clear_db_generation():
     xbmcgui._window_properties.pop(10000, None)
+    xbmc._conditions.clear()
     yield
     xbmcgui._window_properties.pop(10000, None)
+    xbmc._conditions.clear()
 
 
 def _bump_generation(value):
@@ -61,6 +63,7 @@ class FakePlayer(object):
 
     def pause(self):
         self.pause_calls += 1
+        xbmc.set_condition('Player.Paused', not xbmc.getCondVisibility('Player.Paused'))
 
     def attach(self, session):
         self.attached = session
@@ -2516,6 +2519,61 @@ def test_pause_grace_within_30s_resumes_native_and_shows_behind_live(tmp_path):
     assert len(window.player.plays) == plays_before
     assert window.getProperty('behind_live') == '1'
     assert window.getProperty('behind_text') == '-00:20'
+
+
+def test_pause_action_skips_extra_toggle_when_kodi_already_paused(tmp_path):
+    # Real Kodi 21: ACTION_PAUSE/PLAYPAUSE reach our onAction *and* are then
+    # handled by CApplication::OnAction, which pauses the player itself
+    # before our callback runs. Our own player.pause() must not also fire,
+    # or the two toggles cancel out and playback never actually pauses.
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    xbmc.set_condition('Player.Paused', True)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+
+    assert window.getProperty('paused') == '1'
+    assert window.player.pause_calls == 0
+
+
+def test_resume_action_skips_extra_toggle_when_kodi_already_resumed(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    now = FakeNow(datetime(2026, 1, 1, 12, 30))
+    window = _window(conn, snapshot, now_fn=now)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0
+    xbmc.set_condition('Player.Paused', True)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    assert window.player.pause_calls == 0
+    plays_before = len(window.player.plays)
+
+    xbmc.set_condition('Player.Paused', False)
+    now.value = now.value + timedelta(seconds=5)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
+
+    assert window.getProperty('paused') == '0'
+    assert window.player.pause_calls == 0
+    assert len(window.player.plays) == plays_before
+
+
+def test_click_playpause_still_toggles_player(tmp_path):
+    # onClick has no app-level action involved, so player.pause() must
+    # still fire on every click regardless of the (default-false) condition.
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+
+    window.onClick(BTN_PLAYPAUSE_ID)
+
+    assert window.getProperty('paused') == '1'
+    assert window.player.pause_calls == 1
 
 
 def test_pause_grace_second_cycle_does_not_reuse_stale_lag(tmp_path):
