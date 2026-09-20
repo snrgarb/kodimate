@@ -57,7 +57,7 @@
             <label>$ADDON[script.kodimate 32119]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font12</font>
+            <font>font10</font>
             <textcolor>ffcccccc</textcolor>
             <visible>!Control.HasFocus(601)</visible>
         </control>
@@ -69,7 +69,7 @@
             <label>$ADDON[script.kodimate 32119]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font12</font>
+            <font>font10</font>
             <textcolor>ffffffff</textcolor>
             <visible>Control.HasFocus(601)</visible>
         </control>
@@ -113,7 +113,7 @@
             <label>$ADDON[script.kodimate 32110]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font12</font>
+            <font>font10</font>
             <textcolor>ffcccccc</textcolor>
             <visible>!Control.HasFocus(602)</visible>
         </control>
@@ -125,7 +125,7 @@
             <label>$ADDON[script.kodimate 32110]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font12</font>
+            <font>font10</font>
             <textcolor>ffffffff</textcolor>
             <visible>Control.HasFocus(602)</visible>
         </control>
@@ -169,7 +169,7 @@
             <label>$ADDON[script.kodimate 32116]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font12</font>
+            <font>font10</font>
             <textcolor>ffcccccc</textcolor>
             <visible>!Control.HasFocus(603)</visible>
         </control>
@@ -181,7 +181,7 @@
             <label>$ADDON[script.kodimate 32116]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font12</font>
+            <font>font10</font>
             <textcolor>ffffffff</textcolor>
             <visible>Control.HasFocus(603)</visible>
         </control>
@@ -438,7 +438,7 @@
                     <posy>44</posy>
                     <width>1406</width>
                     <height>34</height>
-                    <font>font12</font>
+                    <font>font10</font>
                     <textcolor>ff8a8a8a</textcolor>
                     <label>$INFO[ListItem.Property(description)]</label>
                     <visible>!String.IsEqual(ListItem.Property(header),1) + !String.IsEqual(ListItem.Property(playable),0)</visible>
@@ -448,7 +448,7 @@
                     <posy>44</posy>
                     <width>1406</width>
                     <height>34</height>
-                    <font>font12</font>
+                    <font>font10</font>
                     <textcolor>ff606060</textcolor>
                     <label>$INFO[ListItem.Property(description)]</label>
                     <visible>!String.IsEqual(ListItem.Property(header),1) + String.IsEqual(ListItem.Property(playable),0)</visible>
@@ -545,7 +545,7 @@
                     <posy>44</posy>
                     <width>1406</width>
                     <height>34</height>
-                    <font>font12</font>
+                    <font>font10</font>
                     <textcolor>ff8a8a8a</textcolor>
                     <label>$INFO[ListItem.Property(description)]</label>
                     <visible>!String.IsEqual(ListItem.Property(header),1) + !String.IsEqual(ListItem.Property(playable),0)</visible>
@@ -555,7 +555,7 @@
                     <posy>44</posy>
                     <width>1406</width>
                     <height>34</height>
-                    <font>font12</font>
+                    <font>font10</font>
                     <textcolor>ff606060</textcolor>
                     <label>$INFO[ListItem.Property(description)]</label>
                     <visible>!String.IsEqual(ListItem.Property(header),1) + String.IsEqual(ListItem.Property(playable),0)</visible>

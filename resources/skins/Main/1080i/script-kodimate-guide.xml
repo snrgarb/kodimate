@@ -58,7 +58,7 @@
                 <label>$ADDON[script.kodimate 32119]</label>
                 <align>center</align>
                 <aligny>center</aligny>
-                <font>font12</font>
+                <font>font10</font>
                 <textcolor>ffcccccc</textcolor>
                 <visible>!Control.HasFocus(601)</visible>
             </control>
@@ -70,7 +70,7 @@
                 <label>$ADDON[script.kodimate 32119]</label>
                 <align>center</align>
                 <aligny>center</aligny>
-                <font>font12</font>
+                <font>font10</font>
                 <textcolor>ffffffff</textcolor>
                 <visible>Control.HasFocus(601)</visible>
             </control>
@@ -114,7 +114,7 @@
                 <label>$ADDON[script.kodimate 32110]</label>
                 <align>center</align>
                 <aligny>center</aligny>
-                <font>font12</font>
+                <font>font10</font>
                 <textcolor>ffcccccc</textcolor>
                 <visible>!Control.HasFocus(602)</visible>
             </control>
@@ -126,7 +126,7 @@
                 <label>$ADDON[script.kodimate 32110]</label>
                 <align>center</align>
                 <aligny>center</aligny>
-                <font>font12</font>
+                <font>font10</font>
                 <textcolor>ffffffff</textcolor>
                 <visible>Control.HasFocus(602)</visible>
             </control>
@@ -170,7 +170,7 @@
                 <label>$ADDON[script.kodimate 32116]</label>
                 <align>center</align>
                 <aligny>center</aligny>
-                <font>font12</font>
+                <font>font10</font>
                 <textcolor>ffcccccc</textcolor>
                 <visible>!Control.HasFocus(603)</visible>
             </control>
@@ -182,7 +182,7 @@
                 <label>$ADDON[script.kodimate 32116]</label>
                 <align>center</align>
                 <aligny>center</aligny>
-                <font>font12</font>
+                <font>font10</font>
                 <textcolor>ffffffff</textcolor>
                 <visible>Control.HasFocus(603)</visible>
             </control>
@@ -242,7 +242,7 @@
                     <width min="40" max="520">auto</width>
                     <height>50</height>
                     <label>$INFO[Window.Property(strip_channel_number)] $INFO[Window.Property(strip_channel_name)]</label>
-                    <font>font12</font>
+                    <font>font10</font>
                     <textcolor>ffaaaaaa</textcolor>
                     <align>left</align>
                     <aligny>center</aligny>
@@ -265,7 +265,7 @@
                         <width>90</width>
                         <height>36</height>
                         <label>$ADDON[script.kodimate 32126]</label>
-                        <font>font12</font>
+                        <font>font10</font>
                         <align>center</align>
                         <aligny>center</aligny>
                         <textcolor>ffffffff</textcolor>
@@ -297,7 +297,7 @@
                         <width>70</width>
                         <height>36</height>
                         <label>$ADDON[script.kodimate 32127]</label>
-                        <font>font12</font>
+                        <font>font10</font>
                         <align>center</align>
                         <aligny>center</aligny>
                         <textcolor>ffffffff</textcolor>
@@ -321,7 +321,7 @@
                         <width>130</width>
                         <height>36</height>
                         <label>$ADDON[script.kodimate 32128]</label>
-                        <font>font12</font>
+                        <font>font10</font>
                         <align>center</align>
                         <aligny>center</aligny>
                         <textcolor>ffffffff</textcolor>
@@ -336,7 +336,7 @@
                 <width>975</width>
                 <height>40</height>
                 <label>$INFO[Window.Property(strip_title)]</label>
-                <font>font13</font>
+                <font>font12</font>
                 <textcolor>ffffffff</textcolor>
                 <align>left</align>
                 <aligny>center</aligny>
@@ -350,7 +350,7 @@
                 <width>280</width>
                 <height>30</height>
                 <label>$INFO[Window.Property(strip_times)]</label>
-                <font>font12</font>
+                <font>font10</font>
                 <textcolor>ffaaaaaa</textcolor>
                 <align>left</align>
                 <aligny>center</aligny>
@@ -379,7 +379,7 @@
                 <width>350</width>
                 <height>30</height>
                 <label>$INFO[Window.Property(strip_remaining)]</label>
-                <font>font12</font>
+                <font>font10</font>
                 <textcolor>ff808080</textcolor>
                 <align>left</align>
                 <aligny>center</aligny>
@@ -393,7 +393,7 @@
                 <width>975</width>
                 <height>56</height>
                 <label>$INFO[Window.Property(strip_description)]</label>
-                <font>font12</font>
+                <font>font10</font>
                 <textcolor>ff8a8a8a</textcolor>
                 <autoscroll>false</autoscroll>
             </control>
@@ -405,7 +405,7 @@
                 <width>500</width>
                 <height>30</height>
                 <label>$INFO[System.Time]</label>
-                <font>font13</font>
+                <font>font12</font>
                 <align>right</align>
                 <textcolor>ffffffff</textcolor>
             </control>
@@ -415,7 +415,7 @@
                 <width>500</width>
                 <height>26</height>
                 <label>$INFO[System.Date(ddd d mmm yyyy)]</label>
-                <font>font12</font>
+                <font>font10</font>
                 <align>right</align>
                 <textcolor>ffaaaaaa</textcolor>
             </control>
@@ -429,7 +429,7 @@
             <label>$INFO[Window.Property(strip_date)]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font12</font>
+            <font>font10</font>
             <textcolor>ff808080</textcolor>
             <wrapmultiline>true</wrapmultiline>
         </control>
@@ -452,7 +452,7 @@
             <label>$INFO[Window.Property(guide_header0)]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font13</font>
+            <font>font12</font>
             <textcolor>ffffffff</textcolor>
             <visible>String.IsEqual(Window.Property(guide_header_now),0)</visible>
         </control>
@@ -475,7 +475,7 @@
             <label>$INFO[Window.Property(guide_header1)]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font13</font>
+            <font>font12</font>
             <textcolor>ffffffff</textcolor>
             <visible>String.IsEqual(Window.Property(guide_header_now),1)</visible>
         </control>
@@ -498,7 +498,7 @@
             <label>$INFO[Window.Property(guide_header2)]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font13</font>
+            <font>font12</font>
             <textcolor>ffffffff</textcolor>
             <visible>String.IsEqual(Window.Property(guide_header_now),2)</visible>
         </control>
@@ -521,7 +521,7 @@
             <label>$INFO[Window.Property(guide_header3)]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font13</font>
+            <font>font12</font>
             <textcolor>ffffffff</textcolor>
             <visible>String.IsEqual(Window.Property(guide_header_now),3)</visible>
         </control>
@@ -544,7 +544,7 @@
             <label>$INFO[Window.Property(guide_header4)]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font13</font>
+            <font>font12</font>
             <textcolor>ffffffff</textcolor>
             <visible>String.IsEqual(Window.Property(guide_header_now),4)</visible>
         </control>
@@ -567,7 +567,7 @@
             <label>$INFO[Window.Property(guide_header5)]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font13</font>
+            <font>font12</font>
             <textcolor>ffffffff</textcolor>
             <visible>String.IsEqual(Window.Property(guide_header_now),5)</visible>
         </control>
@@ -589,7 +589,7 @@
             <label>$INFO[Window.Property(guide_now_label)]</label>
             <align>center</align>
             <aligny>center</aligny>
-            <font>font12</font>
+            <font>font10</font>
             <textcolor>ffffffff</textcolor>
             <visible>!String.IsEmpty(Window.Property(guide_now_label))</visible>
         </control>
@@ -623,7 +623,7 @@
                     <width>76</width>
                     <height>66</height>
                     <label>$INFO[ListItem.Property(number)]</label>
-                    <font>font12</font>
+                    <font>font10</font>
                     <textcolor>ffcccccc</textcolor>
                     <align>left</align>
                     <aligny>center</aligny>
@@ -683,7 +683,7 @@
                     <width>76</width>
                     <height>66</height>
                     <label>$INFO[ListItem.Property(number)]</label>
-                    <font>font12</font>
+                    <font>font10</font>
                     <textcolor>ffffffff</textcolor>
                     <align>left</align>
                     <aligny>center</aligny>
@@ -775,7 +775,7 @@
                 <height>80</height>
                 <visible>!String.IsEmpty(Window.Property(hint1_texture))</visible>
                 <label>[B]$INFO[Window.Property(hint1_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint1_verb)][/COLOR]</label>
-                <font>font12</font>
+                <font>font10</font>
                 <align>left</align>
                 <aligny>center</aligny>
                 <textcolor>ffffffff</textcolor>
@@ -820,7 +820,7 @@
                 <height>80</height>
                 <visible>!String.IsEmpty(Window.Property(hint2_texture))</visible>
                 <label>[B]$INFO[Window.Property(hint2_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint2_verb)][/COLOR]</label>
-                <font>font12</font>
+                <font>font10</font>
                 <align>left</align>
                 <aligny>center</aligny>
                 <textcolor>ffffffff</textcolor>
@@ -865,7 +865,7 @@
                 <height>80</height>
                 <visible>!String.IsEmpty(Window.Property(hint3_texture))</visible>
                 <label>[B]$INFO[Window.Property(hint3_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint3_verb)][/COLOR]</label>
-                <font>font12</font>
+                <font>font10</font>
                 <align>left</align>
                 <aligny>center</aligny>
                 <textcolor>ffffffff</textcolor>
@@ -910,7 +910,7 @@
                 <height>80</height>
                 <visible>!String.IsEmpty(Window.Property(hint4_texture))</visible>
                 <label>[B]$INFO[Window.Property(hint4_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint4_verb)][/COLOR]</label>
-                <font>font12</font>
+                <font>font10</font>
                 <align>left</align>
                 <aligny>center</aligny>
                 <textcolor>ffffffff</textcolor>
@@ -955,7 +955,7 @@
                 <height>80</height>
                 <visible>!String.IsEmpty(Window.Property(hint5_texture))</visible>
                 <label>[B]$INFO[Window.Property(hint5_key)][/B] [COLOR ffaaaaaa]$INFO[Window.Property(hint5_verb)][/COLOR]</label>
-                <font>font12</font>
+                <font>font10</font>
                 <align>left</align>
                 <aligny>center</aligny>
                 <textcolor>ffffffff</textcolor>
