@@ -2496,6 +2496,167 @@ def test_behind_live_property_zero_when_at_live_edge(tmp_path):
     assert window.getProperty('behind_text') == ''
 
 
+def test_pause_grace_within_30s_resumes_native_and_shows_behind_live(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    now = FakeNow(datetime(2026, 1, 1, 12, 30))
+    window = _window(conn, snapshot, now_fn=now)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0  # live HTTP TS: getTotalTime() reports 0
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    now.value = now.value + timedelta(seconds=20)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
+
+    assert window.getProperty('paused') == '0'
+    assert window.player.pause_calls == 2
+    assert window.catchup is None
+    assert len(window.player.plays) == plays_before
+    assert window.getProperty('behind_live') == '1'
+    assert window.getProperty('behind_text') == '-00:20'
+
+
+def test_pause_grace_second_cycle_does_not_reuse_stale_lag(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    now = FakeNow(datetime(2026, 1, 1, 12, 30))
+    window = _window(conn, snapshot, now_fn=now)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0  # live HTTP TS: getTotalTime() reports 0
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    now.value = now.value + timedelta(seconds=10)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
+    now.value = now.value + timedelta(seconds=5)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    assert window.getProperty('behind_text') == '-00:10'
+    now.value = now.value + timedelta(seconds=10)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
+
+    assert window.getProperty('paused') == '0'
+    assert window.getProperty('behind_live') == '1'
+    assert window.getProperty('behind_text') == '-00:20'
+
+
+def test_pause_grace_updates_behind_live_while_still_paused(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    now = FakeNow(datetime(2026, 1, 1, 12, 30))
+    window = _window(conn, snapshot, now_fn=now)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    now.value = now.value + timedelta(seconds=20)
+    window._update_behind_live()
+
+    assert window.getProperty('behind_live') == '1'
+    assert window.getProperty('behind_text') == '-00:20'
+
+
+def test_pause_beyond_grace_starts_catchup_session(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = FakeNow(datetime(2026, 1, 1, 12, 30))  # Show3 12:00-13:00 airing
+    window = _window(conn, snapshot, now_fn=now)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    now.value = now.value + timedelta(seconds=45)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
+
+    assert window.getProperty('paused') == '0'
+    assert window.catchup is not None
+    assert window.catchup['title'] == 'Show3'
+    assert len(window.player.plays) == plays_before + 1
+
+
+def test_back_to_live_after_grace_resume_clears_behind_live(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    now = FakeNow(datetime(2026, 1, 1, 12, 30))
+    window = _window(conn, snapshot, now_fn=now)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+    now.value = now.value + timedelta(seconds=20)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
+
+    window.onClick(BTN_LIVE_ID)
+    window.on_stopped()  # old stream's stop callback, arriving after abort()
+
+    assert len(window.player.plays) == plays_before + 1
+    window._update_behind_live()
+    assert window.getProperty('behind_live') == '0'
+
+
+def test_programme_live_true_for_start_over_while_programme_still_airing(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)  # Show3 12:00-13:00 airing
+    start_dt = datetime(2026, 1, 1, 12, 0)
+    end_dt = datetime(2026, 1, 1, 13, 0)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
+        'title': 'Show3', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+    }
+    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
+    window.onInit()
+    window.session.on_av_started()
+
+    assert window.getProperty('programme_live') == '1'
+
+
+def test_programme_live_false_for_genuine_catchup_replay(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    start_dt = datetime(2026, 1, 1, 11, 0)
+    end_dt = datetime(2026, 1, 1, 12, 0)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
+        'title': 'Show2', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+    }
+    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
+    window.onInit()
+    window.session.on_av_started()
+
+    assert window.getProperty('programme_live') == '0'
+
+
+def test_programme_live_flips_to_false_once_programme_ends(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = FakeNow(datetime(2026, 1, 1, 12, 30))  # Show3 12:00-13:00 airing
+    start_dt = datetime(2026, 1, 1, 12, 0)
+    end_dt = datetime(2026, 1, 1, 13, 0)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now.value),
+        'title': 'Show3', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+    }
+    window = _window(conn, snapshot, now_fn=now, catchup=catchup_dict)
+    window.onInit()
+    window.session.on_av_started()
+    assert window.getProperty('programme_live') == '1'
+
+    now.value = now.value + timedelta(hours=1)
+    window._tick()
+
+    assert window.getProperty('programme_live') == '0'
+
+
 def test_button_row_left_right_moves_focus(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)

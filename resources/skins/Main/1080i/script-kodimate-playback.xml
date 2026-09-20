@@ -167,7 +167,7 @@
                 <control type="group">
                     <width>130</width>
                     <height>32</height>
-                    <visible>String.IsEqual(Window.Property(catchup),1)</visible>
+                    <visible>String.IsEqual(Window.Property(catchup),1) + !String.IsEqual(Window.Property(programme_live),1)</visible>
                     <control type="image">
                         <posy>4</posy>
                         <width>130</width>
@@ -189,7 +189,7 @@
                 <control type="group">
                     <width>130</width>
                     <height>32</height>
-                    <visible>!String.IsEqual(Window.Property(catchup),1) + !String.IsEqual(Window.Property(behind_live),1)</visible>
+                    <visible>[!String.IsEqual(Window.Property(catchup),1) + !String.IsEqual(Window.Property(behind_live),1)] | [String.IsEqual(Window.Property(catchup),1) + String.IsEqual(Window.Property(programme_live),1)]</visible>
                     <control type="image">
                         <posy>4</posy>
                         <width>130</width>

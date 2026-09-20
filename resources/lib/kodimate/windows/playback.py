@@ -64,6 +64,7 @@ _BUTTON_ROW_IDS = (BTN_REWIND_ID, BTN_PLAYPAUSE_ID, BTN_FASTFORWARD_ID, BTN_LIVE
 _DEFAULT_OSD_HIDE_SECONDS = 3
 _DEFAULT_NUMBER_COMMIT_DELAY = 1.5
 _BEHIND_LIVE_TOLERANCE_SECONDS = 1
+_PAUSE_GRACE_SECONDS = 30
 
 # Wide enough to step (Left/Right) back through a Catch-up window.
 _PROGRAMME_WINDOW_BEFORE = timedelta(days=7)
@@ -137,6 +138,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
         self._seek_timer = None
         self._seek_stepper = None
         self._screensaver_inhibited = False
+        self._live_lag_seconds = 0
         if self.osd_position is None:
             self.osd_position = self._addon_setting_string('osd_position', 'top')
         if self.osd_position != 'bottom':
@@ -153,6 +155,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
         self.setProperty('list_visible', '0')
         self.setProperty('digits', '')
         self.setProperty('catchup', '1' if self.catchup else '0')
+        self.setProperty('programme_live', '0')
         self.setProperty('seekable', '0')
         self.setProperty('upnext', '0')
         self.setProperty('upnext_title', '')
@@ -474,6 +477,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
     def _reset_transient_playback_state(self):
         self._paused = False
         self._paused_at = None
+        self._live_lag_seconds = 0
         self.setProperty('paused', '0')
         self._cancel_seek_timer()
         if self._seek_stepper is not None:
@@ -530,6 +534,10 @@ class PlaybackWindow(xbmcgui.WindowXML):
         self._update_behind_live()
 
     def _apply_catchup_bar(self):
+        self.setProperty(
+            'programme_live',
+            '1' if _epoch(self.now_fn()) < self.catchup['end'] else '0',
+        )
         self.setProperty('now_title', self.catchup.get('title') or '')
         self.setProperty('now_times', osd.format_position(
             self._catchup_elapsed_seconds(), self._catchup_duration_seconds(),
@@ -799,9 +807,11 @@ class PlaybackWindow(xbmcgui.WindowXML):
             offset_seconds = self.session.catchup_offset_seconds if self.session is not None else 0
             position = self.catchup['start'] + offset_seconds + self._player_time_seconds()
             return max(0, _epoch(self.now_fn()) - position)
+        if self._paused:
+            return self._behind_at_pause + (_epoch(self.now_fn()) - _epoch(self._paused_at))
         total = self._player_total_seconds()
         if total <= 0:
-            return 0
+            return self._live_lag_seconds
         return max(0, total - self._player_time_seconds())
 
     def _update_behind_live(self):
@@ -809,6 +819,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
             self.setProperty('behind_live', '1')
             self.setProperty('behind_text', '')
             return
+        self.setProperty('programme_live', '0')
         behind = self._behind_live_seconds()
         if behind > _BEHIND_LIVE_TOLERANCE_SECONDS:
             self.setProperty('behind_live', '1')
@@ -982,14 +993,15 @@ class PlaybackWindow(xbmcgui.WindowXML):
                 self._cancel_seek_timer()
                 self._seek_stepper.reset()
                 self.setProperty('seek_step', '')
+                self._behind_at_pause = self._behind_live_seconds()
                 self._paused = True
                 self._paused_at = self.now_fn()
-                self._behind_at_pause = self._behind_live_seconds()
                 try:
                     self.player.pause()
                 except Exception:
                     pass
                 self.setProperty('paused', '1')
+                self._update_behind_live()
                 self._show_bar(arm_hide=False)
                 return
             behind_now = self._behind_at_pause + (
@@ -999,7 +1011,12 @@ class PlaybackWindow(xbmcgui.WindowXML):
             self._paused = False
             self._paused_at = None
             self.setProperty('paused', '0')
-            if self.catchup is not None or (total_seconds > 0 and behind_now <= total_seconds):
+            native_resume = self.catchup is not None or behind_now <= _PAUSE_GRACE_SECONDS or (
+                total_seconds > 0 and behind_now <= total_seconds
+            )
+            if native_resume:
+                if self.catchup is None and total_seconds <= 0:
+                    self._live_lag_seconds = behind_now
                 try:
                     self.player.pause()
                 except Exception:
