@@ -10,6 +10,7 @@ play_calls = []
 _info_labels = {}
 _jsonrpc_results = {}
 _conditions = {}
+_default_conditions = {'Player.CanPause': True}
 
 
 def set_condition(name, value):
@@ -17,7 +18,9 @@ def set_condition(name, value):
 
 
 def getCondVisibility(condition):
-    return bool(_conditions.get(condition, False))
+    if condition in _conditions:
+        return bool(_conditions[condition])
+    return bool(_default_conditions.get(condition, False))
 
 
 def log(msg, level=LOGINFO):

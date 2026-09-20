@@ -102,8 +102,8 @@ def substitute_template(template, start, end, now, catchup_id=None, local_offset
             diff = end - start
             if fmt is not None:
                 n = int(fmt)
-                divided = diff // n
-                return str(divided if divided >= 0 else 0)
+                divided = max(1, diff // n) if diff > 0 else 0
+                return str(divided)
             return str(diff)
 
         if name == 'offset':

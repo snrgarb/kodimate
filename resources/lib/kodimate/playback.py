@@ -420,7 +420,7 @@ class PlaybackSession(object):
                 start, offset,
                 {'catchup_correction_hours': snapshot.get('provider_catchup_correction_hours')},
             )
-            duration_seconds = max(0, min(end, now) - start)
+            duration_seconds = max(0, end - start)
             minutes = max(1, duration_seconds // 60)
             ext = urls.live_form(snapshot, snapshot.get('allowed_output_formats'))
             url = urls.xtream_catchup_url(
@@ -434,7 +434,7 @@ class PlaybackSession(object):
                 {'catchup_correction_hours': snapshot.get('provider_catchup_correction_hours')},
             )
             url = urls.m3u_catchup_url(
-                snapshot, corrected_start, min(end, now), now, self.catchup.get('catchup_id'),
+                snapshot, corrected_start, end, now, self.catchup.get('catchup_id'),
                 local_offset_seconds=offset,
             )
         if url is None:

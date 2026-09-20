@@ -90,6 +90,9 @@ def test_substitute_lutc_now_timestamp():
 def test_substitute_duration_bare_and_n():
     assert urls.substitute_template('{duration}', 100, 220, 300) == '120'
     assert urls.substitute_template('{duration:60}', 100, 220, 300) == '2'
+    # A positive range shorter than the divisor must still round up to 1,
+    # never floor to 0 (a 0-minute duration is rejected by some providers).
+    assert urls.substitute_template('{duration:60}', 100, 143, 300) == '1'
 
 
 def test_substitute_offset_bare_and_n():

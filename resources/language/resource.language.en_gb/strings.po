@@ -583,3 +583,7 @@ msgstr ""
 msgctxt "#32142"
 msgid "Select"
 msgstr ""
+
+msgctxt "#32143"
+msgid "Paused"
+msgstr ""
