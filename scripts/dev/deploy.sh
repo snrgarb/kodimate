@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VERSION="$(sed -n 's/^[[:space:]]*version="\([^"]*\)".*/\1/p' "$REPO_ROOT/addon.xml" | head -1)"
-DIST_DIR="$REPO_ROOT/dist"
+DIST_DIR="${KODIMATE_DIST_DIR:-$REPO_ROOT/dist}"
 ZIP_PATH="$DIST_DIR/script.kodimate-${VERSION}.zip"
 ADDONS_DIR="$HOME/Library/Application Support/Kodi/addons"
 TARGET="$ADDONS_DIR/script.kodimate"
@@ -15,14 +15,17 @@ trap 'rm -rf "$STAGE"' EXIT
 STAGE_ADDON="$STAGE/script.kodimate"
 mkdir -p "$STAGE_ADDON"
 
-rsync -a \
+rsync -a --prune-empty-dirs \
     --exclude '.git' \
     --exclude '.claude' \
+    --exclude '.github' \
     --exclude 'docs' \
     --exclude 'scripts' \
     --exclude 'dist' \
     --exclude 'tests' \
     --exclude '__pycache__' \
+    --exclude '*.pyc' \
+    --exclude '.pytest_cache' \
     --exclude '.gitignore' \
     --exclude 'CLAUDE.md' \
     --exclude 'CONTEXT.md' \
@@ -30,6 +33,8 @@ rsync -a \
     --exclude '.venv' \
     --exclude 'pytest.ini' \
     --exclude 'requirements-dev.txt' \
+    --exclude '.DS_Store' \
+    --exclude 'site' \
     "$REPO_ROOT/" "$STAGE_ADDON/"
 
 rm -f "$ZIP_PATH"

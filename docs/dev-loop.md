@@ -37,13 +37,38 @@
 - `reload.sh` — `UpdateLocalAddons()` -> enable addon -> `Addons.ExecuteAddon`.
   Use after editing `default.py`/`service.py` via the symlink.
 - `deploy.sh [--install]` — builds `dist/script.kodimate-<version>.zip` (top
-  folder `script.kodimate/`, excludes `.git`, `.claude`, `docs`, `scripts`,
-  `dist`, `tests`, `__pycache__`, `.gitignore`, `CLAUDE.md`, `CONTEXT.md`,
-  `README.md`). With `--install`, replaces
+  folder `script.kodimate/`, excludes `.git`, `.claude`, `.github`, `docs`,
+  `scripts`, `dist`, `tests`, `__pycache__`, `*.pyc`, `.pytest_cache`,
+  `.gitignore`, `CLAUDE.md`, `CONTEXT.md`, `README.md`, `.DS_Store`, `site`).
+  Set `KODIMATE_DIST_DIR` to build into a different directory (defaults to
+  `dist/` at the repo root). With `--install`, replaces
   the addons-dir entry with the zip contents and reloads — refuses if that
   entry is currently a symlink (use `link.sh` for symlink-based dev instead).
 - `log.sh [grep-pattern]` — tails `kodi.log` (`-F`, last 200 lines), optional
   arg is passed to `grep -E` as a filter.
+
+## Releasing
+
+1. Bump `version` in `addon.xml` (semver).
+2. Commit the bump, then `git tag v<version> && git push origin main v<version>`.
+3. The `.github/workflows/release.yml` workflow runs the test suite, builds
+   `script.kodimate-<version>.zip` with `deploy.sh`, and builds
+   `repository.kodimate-<version>.zip` plus the addons repository site with
+   `scripts/release/build_site.py`. It attaches both zips to a GitHub
+   Release for the tag and publishes the site to GitHub Pages.
+
+One-time setup: repo Settings -> Pages -> Source "GitHub Actions" (a public
+repo, or a paid GitHub plan for a private one, is required for Pages).
+
+To install as a Kodi user: open `https://snrgarb.github.io/kodimate/` and
+download the repository zip linked there (`index.html` links to the current
+`repository.kodimate-<version>.zip`), "Install from zip" in Kodi, then
+install Kodimate from the "Kodimate Repository" that appears. Updates to
+Kodimate arrive automatically through the repository.
+
+For a local preview of the site, run `scripts/release/build_site.py
+--addon-zip dist/script.kodimate-<version>.zip --out site` and serve it with
+`python3 -m http.server -d site`.
 
 ## Starting/stopping Kodi
 
@@ -82,12 +107,13 @@
 - `rpc.py JSONRPC.Ping` -> `{"result": "pong"}`.
 - `link.sh` symlinked the addon dir; `UpdateLocalAddons()` + `SetAddonEnabled`
   succeeded once the addon was discoverable.
-- `rpc.py Addons.GetAddonDetails` -> `enabled: true`, `version: "0.0.1"`.
+- `rpc.py Addons.GetAddonDetails` -> `enabled: true`, `version: "0.0.1"` (that
+  verification run predates the 0.1.0 version bump below).
 - `reload.sh` -> log shows `Kodimate script started` and (from Kodi's own
   service startup) `Kodimate service started`.
-- `deploy.sh` built `dist/script.kodimate-0.0.1.zip` with top-level
-  `script.kodimate/` folder containing only `addon.xml`, `default.py`,
-  `service.py`.
+- `deploy.sh` built `dist/script.kodimate-0.1.0.zip` with top-level
+  `script.kodimate/` folder containing the addon's `addon.xml`, `default.py`,
+  `service.py`, `icon.png`/`fanart.jpg`, and `resources/`.
 - `builtin.py 'Notification(Kodimate,builtin ok)'` -> log shows
   `ES: Incoming connection from kodimate-dev` with no error afterward.
 

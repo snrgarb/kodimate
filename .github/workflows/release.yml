@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Verify tag matches addon.xml version
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          ADDON_VERSION="$(sed -n 's/^[[:space:]]*version="\([^"]*\)".*/\1/p' addon.xml | head -1)"
+          if [ "v$ADDON_VERSION" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match addon.xml version v$ADDON_VERSION" >&2
+            exit 1
+          fi
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Build addon zip
+        run: scripts/dev/deploy.sh
+
+      - name: Build site
+        run: python scripts/release/build_site.py --addon-zip dist/script.kodimate-*.zip --out site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zips
+          path: |
+            dist/*.zip
+            site/repository.kodimate/*.zip
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zips
+          path: zips
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber zips/dist/*.zip zips/site/repository.kodimate/*.zip
+
+  pages:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
