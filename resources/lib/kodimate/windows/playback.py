@@ -418,7 +418,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
         call while one is already pending just replaces which `prepare`
         eventually runs (last wins). With no alive session, run
         immediately. Used by every "replace the running session" transition
-        (zap, seek/pause-resume catch-up rebuild, programme-step catch-up);
+        (zap, live-to-Catch-up seek rebuild, programme-step catch-up);
         Up-next keeps its own, pre-existing await-stop mechanism."""
         self._reset_transient_playback_state()
         if self._pending_transition is not None:
@@ -557,7 +557,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
         # offset (e.g. a rebuild landing mid-programme before playback begins).
         if self._playing:
             return self._player_time_seconds()
-        return self.session.catchup_offset_seconds if self.session is not None else 0
+        return int(self.catchup.get('offset', 0)) if self.catchup else 0
 
     def _near_catchup_end(self):
         duration = self._catchup_duration_seconds()
@@ -889,16 +889,28 @@ class PlaybackWindow(xbmcgui.WindowXML):
             )
             self._go_live_if_needed()
             return
-        if self.catchup is not None and self.session is not None:
+        if self.catchup is not None:
             # ffmpegdirect catchup mode seeks within the programme itself
-            # (it expands catchup_url_format_string on every seek), so the
-            # natively seekable range is the whole programme; only leaving
-            # the programme replaces the session.
+            # (it expands catchup_url_format_string on every seek), so a
+            # seek inside a Catch-up session never rebuilds the URL; it is
+            # always native, clamped to the programme's bounds.
             duration = self._catchup_duration_seconds()
-            in_buffer = duration > 0 and 0 <= time_seconds + step < duration
-        else:
-            in_buffer = total_seconds > 0 and 0 <= time_seconds + step <= total_seconds
-        clamp = self.catchup is None and not self._catchup_window_days()
+            clamped = max(0, min(duration - 1, time_seconds + step)) if duration > 0 \
+                else max(0, time_seconds + step)
+            log.debug(
+                'Playback seek: behind={0} time={1} total={2} target={3} path={4}'.format(
+                    behind, time_seconds, total_seconds, target,
+                    'native' if clamped == time_seconds + step else 'clamp'
+                )
+            )
+            try:
+                self.player.seekTime(clamped)
+            except Exception:
+                pass
+            self._update_behind_live()
+            return
+        in_buffer = total_seconds > 0 and 0 <= time_seconds + step <= total_seconds
+        clamp = not self._catchup_window_days()
         log.debug(
             'Playback seek: behind={0} time={1} total={2} target={3} path={4}'.format(
                 behind, time_seconds, total_seconds, target,
@@ -920,7 +932,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
                     pass
             self._update_behind_live()
             return
-        self._rebuild_for_target(target, -1 if step < 0 else 1)
+        self._rebuild_for_target(target)
 
     def _go_live_if_needed(self):
         if self.catchup is not None:
@@ -942,30 +954,15 @@ class PlaybackWindow(xbmcgui.WindowXML):
             self._set_player_paused(False)
         self._update_behind_live()
 
-    @staticmethod
-    def _snap_catchup_offset(offset, granularity, direction):
-        offset = max(0, offset)
-        if granularity <= 1:
-            return offset
-        remainder = offset % granularity
-        if remainder == 0:
-            return offset
-        if direction > 0:
-            return offset + (granularity - remainder)
-        return offset - remainder
-
-    def _rebuild_at_target(self, target_epoch, unavailable, direction=0):
-        """Find the programme covering `target_epoch` and start a Catch-up
-        session there -- Start Over semantics when the programme is still
-        airing (state 'live') -- or call `unavailable()` when no programme
-        covers it or it isn't playable (including a 'live' programme with
-        no Catch-up Window at all). Going live at/after the live edge is
-        decided earlier, by the caller's live-edge check; this only ever
-        rebuilds a Catch-up URL. The offset is snapped to the Provider's
-        URL-rebuild granularity (floor for a rewind, ceil for a forward
-        seek; `direction` 0 floors) so a step smaller than that granularity
-        still yields a URL Kodi hasn't already got open. Used by a
-        seek/big-step commit that lands outside the player's buffer."""
+    def _rebuild_at_target(self, target_epoch, unavailable):
+        """Live -> Catch-up rebuild: find the programme covering
+        `target_epoch` and start a Catch-up session there -- Start Over
+        semantics when the programme is still airing (state 'live') -- or
+        call `unavailable()` when no programme covers it or it isn't
+        playable (including a 'live' programme with no Catch-up Window at
+        all). Used only when a seek on a live session lands before the
+        timeshift buffer start; a seek inside an existing Catch-up session
+        never rebuilds (ffmpegdirect re-expands the URL itself)."""
         self._load_programmes()
         programme = self._programme_containing(target_epoch)
         window_days = self._catchup_window_days()
@@ -978,25 +975,18 @@ class PlaybackWindow(xbmcgui.WindowXML):
             unavailable()
             return
         programme_start = _epoch(programme['start'])
-        offset = target_epoch - programme_start
-        granularity = urls.catchup_granularity_seconds(self.snapshot)
-        offset = self._snap_catchup_offset(offset, granularity, direction)
-        current_start = None
-        if self.catchup is not None and self.session is not None:
-            current_start = self.catchup['start'] + self.session.catchup_offset_seconds
-        if current_start is not None and programme_start + offset == current_start:
-            offset = max(0, offset + (granularity if direction >= 0 else -granularity))
+        offset = max(0, target_epoch - programme_start)
 
         def prepare():
             self.catchup = self._catchup_dict_for(programme, now, offset=offset)
         self._replace_session(prepare)
 
-    def _rebuild_for_target(self, target_epoch, direction=0):
+    def _rebuild_for_target(self, target_epoch):
         def unavailable():
             addon = xbmcaddon.Addon()
             self.notify('Kodimate', addon.getLocalizedString(_STR_CATCHUP_UNAVAILABLE)
                         % self.snapshot['provider_name'])
-        self._rebuild_at_target(target_epoch, unavailable, direction)
+        self._rebuild_at_target(target_epoch, unavailable)
 
     def _player_paused(self):
         try:

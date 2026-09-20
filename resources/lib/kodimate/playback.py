@@ -171,7 +171,6 @@ class PlaybackSession(object):
         self.catchup = catchup
         self.persist_catchup_form = persist_catchup_form
         self._catchup_offset_seconds = int(catchup.get('offset', 0)) if catchup is not None else 0
-        self._catchup_clock_origin = self.clock() if catchup is not None else None
         self._explicit_catchup_form = (
             catchup is not None and snapshot.get('catchup_url_form') in ('path', 'query')
         )
@@ -192,10 +191,6 @@ class PlaybackSession(object):
         self._reconnect_timer = None
         self._explicit_format = bool(snapshot.get('stream_format'))
         self._probing = False
-
-    @property
-    def catchup_offset_seconds(self):
-        return self._catchup_offset_seconds
 
     # -- entry point ---------------------------------------------------
 
@@ -347,8 +342,6 @@ class PlaybackSession(object):
             self._fail('unavailable')
 
     def _enter_reconnecting(self):
-        if self.catchup is not None and self._av_started_at is not None:
-            self._catchup_offset_seconds += self.clock() - self._av_started_at
         self.player.stop()
         self._debug_attempt_outcome('dropped')
         self._phase = 'reconnect'
@@ -432,15 +425,11 @@ class PlaybackSession(object):
             return _NO_FALLBACK
         return self._form
 
-    def _catchup_times(self):
-        start = int(self.catchup['start'] + self._catchup_offset_seconds)
-        end = self.catchup['end']
-        now = int(self.catchup['now'] + (self.clock() - self._catchup_clock_origin))
-        return start, end, now
-
     def _catchup_url_and_headers(self, form):
         snapshot = self.snapshot
-        start, end, now = self._catchup_times()
+        start = int(self.catchup['start'] + self._catchup_offset_seconds)
+        end = self.catchup['end']
+        now = int(self.catchup['now'])
         offset = tz.zone_offset_seconds(snapshot.get('server_timezone'), start)
         if snapshot['kind'] == 'xtream':
             start_local = urls.xtream_local_start(
@@ -512,7 +501,7 @@ class PlaybackSession(object):
         else:
             shift = correction
 
-        _, _, now = self._catchup_times()
+        now = int(self.catchup['now'])
         # A user catchup-source template may already carry its own
         # '|Key=Value' pipe (urls.m3u_catchup_template keeps it verbatim);
         # only append ours when the string doesn't already have one, same

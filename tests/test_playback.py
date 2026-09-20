@@ -211,8 +211,6 @@ def test_catchup_offset_initialises_offset_seconds_and_shifts_start():
     session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
         _catchup_session(_catchup_xtream_snapshot(), catchup)
 
-    assert session.catchup_offset_seconds == 300
-
     session.start()
 
     url = player.plays[0][0]
@@ -321,14 +319,14 @@ def test_catchup_exhausted_alternate_form_fails_catchup_unavailable():
     assert state.calls[-1] == ('failed', 'catchup_unavailable')
 
 
-def test_catchup_drop_reconnects_with_recomputed_start():
+def test_catchup_drop_reconnects_with_same_offset_as_attempt1():
     catchup = {'start': 1000, 'end': 100000, 'now': 5000}
     session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
         _catchup_session(_catchup_xtream_snapshot(), catchup)
 
     session.start()
     session.on_av_started()
-    clock.advance(30)  # 30s elapsed while playing -> crosses a minute boundary
+    clock.advance(30)  # elapsed time while playing must not shift the offset
 
     session.on_stopped()  # drop past 5s -> reconnecting
 
@@ -338,9 +336,8 @@ def test_catchup_drop_reconnects_with_recomputed_start():
 
     assert len(player.plays) == plays_before + 1
     new_url = player.plays[-1][0]
-    # New start = 1000 (original) + 30 (elapsed) = 1030 -> local start
-    # advances by a minute; just confirm the URL differs from attempt 1's.
-    assert new_url != player.plays[0][0]
+    # The reconnect Attempt reuses the session's initial offset verbatim.
+    assert new_url == player.plays[0][0]
 
 
 def test_catchup_reconnect_exhaustion_fails_catchup_unavailable():

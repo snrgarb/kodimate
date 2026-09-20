@@ -285,18 +285,6 @@ def _template_granularity_seconds(template):
     return 60
 
 
-def catchup_granularity_seconds(snapshot):
-    """Coarsest interval, in seconds, at which a rebuilt Catch-up URL's
-    start time actually changes for this Channel/Provider. A seek rebuild
-    whose new offset differs from the current one by less than this
-    yields the identical URL already open (Kodi restarts the same file
-    instead of perceiving a seek), so callers must snap the offset to
-    this granularity before rebuilding."""
-    if snapshot.get('kind') != 'm3u':
-        return 60  # Xtream: '%Y-%m-%d:%H-%M' path/query stamp, minute precision
-    return _template_granularity_seconds(m3u_catchup_template(snapshot))
-
-
 def m3u_catchup_supported(channel):
     """True iff `m3u_catchup_url` can produce a URL for `channel`."""
     stream_url = channel.get('stream_url') or ''

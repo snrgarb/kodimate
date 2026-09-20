@@ -2292,7 +2292,7 @@ def test_seek_in_catchup_range_is_native_even_with_zero_total_time(tmp_path):
     assert window.catchup is catchup_dict  # unchanged: native seek, no rebuild
 
 
-def test_seek_leaving_catchup_range_rebuilds_once(tmp_path):
+def test_seek_leaving_catchup_programme_clamps_natively_without_rebuild(tmp_path):
     conn = _conn(tmp_path)
     provider_id, snapshot = _setup_channel_with_programmes(conn)
     now = datetime(2026, 1, 1, 12, 30)
@@ -2312,68 +2312,12 @@ def test_seek_leaving_catchup_range_rebuilds_once(tmp_path):
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # -10s: before session_start
     window.scheduler.advance(0.75)
-    assert window.player.seek_calls == []  # left the buffer: no native seek
 
-    window.on_stopped()  # old stream's stop callback, arriving after abort()
-
-    # 5s into the file minus a 10s rewind lands 5s before session_start,
-    # i.e. in the previous programme (Show2, 11:00-12:00) -- "rebuild
-    # earlier" -- not a repeated rebuild of Show3.
-    assert window.catchup is not None
-    assert window.catchup['title'] == 'Show2'
-    assert len(window.player.plays) == plays_before + 1
-
-
-def test_rebuild_snaps_offset_floor_for_rewind_and_bumps_if_unchanged(tmp_path):
-    conn = _conn(tmp_path)
-    provider_id, snapshot = _setup_channel_with_programmes(conn)
-    snapshot['catchup_mode'] = 'xc'  # minute-precision granularity (60s)
-    now = datetime(2026, 1, 1, 12, 30)
-    start_dt = datetime(2026, 1, 1, 12, 0)  # Show3 12:00-13:00
-    end_dt = datetime(2026, 1, 1, 13, 0)
-    catchup_dict = {
-        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
-        'title': 'Show3', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
-        'offset': 600,  # the running session's URL starts at 12:10:00
-    }
-    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
-    window.onInit()
-    window.session.on_av_started()
-    captured = []
-    window._replace_session = lambda prepare: captured.append(prepare)
-
-    # 605s past the programme start floors to 600 -- the same minute the
-    # current session already opened -- so it must bump one more step.
-    window._rebuild_at_target(_epoch(start_dt) + 605, lambda: None, direction=-1)
-
-    captured[-1]()
-    assert window.catchup['offset'] == 540  # 600 - 60, not 600
-
-
-def test_rebuild_snaps_offset_ceil_for_forward_and_bumps_if_unchanged(tmp_path):
-    conn = _conn(tmp_path)
-    provider_id, snapshot = _setup_channel_with_programmes(conn)
-    snapshot['catchup_mode'] = 'xc'  # minute-precision granularity (60s)
-    now = datetime(2026, 1, 1, 12, 30)
-    start_dt = datetime(2026, 1, 1, 12, 0)  # Show3 12:00-13:00
-    end_dt = datetime(2026, 1, 1, 13, 0)
-    catchup_dict = {
-        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
-        'title': 'Show3', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
-        'offset': 600,  # the running session's URL starts at 12:10:00
-    }
-    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
-    window.onInit()
-    window.session.on_av_started()
-    captured = []
-    window._replace_session = lambda prepare: captured.append(prepare)
-
-    # 595s past the programme start ceils to 600 -- the same minute the
-    # current session already opened -- so it must bump one more step.
-    window._rebuild_at_target(_epoch(start_dt) + 595, lambda: None, direction=1)
-
-    captured[-1]()
-    assert window.catchup['offset'] == 660  # 600 + 60
+    # A Catch-up seek never rebuilds the URL (ffmpegdirect re-expands it
+    # itself); it clamps natively at the programme start instead.
+    assert window.player.seek_calls == [0]
+    assert len(window.player.plays) == plays_before
+    assert window.catchup is catchup_dict
 
 
 def test_commit_seek_dropped_while_transition_pending(tmp_path):
