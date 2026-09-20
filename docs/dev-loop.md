@@ -59,6 +59,10 @@
 
 One-time setup: repo Settings -> Pages -> Source "GitHub Actions" (a public
 repo, or a paid GitHub plan for a private one, is required for Pages).
+The `github-pages` environment only allows deploys from `main` by default,
+so the `pages` job fails on a tag push until you add a tag rule: Settings ->
+Environments -> github-pages -> Deployment branches and tags -> add `v*`
+(or `gh api -X POST repos/snrgarb/kodimate/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag`).
 
 To install as a Kodi user: open `https://snrgarb.github.io/kodimate/` and
 download the repository zip linked there (`index.html` links to the current
