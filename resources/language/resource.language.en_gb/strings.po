@@ -575,3 +575,11 @@ msgstr ""
 msgctxt "#32140"
 msgid "Next: %s"
 msgstr ""
+
+msgctxt "#32141"
+msgid "All groups"
+msgstr ""
+
+msgctxt "#32142"
+msgid "Select"
+msgstr ""

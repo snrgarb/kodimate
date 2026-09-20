@@ -234,7 +234,7 @@ def viewport_changed(prev_top_row, new_top_row, prev_viewport_start, new_viewpor
 
 
 def panel_rows(providers, groups, collapsed, all_label, favourites_label):
-    """Rows for the Groups panel: All channels, Favourites, then one
+    """Rows for the Groups panel: All groups, Favourites, then one
     section per provider (a header row, followed by that provider's
     groups unless the header's provider_id is in `collapsed`). A
     provider with no groups still gets a header row; disabled providers
@@ -344,22 +344,6 @@ def channel_initials(name):
     if len(words) == 1:
         return words[0][:4].upper()
     return ''.join(word if word.isdigit() else word[0].upper() for word in words)[:4]
-
-
-def channel_panel_rows(channel_rows, playing_key):
-    """Rows for the panel's channel list (issue #64): one dict per channel
-    row, in the same order, with {'id','number','name','logo','playing',
-    'initials'}. `playing_key` is the (provider_id, channel_key) pair of
-    the currently playing channel, or None."""
-    return [
-        {
-            'id': row['id'], 'number': row['number'], 'name': row['name'],
-            'logo': row.get('logo_url') or '',
-            'playing': (row['provider_id'], row['channel_key']) == playing_key,
-            'initials': channel_initials(row['name']),
-        }
-        for row in channel_rows
-    ]
 
 
 def initial_cursor_index(rows, focus_channel_id):
@@ -500,13 +484,14 @@ STR_HINT_FAVOURITE = 32135
 STR_HINT_LONG_PRESS = 32136
 STR_HINT_OPEN = 32137
 STR_HINT_CHANNELS = 32138
+STR_HINT_SELECT = 32142
 
 
-def hint_slots(zone, get_string, panel_mode='channels'):
+def hint_slots(zone, get_string):
     """Remote-hint bar slots for the given focus zone: up to five dicts of
     {'icon', 'key', 'verb'}, one per key this zone's Left/Right/OK/Info/
-    long-press actually does. For zone == 'panel', `panel_mode` ('channels'
-    or 'groups') picks between "OK Channels" and "OK Groups"."""
+    long-press actually does. For zone == 'panel', the two slots are OK
+    Select and → Channels."""
     if zone == 'column':
         return [
             {'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_WATCH), 'texture': u'hint_ok.png'},
@@ -525,18 +510,20 @@ def hint_slots(zone, get_string, panel_mode='channels'):
     if zone == 'rail':
         return [{'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_OPEN), 'texture': u'hint_ok.png'}]
     if zone == 'panel':
-        verb = STR_HINT_GROUPS if panel_mode == 'groups' else STR_HINT_CHANNELS
-        return [{'icon': u'OK', 'key': u'', 'verb': get_string(verb), 'texture': u'hint_ok.png'}]
+        return [
+            {'icon': u'OK', 'key': u'', 'verb': get_string(STR_HINT_SELECT), 'texture': u'hint_ok.png'},
+            {'icon': u'→', 'key': u'', 'verb': get_string(STR_HINT_CHANNELS), 'texture': u'hint_right.png'},
+        ]
     return []
 
 
-def hint_text(zone, get_string, panel_mode='channels'):
+def hint_text(zone, get_string):
     """Remote-hint bar text for the given focus zone, built from
     hint_slots: each slot renders as "<key> <verb>", or "<icon> <verb>"
     when the slot has no key (an arrow-only hint), joined with ' · '."""
     fragments = [
         u'%s %s' % (slot['key'] or slot['icon'], slot['verb'])
-        for slot in hint_slots(zone, get_string, panel_mode)
+        for slot in hint_slots(zone, get_string)
     ]
     return u' · '.join(fragments)
 

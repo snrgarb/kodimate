@@ -398,30 +398,6 @@ def test_filter_label_group_id_wins_over_provider_id():
 
 
 
-def test_channel_panel_rows_preserves_order_and_flags_playing_row():
-    channel_rows = [
-        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo_url': 'http://x/a.png',
-         'provider_id': 1, 'channel_key': 'a'},
-        {'id': 2, 'number': 2, 'name': 'Beta', 'logo_url': None,
-         'provider_id': 1, 'channel_key': 'b'},
-    ]
-    rows = guide.channel_panel_rows(channel_rows, (1, 'b'))
-    assert rows == [
-        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo': 'http://x/a.png', 'playing': False,
-         'initials': 'ALPH'},
-        {'id': 2, 'number': 2, 'name': 'Beta', 'logo': '', 'playing': True, 'initials': 'BETA'},
-    ]
-
-
-def test_channel_panel_rows_none_playing_key_flags_nothing():
-    channel_rows = [
-        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo_url': None,
-         'provider_id': 1, 'channel_key': 'a'},
-    ]
-    rows = guide.channel_panel_rows(channel_rows, None)
-    assert rows[0]['playing'] is False
-
-
 def test_channel_initials_multi_word_uses_first_letters():
     assert guide.channel_initials('Fox Sports') == 'FS'
 
@@ -827,7 +803,7 @@ def test_hint_text_rail_zone():
 
 
 def test_hint_text_panel_zone():
-    assert guide.hint_text('panel', str) == u'OK 32138'
+    assert guide.hint_text('panel', str) == u'OK 32142 · → 32138'
 
 
 def test_hint_slots_column():
@@ -853,19 +829,8 @@ def test_hint_slots_grid():
 
 def test_hint_slots_panel():
     assert guide.hint_slots('panel', str) == [
-        {'icon': u'OK', 'key': u'', 'verb': '32138', 'texture': u'hint_ok.png'},
-    ]
-
-
-def test_hint_slots_panel_channels_mode_explicit():
-    assert guide.hint_slots('panel', str, 'channels') == [
-        {'icon': u'OK', 'key': u'', 'verb': '32138', 'texture': u'hint_ok.png'},
-    ]
-
-
-def test_hint_slots_panel_groups_mode():
-    assert guide.hint_slots('panel', str, 'groups') == [
-        {'icon': u'OK', 'key': u'', 'verb': '32132', 'texture': u'hint_ok.png'},
+        {'icon': u'OK', 'key': u'', 'verb': '32142', 'texture': u'hint_ok.png'},
+        {'icon': u'→', 'key': u'', 'verb': '32138', 'texture': u'hint_right.png'},
     ]
 
 

@@ -949,7 +949,7 @@ def test_channel_list_item_carries_logo_property(tmp_path):
         conn.close()
 
 
-def test_channel_list_and_panel_items_carry_initials_property(tmp_path):
+def test_channel_list_item_carries_initials_property(tmp_path):
     conn = _conn(tmp_path)
     try:
         _provider_id = _provider(conn)
@@ -958,10 +958,6 @@ def test_channel_list_and_panel_items_carry_initials_property(tmp_path):
 
         column_item = window.getControl(CHANNEL_LIST_ID)._items[0]
         assert column_item.getProperty('initials') == guide.channel_initials('Alpha')
-
-        window._render_channel_panel()
-        panel_item = window.getControl(win_guide.PANEL_CHANNELS_ID)._items[0]
-        assert panel_item.getProperty('initials') == guide.channel_initials('Alpha')
     finally:
         conn.close()
 
@@ -1307,13 +1303,13 @@ def test_reentering_oninit_applies_deferred_refresh(tmp_path):
         conn.close()
 
 
-def test_default_filter_is_all_channels(tmp_path):
+def test_default_filter_is_all_groups(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
         _channel(conn, pid, "a", "Alpha", 0)
         window = _window(conn)
-        assert window.getProperty('guide_filter') == 'String 32038'
+        assert window.getProperty('guide_filter') == 'String 32141'
     finally:
         conn.close()
 
@@ -1362,7 +1358,7 @@ def test_provider_filter_unknown_provider_id_falls_back_to_all_label(tmp_path):
         window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
                               conn=conn, provider_id=999)
         window.onInit()
-        assert window.getProperty('guide_filter') == 'String 32038'
+        assert window.getProperty('guide_filter') == 'String 32141'
         assert window._channel_rows == []
     finally:
         conn.close()
@@ -1512,27 +1508,29 @@ def test_rail_selected_property_set_to_livetv(tmp_path):
         conn.close()
 
 
-def test_left_from_column_opens_channel_panel_with_column_selection(tmp_path):
+def test_left_from_column_opens_panel_with_active_row_selected(tmp_path):
     conn = _conn(tmp_path)
     try:
-        pid = _provider(conn)
+        pid = _provider(conn, name="P1")
+        gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
+            (pid,),
+        ).lastrowid
         _channel(conn, pid, "a", "Alpha", 0)
-        _channel(conn, pid, "b", "Beta", 1)
-        autoplay.remember_last_channel(conn, pid, "b")
+        cid_b = _channel(conn, pid, "b", "Beta", 1)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_b))
         window = _window(conn)
-        window.getControl(CHANNEL_LIST_ID).selectItem(1)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel
+        panel = window.getControl(win_guide.PANEL_LIST_ID)
+        panel.selectItem(3)  # 'Sports'
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))  # applies filter, panel -> column
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
 
         assert window._zone == 'panel'
-        assert window.getProperty('panel_mode') == 'channels'
-        assert window.getFocusId() == win_guide.PANEL_CHANNELS_ID
-        panel = window.getControl(win_guide.PANEL_CHANNELS_ID)
-        assert [item.getLabel() for item in panel._items] == ['Alpha', 'Beta']
-        assert panel.getSelectedPosition() == 1
-        playing_flags = [item.getProperty('playing') for item in panel._items]
-        assert playing_flags == ['0', '1']
-        assert window.getProperty('panel_heading') == 'String 32038'
+        assert window.getFocusId() == win_guide.PANEL_LIST_ID
+        assert panel.getSelectedPosition() == 3
+        assert panel.getListItem(3).getProperty('active') == '1'
     finally:
         conn.close()
 
@@ -1565,53 +1563,12 @@ def test_right_from_rail_returns_to_panel(tmp_path):
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
 
         assert window._zone == 'panel'
-        assert window.getFocusId() == win_guide.PANEL_CHANNELS_ID
+        assert window.getFocusId() == win_guide.PANEL_LIST_ID
     finally:
         conn.close()
 
 
-def test_ok_on_channel_row_selects_it_in_column_and_updates_strip(tmp_path):
-    conn = _conn(tmp_path)
-    try:
-        pid = _provider(conn)
-        _channel(conn, pid, "a", "Alpha", 0)
-        _channel(conn, pid, "b", "Beta", 1)
-        window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        channel_panel = window.getControl(win_guide.PANEL_CHANNELS_ID)
-        channel_panel.selectItem(1)  # Beta
-
-        window.onClick(win_guide.PANEL_CHANNELS_ID)
-
-        assert window.getControl(CHANNEL_LIST_ID).getSelectedPosition() == 1
-        assert window._zone == 'column'
-        assert window.getFocusId() == CHANNEL_LIST_ID
-        assert window.getProperty('strip_channel_name') == 'Beta'
-    finally:
-        conn.close()
-
-
-def test_right_on_channel_row_selects_it_in_column(tmp_path):
-    conn = _conn(tmp_path)
-    try:
-        pid = _provider(conn)
-        _channel(conn, pid, "a", "Alpha", 0)
-        _channel(conn, pid, "b", "Beta", 1)
-        window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        channel_panel = window.getControl(win_guide.PANEL_CHANNELS_ID)
-        channel_panel.selectItem(1)  # Beta
-
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
-
-        assert window.getControl(CHANNEL_LIST_ID).getSelectedPosition() == 1
-        assert window._zone == 'column'
-        assert window.getFocusId() == CHANNEL_LIST_ID
-    finally:
-        conn.close()
-
-
-def test_ok_on_panel_header_opens_groups_picker(tmp_path):
+def test_after_init_panel_lists_all_favourites_and_provider_groups(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn, name="P1")
@@ -1619,49 +1576,40 @@ def test_ok_on_panel_header_opens_groups_picker(tmp_path):
             "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
             (pid,),
         ).lastrowid
-        _channel(conn, pid, "a", "Alpha", 0)
-        cid_b = _channel(conn, pid, "b", "Beta", 1)
-        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_b))
+        cid_a = _channel(conn, pid, "a", "Alpha", 0)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_a))
         window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
 
-        window.onClick(win_guide.PANEL_HEADER_ID)
-
-        assert window.getProperty('panel_mode') == 'groups'
-        assert window._zone == 'panel'
-        assert window.getFocusId() == win_guide.PANEL_LIST_ID
         panel = window.getControl(win_guide.PANEL_LIST_ID)
         labels = [item.getLabel() for item in panel._items]
-        assert labels == ['String 32038', 'String 32039', 'P1', 'Sports']
-        assert window.getProperty('panel_heading') == 'String 32125'
+        assert labels == ['String 32141', 'String 32039', 'P1', 'Sports']
+        assert panel.getSelectedPosition() == 0
+        active_flags = [item.getProperty('active') for item in panel._items]
+        assert active_flags == ['1', '0', '0', '0']
+        assert window.getProperty('panel_mode') == ''
+        assert window.getProperty('panel_heading') == ''
     finally:
         conn.close()
 
 
-def test_hint_bar_slot1_verb_switches_between_channels_and_groups(tmp_path):
+def test_hint_bar_matches_panel_zone_after_left(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
         _channel(conn, pid, "a", "Alpha", 0)
         window = _window(conn)
         addon = xbmcaddon.Addon()
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        assert window.getProperty('hint1_verb') == addon.getLocalizedString(guide.STR_HINT_CHANNELS)
 
-        window.onClick(win_guide.PANEL_HEADER_ID)  # open groups picker
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel
 
-        assert window.getProperty('panel_mode') == 'groups'
-        assert window.getProperty('hint1_verb') == addon.getLocalizedString(guide.STR_HINT_GROUPS)
-
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))  # back to channels mode
-
-        assert window.getProperty('panel_mode') == 'channels'
-        assert window.getProperty('hint1_verb') == addon.getLocalizedString(guide.STR_HINT_CHANNELS)
+        assert window.getProperty('hint1_verb') == addon.getLocalizedString(guide.STR_HINT_SELECT)
+        assert window.getProperty('hint2_verb') == addon.getLocalizedString(guide.STR_HINT_CHANNELS)
+        assert window.getProperty('hint2_icon') == u'→'
     finally:
         conn.close()
 
 
-def test_ok_on_group_row_applies_filter_relists_channel_panel_stays_in_panel(tmp_path):
+def test_ok_on_group_row_applies_filter_updates_column_and_strip_stays_in_panel(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn, name="P1")
@@ -1673,9 +1621,8 @@ def test_ok_on_group_row_applies_filter_relists_channel_panel_stays_in_panel(tmp
         cid_b = _channel(conn, pid, "b", "Beta", 1)
         conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_b))
         window = _window(conn)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel
         original_viewport = window._viewport_start
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        window.onClick(win_guide.PANEL_HEADER_ID)  # open groups picker
         panel = window.getControl(win_guide.PANEL_LIST_ID)
         panel.selectItem(3)  # 'Sports'
 
@@ -1685,18 +1632,17 @@ def test_ok_on_group_row_applies_filter_relists_channel_panel_stays_in_panel(tmp
         assert window._top_row == 0
         assert window._viewport_start == original_viewport
         assert window.getProperty('guide_filter') == 'Sports'
-        assert window.getProperty('panel_heading') == 'Sports'
-        assert window.getProperty('panel_mode') == 'channels'
         assert window._zone == 'panel'
-        assert window.getFocusId() == win_guide.PANEL_CHANNELS_ID
-        channel_panel = window.getControl(win_guide.PANEL_CHANNELS_ID)
-        assert [item.getLabel() for item in channel_panel._items] == ['Beta']
-        assert channel_panel.getSelectedPosition() == 0
+        assert window.getFocusId() == win_guide.PANEL_LIST_ID
+        assert panel.getSelectedPosition() == 3
+        assert panel.getListItem(3).getProperty('active') == '1'
+        assert [item.getLabel() for item in window.getControl(CHANNEL_LIST_ID)._items] == ['Beta']
+        assert window.getProperty('strip_channel_name') == 'Beta'
     finally:
         conn.close()
 
 
-def test_right_on_group_row_applies_filter_relists_channel_panel_stays_in_panel(tmp_path):
+def test_right_on_group_row_applies_filter_and_focuses_column(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn, name="P1")
@@ -1708,8 +1654,7 @@ def test_right_on_group_row_applies_filter_relists_channel_panel_stays_in_panel(
         cid_b = _channel(conn, pid, "b", "Beta", 1)
         conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_b))
         window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        window.onClick(win_guide.PANEL_HEADER_ID)  # open groups picker
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel
         panel = window.getControl(win_guide.PANEL_LIST_ID)
         panel.selectItem(3)  # 'Sports'
 
@@ -1717,9 +1662,9 @@ def test_right_on_group_row_applies_filter_relists_channel_panel_stays_in_panel(
 
         assert [row['name'] for row in window._channel_rows] == ['Beta']
         assert window.getProperty('guide_filter') == 'Sports'
-        assert window.getProperty('panel_mode') == 'channels'
-        assert window._zone == 'panel'
-        assert window.getFocusId() == win_guide.PANEL_CHANNELS_ID
+        assert window._zone == 'column'
+        assert window.getFocusId() == CHANNEL_LIST_ID
+        assert window.getControl(CHANNEL_LIST_ID).getSelectedPosition() == 0
     finally:
         conn.close()
 
@@ -1735,29 +1680,27 @@ def test_ok_on_provider_header_collapses_and_expands(tmp_path):
         cid = _channel(conn, pid, "a", "Alpha", 0)
         conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid))
         window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        window.onClick(win_guide.PANEL_HEADER_ID)  # open groups picker
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel
         panel = window.getControl(win_guide.PANEL_LIST_ID)
         panel.selectItem(2)  # provider header 'P1'
 
         window.onClick(win_guide.PANEL_LIST_ID)
 
         labels = [item.getLabel() for item in panel._items]
-        assert labels == ['String 32038', 'String 32039', 'P1']
+        assert labels == ['String 32141', 'String 32039', 'P1']
         assert panel.getSelectedPosition() == 2
         assert window.getFocusId() == win_guide.PANEL_LIST_ID
         assert window._zone == 'panel'
-        assert window.getProperty('panel_mode') == 'groups'
 
         window.onClick(win_guide.PANEL_LIST_ID)
 
         labels = [item.getLabel() for item in panel._items]
-        assert labels == ['String 32038', 'String 32039', 'P1', 'Sports']
+        assert labels == ['String 32141', 'String 32039', 'P1', 'Sports']
     finally:
         conn.close()
 
 
-def test_right_on_provider_header_returns_to_channels_mode_without_changing_filter(tmp_path):
+def test_right_on_provider_header_focuses_column_without_changing_filter(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn, name="P1")
@@ -1768,32 +1711,29 @@ def test_right_on_provider_header_returns_to_channels_mode_without_changing_filt
         cid = _channel(conn, pid, "a", "Alpha", 0)
         conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid))
         window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        window.onClick(win_guide.PANEL_HEADER_ID)  # open groups picker
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel
         panel = window.getControl(win_guide.PANEL_LIST_ID)
         panel.selectItem(2)  # provider header 'P1'
 
         window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_RIGHT))
 
-        assert window._zone == 'panel'
-        assert window.getProperty('panel_mode') == 'channels'
-        assert window.getFocusId() == win_guide.PANEL_CHANNELS_ID
+        assert window._zone == 'column'
+        assert window.getFocusId() == CHANNEL_LIST_ID
         assert window._group_id is None
         assert window._favourites is False
         assert window._collapsed == set()
-        assert window.getProperty('guide_filter') == 'String 32038'
-        assert window.getProperty('panel_heading') == 'String 32038'
+        assert window.getProperty('guide_filter') == 'String 32141'
     finally:
         conn.close()
 
 
-def test_back_on_channel_rows_closes_window(tmp_path):
+def test_back_in_panel_closes_window(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
         _channel(conn, pid, "a", "Alpha", 0)
         window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel
         closed = []
         window.close = lambda: closed.append(True)
 
@@ -1806,7 +1746,7 @@ def test_back_on_channel_rows_closes_window(tmp_path):
         conn.close()
 
 
-def test_back_in_groups_picker_returns_to_channels_mode_without_closing(tmp_path):
+def test_refresh_in_place_relists_panel_and_keeps_active_filter(tmp_path):
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn, name="P1")
@@ -1814,93 +1754,27 @@ def test_back_in_groups_picker_returns_to_channels_mode_without_closing(tmp_path
             "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
             (pid,),
         ).lastrowid
-        cid = _channel(conn, pid, "a", "Alpha", 0)
-        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid))
-        window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        window.onClick(win_guide.PANEL_HEADER_ID)  # open groups picker
-        closed = []
-        window.close = lambda: closed.append(True)
+        cid_a = _channel(conn, pid, "a", "Alpha", 0)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_a))
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, group_id=gid, provider_id=pid)
+        window.onInit()
+        panel = window.getControl(win_guide.PANEL_LIST_ID)
 
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_NAV_BACK))
-
-        assert closed == []
-        assert window._zone == 'panel'
-        assert window.getProperty('panel_mode') == 'channels'
-        assert window.getFocusId() == win_guide.PANEL_CHANNELS_ID
-        assert window._group_id is None
-        assert window._favourites is False
-        assert window.getProperty('guide_filter') == 'String 32038'
-    finally:
-        conn.close()
-
-
-def test_reopening_groups_picker_highlights_the_applied_row(tmp_path):
-    conn = _conn(tmp_path)
-    try:
-        pid = _provider(conn, name="P1")
-        gid = conn.execute(
-            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
+        news_gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'News', 1)",
             (pid,),
         ).lastrowid
-        _channel(conn, pid, "a", "Alpha", 0)
         cid_b = _channel(conn, pid, "b", "Beta", 1)
-        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_b))
-        window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        window.onClick(win_guide.PANEL_HEADER_ID)  # open groups picker
-        panel = window.getControl(win_guide.PANEL_LIST_ID)
-        panel.selectItem(3)  # 'Sports'
-        window.onClick(win_guide.PANEL_LIST_ID)  # applies filter, back to channels mode
-
-        window.onClick(win_guide.PANEL_HEADER_ID)  # reopen groups picker
-
-        assert panel.getSelectedPosition() == 3
-        assert panel.getListItem(3).getProperty('active') == '1'
-    finally:
-        conn.close()
-
-
-def test_refresh_in_place_relists_channel_panel_in_channels_mode(tmp_path):
-    conn = _conn(tmp_path)
-    try:
-        pid = _provider(conn, name="P1")
-        _channel(conn, pid, "a", "Alpha", 0)
-        window = _window(conn)
-        panel = window.getControl(win_guide.PANEL_CHANNELS_ID)
-
-        _channel(conn, pid, "b", "Beta", 1)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (news_gid, cid_b))
         _bump_generation(2)
         _notify_refreshed(window)
 
         labels = [item.getLabel() for item in panel._items]
-        assert labels == ['Alpha', 'Beta']
-        assert window.getProperty('panel_mode') == 'channels'
-    finally:
-        conn.close()
-
-
-def test_refresh_in_place_relists_groups_picker_when_in_groups_mode(tmp_path):
-    conn = _conn(tmp_path)
-    try:
-        pid = _provider(conn, name="P1")
-        _channel(conn, pid, "a", "Alpha", 0)
-        window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        window.onClick(win_guide.PANEL_HEADER_ID)  # open groups picker
-        panel = window.getControl(win_guide.PANEL_LIST_ID)
-
-        gid = conn.execute(
-            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
-            (pid,),
-        ).lastrowid
-        _channel(conn, pid, "b", "Beta", 1)
-        conn.execute("UPDATE channel SET group_id = ? WHERE channel_key = 'b'", (gid,))
-        _bump_generation(2)
-        _notify_refreshed(window)
-
-        labels = [item.getLabel() for item in panel._items]
-        assert labels == ['String 32038', 'String 32039', 'P1', 'Sports']
+        assert labels == ['String 32141', 'String 32039', 'P1', 'Sports', 'News']
+        assert window.getProperty('guide_filter') == 'Sports'
+        active_index = labels.index('Sports')
+        assert panel.getListItem(active_index).getProperty('active') == '1'
     finally:
         conn.close()
 
@@ -1911,8 +1785,7 @@ def test_applying_empty_favourites_yields_empty_list_no_exception(tmp_path):
         pid = _provider(conn)
         _channel(conn, pid, "a", "Alpha", 0)
         window = _window(conn)
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        window.onClick(win_guide.PANEL_HEADER_ID)  # open groups picker
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel
         panel = window.getControl(win_guide.PANEL_LIST_ID)
         panel.selectItem(1)  # Favourites
 
@@ -1921,7 +1794,7 @@ def test_applying_empty_favourites_yields_empty_list_no_exception(tmp_path):
         assert window._channel_rows == []
         assert window.getProperty('guide_filter') == 'String 32039'
         assert window._zone == 'panel'
-        assert window.getControl(win_guide.PANEL_CHANNELS_ID)._items == []
+        assert window.getControl(CHANNEL_LIST_ID)._items == []
     finally:
         conn.close()
 
@@ -1948,17 +1821,17 @@ def test_generation_change_falls_back_to_all_when_group_vanishes(tmp_path):
         assert window._group_id is None
         assert window._favourites is False
         assert window._provider_id is None
-        assert window.getProperty('guide_filter') == 'String 32038'
+        assert window.getProperty('guide_filter') == 'String 32141'
         assert window.getControl(CHANNEL_LIST_ID).getSelectedPosition() == 0
     finally:
         conn.close()
 
 
-def test_generation_change_falls_back_and_reselects_all_row_in_groups_picker(tmp_path):
-    # Review fix 2: the Groups picker re-render after a fallback must not
-    # clamp against the stale (pre-rebuild) row count, and must select the
-    # All channels row -- not whatever position happened to be selected in
-    # the old (now-gone) 'Sports' section.
+def test_generation_change_falls_back_and_reselects_all_row_in_panel(tmp_path):
+    # Review fix 2: the panel re-render after a fallback must not clamp
+    # against the stale (pre-rebuild) row count, and must select the All
+    # groups row -- not whatever position happened to be selected in the
+    # old (now-gone) 'Sports' section.
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn, name="P1")
@@ -1971,10 +1844,9 @@ def test_generation_change_falls_back_and_reselects_all_row_in_groups_picker(tmp
         window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
                               conn=conn, group_id=gid)
         window.onInit()
-        window.onClick(win_guide.PANEL_HEADER_ID)  # open groups picker
         panel = window.getControl(win_guide.PANEL_LIST_ID)
         assert [item.getLabel() for item in panel._items] == [
-            'String 32038', 'String 32039', 'P1', 'Sports',
+            'String 32141', 'String 32039', 'P1', 'Sports',
         ]
         panel.selectItem(3)  # 'Sports'
 
@@ -1983,7 +1855,7 @@ def test_generation_change_falls_back_and_reselects_all_row_in_groups_picker(tmp
         _bump_generation(2)
         _notify_refreshed(window)
 
-        assert window.getProperty('guide_filter') == 'String 32038'
+        assert window.getProperty('guide_filter') == 'String 32141'
         labels = [item.getLabel() for item in panel._items]
         assert 'Sports' not in labels
         assert panel.getSelectedPosition() == 0
@@ -2265,7 +2137,7 @@ def test_skin_pins_rail_and_channel_list_horizontal_navigation_to_self():
         control_id = control.get('id')
         if control_id is not None:
             controls_by_id[control_id] = control
-    for control_id in ('601', '602', '603', '500', '520', '522'):
+    for control_id in ('601', '602', '603', '500', '520'):
         control = controls_by_id[control_id]
         assert control.find('onleft').text == control_id
         assert control.find('onright').text == control_id
@@ -2278,7 +2150,7 @@ def test_skin_panel_is_permanent_with_no_open_state():
     assert 'panel_open' not in xml_text
     tree = ET.parse(_SKIN_XML)
     ids = {c.get('id') for c in tree.getroot().iter('control') if c.get('id') is not None}
-    assert {'520', '521', '522'} <= ids
+    assert {'520'} <= ids
 
 
 def test_focus_channel_id_outside_filtered_rows_defaults_to_first_row(tmp_path):
@@ -2628,8 +2500,7 @@ def test_strip_shows_first_row_after_applying_group(tmp_path):
         viewport_start = window._viewport_start
         _programme(conn, eid, "x2", guide.format_iso(viewport_start),
                    guide.format_iso(viewport_start + timedelta(hours=1)), "Beta Show")
-        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel, channels mode
-        window.onClick(win_guide.PANEL_HEADER_ID)  # open groups picker
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel
         panel = window.getControl(win_guide.PANEL_LIST_ID)
         panel.selectItem(3)  # 'Sports'
 

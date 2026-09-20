@@ -972,22 +972,15 @@
                 <texture>white.png</texture>
                 <colordiffuse>ff181818</colordiffuse>
             </control>
-            <control type="button" id="521">
-                <posx>150</posx>
+            <control type="label">
+                <posx>162</posx>
                 <posy>60</posy>
-                <width>385</width>
+                <width>373</width>
                 <height>60</height>
-                <label>$INFO[Window.Property(panel_heading)]</label>
+                <label>$ADDON[script.kodimate 32125]</label>
                 <align>left</align>
                 <aligny>center</aligny>
-                <textoffsetx>12</textoffsetx>
-                <texturefocus colordiffuse="ff3a6ea5">white.png</texturefocus>
-                <texturenofocus>-</texturenofocus>
-                <onleft>521</onleft>
-                <onright>521</onright>
-                <onup>521</onup>
-                <ondown condition="String.IsEqual(Window.Property(panel_mode),groups)">520</ondown>
-                <ondown>522</ondown>
+                <textcolor>ffffffff</textcolor>
             </control>
             <control type="image">
                 <posx>495</posx>
@@ -997,148 +990,6 @@
                 <texture>hint_filter.png</texture>
                 <aspectratio>keep</aspectratio>
             </control>
-            <control type="list" id="522">
-                <posx>150</posx>
-                <posy>120</posy>
-                <width>385</width>
-                <height>886</height>
-                <onleft>522</onleft>
-                <onright>522</onright>
-                <onup>521</onup>
-                <ondown>522</ondown>
-                <onback>9000</onback>
-                <scrolltime>0</scrolltime>
-                <visible>String.IsEqual(Window.Property(panel_mode),channels)</visible>
-                <itemlayout width="385" height="60">
-                    <control type="image">
-                        <posx>0</posx>
-                        <posy>0</posy>
-                        <width>4</width>
-                        <height>60</height>
-                        <texture>white.png</texture>
-                        <colordiffuse>ff3a6ea5</colordiffuse>
-                        <visible>String.IsEqual(ListItem.Property(playing),1)</visible>
-                    </control>
-                    <control type="image">
-                        <posx>12</posx>
-                        <posy>8</posy>
-                        <width>44</width>
-                        <height>44</height>
-                        <aspectratio>keep</aspectratio>
-                        <texture fallback="channel-placeholder.png">$INFO[ListItem.Property(logo)]</texture>
-                        <visible>!String.IsEmpty(ListItem.Property(logo))</visible>
-                    </control>
-                    <control type="image">
-                        <posx>12</posx>
-                        <posy>8</posy>
-                        <width>44</width>
-                        <height>44</height>
-                        <texture>white.png</texture>
-                        <colordiffuse>ff2a2a2a</colordiffuse>
-                        <visible>String.IsEmpty(ListItem.Property(logo))</visible>
-                    </control>
-                    <control type="label">
-                        <posx>2</posx>
-                        <posy>8</posy>
-                        <width>64</width>
-                        <height>44</height>
-                        <label>$INFO[ListItem.Property(initials)]</label>
-                        <font>font10</font>
-                        <textcolor>ffffffff</textcolor>
-                        <align>center</align>
-                        <aligny>center</aligny>
-                        <visible>String.IsEmpty(ListItem.Property(logo))</visible>
-                    </control>
-                    <control type="label">
-                        <posx>68</posx>
-                        <posy>0</posy>
-                        <width>305</width>
-                        <height>60</height>
-                        <label>$INFO[ListItem.Property(number)] $INFO[ListItem.Label]</label>
-                        <textcolor>ffcccccc</textcolor>
-                        <align>left</align>
-                        <aligny>center</aligny>
-                    </control>
-                </itemlayout>
-                <focusedlayout width="385" height="60">
-                    <control type="image">
-                        <posx>0</posx>
-                        <posy>0</posy>
-                        <width>385</width>
-                        <height>60</height>
-                        <texture>white.png</texture>
-                        <colordiffuse>ff2a2a2a</colordiffuse>
-                        <visible>!Control.HasFocus(522)</visible>
-                    </control>
-                    <control type="image">
-                        <posx>0</posx>
-                        <posy>0</posy>
-                        <width>385</width>
-                        <height>60</height>
-                        <texture>white.png</texture>
-                        <colordiffuse>ff3a6ea5</colordiffuse>
-                        <visible>Control.HasFocus(522)</visible>
-                    </control>
-                    <control type="image">
-                        <posx>0</posx>
-                        <posy>0</posy>
-                        <width>4</width>
-                        <height>60</height>
-                        <texture>white.png</texture>
-                        <colordiffuse>ff3a6ea5</colordiffuse>
-                        <visible>String.IsEqual(ListItem.Property(playing),1) + !Control.HasFocus(522)</visible>
-                    </control>
-                    <control type="image">
-                        <posx>0</posx>
-                        <posy>0</posy>
-                        <width>4</width>
-                        <height>60</height>
-                        <texture>white.png</texture>
-                        <colordiffuse>ffffffff</colordiffuse>
-                        <visible>String.IsEqual(ListItem.Property(playing),1) + Control.HasFocus(522)</visible>
-                    </control>
-                    <control type="image">
-                        <posx>12</posx>
-                        <posy>8</posy>
-                        <width>44</width>
-                        <height>44</height>
-                        <aspectratio>keep</aspectratio>
-                        <texture fallback="channel-placeholder.png">$INFO[ListItem.Property(logo)]</texture>
-                        <visible>!String.IsEmpty(ListItem.Property(logo))</visible>
-                    </control>
-                    <control type="image">
-                        <posx>12</posx>
-                        <posy>8</posy>
-                        <width>44</width>
-                        <height>44</height>
-                        <texture>white.png</texture>
-                        <colordiffuse>ff1f3d5c</colordiffuse>
-                        <visible>String.IsEmpty(ListItem.Property(logo))</visible>
-                    </control>
-                    <control type="label">
-                        <posx>2</posx>
-                        <posy>8</posy>
-                        <width>64</width>
-                        <height>44</height>
-                        <label>$INFO[ListItem.Property(initials)]</label>
-                        <font>font10</font>
-                        <textcolor>ffffffff</textcolor>
-                        <align>center</align>
-                        <aligny>center</aligny>
-                        <visible>String.IsEmpty(ListItem.Property(logo))</visible>
-                    </control>
-                    <control type="label">
-                        <posx>68</posx>
-                        <posy>0</posy>
-                        <width>305</width>
-                        <height>60</height>
-                        <label>$INFO[ListItem.Property(number)] $INFO[ListItem.Label]</label>
-                        <textcolor>ffffffff</textcolor>
-                        <align>left</align>
-                        <aligny>center</aligny>
-                    </control>
-                </focusedlayout>
-            </control>
             <control type="list" id="520">
                 <posx>150</posx>
                 <posy>120</posy>
@@ -1146,11 +997,10 @@
                 <height>886</height>
                 <onleft>520</onleft>
                 <onright>520</onright>
-                <onup>521</onup>
+                <onup>520</onup>
                 <ondown>520</ondown>
                 <onback>9000</onback>
                 <scrolltime>0</scrolltime>
-                <visible>String.IsEqual(Window.Property(panel_mode),groups)</visible>
                 <itemlayout width="385" height="60">
                     <control type="image">
                         <posx>0</posx>
