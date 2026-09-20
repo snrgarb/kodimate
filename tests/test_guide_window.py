@@ -887,6 +887,23 @@ def test_channel_list_item_carries_logo_property(tmp_path):
         conn.close()
 
 
+def test_channel_list_and_panel_items_carry_initials_property(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        _provider_id = _provider(conn)
+        _channel(conn, _provider_id, "a", "Alpha", 0, epg_channel_id="x1")
+        window = _window(conn)
+
+        column_item = window.getControl(CHANNEL_LIST_ID)._items[0]
+        assert column_item.getProperty('initials') == guide.channel_initials('Alpha')
+
+        window._render_channel_panel()
+        panel_item = window.getControl(win_guide.PANEL_CHANNELS_ID)._items[0]
+        assert panel_item.getProperty('initials') == guide.channel_initials('Alpha')
+    finally:
+        conn.close()
+
+
 def test_unplayable_past_cell_has_no_glyph_and_is_greyed(tmp_path):
     conn = _conn(tmp_path)
     try:

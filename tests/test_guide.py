@@ -407,8 +407,9 @@ def test_channel_panel_rows_preserves_order_and_flags_playing_row():
     ]
     rows = guide.channel_panel_rows(channel_rows, (1, 'b'))
     assert rows == [
-        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo': 'http://x/a.png', 'playing': False},
-        {'id': 2, 'number': 2, 'name': 'Beta', 'logo': '', 'playing': True},
+        {'id': 1, 'number': 1, 'name': 'Alpha', 'logo': 'http://x/a.png', 'playing': False,
+         'initials': 'ALPH'},
+        {'id': 2, 'number': 2, 'name': 'Beta', 'logo': '', 'playing': True, 'initials': 'BETA'},
     ]
 
 
@@ -419,6 +420,40 @@ def test_channel_panel_rows_none_playing_key_flags_nothing():
     ]
     rows = guide.channel_panel_rows(channel_rows, None)
     assert rows[0]['playing'] is False
+
+
+def test_channel_initials_multi_word_uses_first_letters():
+    assert guide.channel_initials('Fox Sports') == 'FS'
+
+
+def test_channel_initials_drops_trailing_number():
+    assert guide.channel_initials('ESPN 1') == 'ESPN'
+
+
+def test_channel_initials_acronym_token_wins():
+    assert guide.channel_initials('Main Event UFC') == 'UFC'
+
+
+def test_channel_initials_single_word_uses_first_four_chars():
+    assert guide.channel_initials('Discovery') == 'DISC'
+
+
+def test_channel_initials_empty_whitespace_or_none_is_empty():
+    assert guide.channel_initials('') == ''
+    assert guide.channel_initials('   ') == ''
+    assert guide.channel_initials(None) == ''
+
+
+def test_channel_initials_leading_number_uses_digit_and_letter():
+    assert guide.channel_initials('7 Two') == '7T'
+
+
+def test_channel_initials_leading_multidigit_number_uses_digits_and_letter():
+    assert guide.channel_initials('10 Comedy') == '10C'
+
+
+def test_channel_initials_single_numeric_word_kept_as_is():
+    assert guide.channel_initials('10') == '10'
 
 
 def test_initial_cursor_index_finds_matching_row():

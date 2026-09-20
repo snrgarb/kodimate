@@ -309,16 +309,54 @@ def filter_label(group_id, favourites, groups, all_label, favourites_label,
     return all_label
 
 
+def channel_initials(name):
+    """Short uppercase initials for a channel with no logo (issue #61).
+
+    Rules, in order:
+    1. None / empty / whitespace-only -> ''.
+    2. Split on whitespace into words.
+    3. Drop only TRAILING purely-numeric words (leading/inner numeric
+       words are kept), so "ESPN 1" ignores the "1" but "7 Two" keeps
+       the "7". If every word is numeric, keep them all ("10" -> "10").
+    4. If any remaining word is a pure-alphabetic, all-uppercase token of
+       2+ chars (an acronym, e.g. "UFC", "ESPN"), use the FIRST such token
+       as-is, capped to 4 chars. This wins over the multi-word/single-word
+       rules below, e.g. "Main Event UFC" -> "UFC".
+    5. Else if exactly one word remains, use it as-is (numeric) or its
+       first 4 characters uppercased (alphabetic), e.g. "10" -> "10",
+       "Discovery" -> "DISC".
+    6. Else, per remaining word take its full digits (if numeric) or its
+       first letter uppercased (otherwise), joined in order, capped to
+       4 chars, e.g. "Fox Sports" -> "FS", "7 Two" -> "7T".
+    """
+    if not name or not name.strip():
+        return ''
+    words = name.split()
+    last_alpha_idx = None
+    for i, word in enumerate(words):
+        if not word.isdigit():
+            last_alpha_idx = i
+    if last_alpha_idx is not None:
+        words = words[:last_alpha_idx + 1]
+    for word in words:
+        if word.isalpha() and word.isupper() and len(word) >= 2:
+            return word[:4]
+    if len(words) == 1:
+        return words[0][:4].upper()
+    return ''.join(word if word.isdigit() else word[0].upper() for word in words)[:4]
+
+
 def channel_panel_rows(channel_rows, playing_key):
     """Rows for the panel's channel list (issue #64): one dict per channel
-    row, in the same order, with {'id','number','name','logo','playing'}.
-    `playing_key` is the (provider_id, channel_key) pair of the currently
-    playing channel, or None."""
+    row, in the same order, with {'id','number','name','logo','playing',
+    'initials'}. `playing_key` is the (provider_id, channel_key) pair of
+    the currently playing channel, or None."""
     return [
         {
             'id': row['id'], 'number': row['number'], 'name': row['name'],
             'logo': row.get('logo_url') or '',
             'playing': (row['provider_id'], row['channel_key']) == playing_key,
+            'initials': channel_initials(row['name']),
         }
         for row in channel_rows
     ]

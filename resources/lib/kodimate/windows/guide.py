@@ -635,6 +635,7 @@ class GuideWindow(BaseWindow):
             item = xbmcgui.ListItem(label=row['name'])
             item.setProperty('number', str(row['number']))
             item.setProperty('logo', row['logo'])
+            item.setProperty('initials', row['initials'])
             item.setProperty('playing', '1' if row['playing'] else '0')
             items.append(item)
         control.addItems(items)
@@ -688,6 +689,7 @@ class GuideWindow(BaseWindow):
             item = xbmcgui.ListItem(label=row['name'])
             item.setProperty('number', str(row['number']))
             item.setProperty('logo', row.get('logo_url') or '')
+            item.setProperty('initials', guide.channel_initials(row['name']))
             window_days = self._window_days_for_channel(index)
             item.setProperty('catchup', '1' if window_days else '0')
             item.setProperty(
