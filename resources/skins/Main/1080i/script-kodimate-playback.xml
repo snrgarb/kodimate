@@ -367,6 +367,7 @@
                 <control type="group">
                     <width>44</width>
                     <height>44</height>
+                    <visible>String.IsEqual(Window.Property(seekable),1)</visible>
                     <control type="button" id="712">
                         <width>44</width>
                         <height>44</height>
@@ -417,6 +418,7 @@
                 <control type="group">
                     <width>44</width>
                     <height>44</height>
+                    <visible>String.IsEqual(Window.Property(seekable),1)</visible>
                     <control type="button" id="714">
                         <width>44</width>
                         <height>44</height>

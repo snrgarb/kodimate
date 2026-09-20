@@ -153,6 +153,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
         self.setProperty('list_visible', '0')
         self.setProperty('digits', '')
         self.setProperty('catchup', '1' if self.catchup else '0')
+        self.setProperty('seekable', '0')
         self.setProperty('upnext', '0')
         self.setProperty('upnext_title', '')
         self.setProperty('upnext_seconds', '')
@@ -164,6 +165,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
             self.setProperty('channel_name', self.snapshot['name'])
             self.setProperty('channel_number', str(self.snapshot['number']))
             self.setProperty('channel_logo', self.snapshot.get('logo_url') or '')
+            self.setProperty('seekable', '1' if self._catchup_window_days() else '0')
 
     @classmethod
     def open(cls, **kwargs):
@@ -293,6 +295,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
         self.setProperty('stream_vcodec', '')
         self.setProperty('stream_audio', '')
         self.setProperty('catchup', '1' if self.catchup else '0')
+        self.setProperty('seekable', '1' if self._catchup_window_days() else '0')
         self._playing = False
         if self.catchup is None and self.conn is not None:
             autoplay.remember_last_channel(
@@ -819,16 +822,19 @@ class PlaybackWindow(xbmcgui.WindowXML):
             self._seek_timer.cancel()
             self._seek_timer = None
 
+    def _seek_allowed(self):
+        return bool(self._catchup_window_days())
+
     def _seek_press(self, direction):
         with self._lock:
-            if self._list_open:
+            if self._list_open or not self._seek_allowed():
                 return
             step = self._seek_stepper.press(direction)
             self._arm_seek(step)
 
     def _seek_big(self, direction):
         with self._lock:
-            if self._list_open:
+            if self._list_open or not self._seek_allowed():
                 return
             step = self._seek_stepper.press_largest(direction)
             self._arm_seek(step)
@@ -1024,8 +1030,12 @@ class PlaybackWindow(xbmcgui.WindowXML):
 
     def _visible_button_row_ids(self):
         if self.getProperty('behind_live') == '1':
-            return _BUTTON_ROW_IDS
-        return tuple(i for i in _BUTTON_ROW_IDS if i != BTN_LIVE_ID)
+            ids = _BUTTON_ROW_IDS
+        else:
+            ids = tuple(i for i in _BUTTON_ROW_IDS if i != BTN_LIVE_ID)
+        if self.getProperty('seekable') != '1':
+            ids = tuple(i for i in ids if i not in (BTN_REWIND_ID, BTN_FASTFORWARD_ID))
+        return ids
 
     def _move_button_focus(self, direction):
         ids = self._visible_button_row_ids()

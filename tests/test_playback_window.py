@@ -1943,9 +1943,95 @@ def test_back_while_transition_pending_cancels_it(tmp_path):
     assert window.getProperty('state') == 'stopped'
 
 
+def test_seek_disabled_on_channel_without_catchup_window(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+    window.setFocusId(SEEK_ROW_ID)
+
+    assert window.getProperty('seekable') == '0'
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    assert window.getProperty('seek_step') == ''
+    window.scheduler.advance(0.75)
+    assert window.player.seek_calls == []
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_REWIND))
+    assert window.getProperty('seek_step') == ''
+    window.scheduler.advance(0.75)
+    assert window.player.seek_calls == []
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_BIG_STEP_BACK))
+    assert window.getProperty('seek_step') == ''
+    window.scheduler.advance(0.75)
+    assert window.player.seek_calls == []
+
+    window.onClick(BTN_REWIND_ID)
+    assert window.getProperty('seek_step') == ''
+    window.scheduler.advance(0.75)
+    assert window.player.seek_calls == []
+
+
+def test_pause_still_works_on_channel_without_catchup_window(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+
+    assert window.getProperty('paused') == '1'
+    assert window.player.pause_calls == 1
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
+
+    assert window.getProperty('paused') == '0'
+    assert window.player.pause_calls == 2
+
+
+def test_seekable_property_set_when_channel_has_catchup_window(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    snapshot['catchup_days'] = 3
+    snapshot['catchup_mode'] = 'shift'
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+    window.setFocusId(SEEK_ROW_ID)
+
+    assert window.getProperty('seekable') == '1'
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    assert window.getProperty('seek_step') == '-10s'
+    window.scheduler.advance(0.75)
+    assert window.player.seek_calls == [40]
+
+
+def test_button_row_excludes_rewind_and_fastforward_when_not_seekable(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    assert window.getProperty('seekable') == '0'
+
+    assert BTN_REWIND_ID not in window._visible_button_row_ids()
+    assert BTN_FASTFORWARD_ID not in window._visible_button_row_ids()
+
+
 def test_pause_cancels_pending_seek(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
+    snapshot['catchup_days'] = 3
+    snapshot['catchup_mode'] = 'shift'
     window = _window(conn, snapshot)
     window.onInit()
     window.session.on_av_started()
@@ -1966,6 +2052,8 @@ def test_pause_cancels_pending_seek(tmp_path):
 def test_seek_committed_while_paused_in_buffer_stays_paused(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
+    snapshot['catchup_days'] = 3
+    snapshot['catchup_mode'] = 'shift'
     window = _window(conn, snapshot)
     window.onInit()
     window.session.on_av_started()
@@ -2411,6 +2499,8 @@ def test_behind_live_property_zero_when_at_live_edge(tmp_path):
 def test_button_row_left_right_moves_focus(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
+    snapshot['catchup_days'] = 3
+    snapshot['catchup_mode'] = 'shift'
     window = _window(conn, snapshot)
     window.onInit()
     window.setFocusId(BTN_PLAYPAUSE_ID)
@@ -2426,6 +2516,8 @@ def test_button_row_left_right_moves_focus(tmp_path):
 def test_button_row_left_right_skips_hidden_back_to_live_button(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
+    snapshot['catchup_days'] = 3
+    snapshot['catchup_mode'] = 'shift'
     window = _window(conn, snapshot)
     window.onInit()
     assert window.getProperty('behind_live') == '0'
@@ -2505,6 +2597,8 @@ def test_pause_action_works_regardless_of_bar_visibility(tmp_path):
 def test_rewind_forward_remote_actions_seek(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
+    snapshot['catchup_days'] = 3
+    snapshot['catchup_mode'] = 'shift'
     window = _window(conn, snapshot)
     window.onInit()
     window.session.on_av_started()
