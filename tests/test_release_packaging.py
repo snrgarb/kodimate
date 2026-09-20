@@ -33,8 +33,9 @@ def test_deploy_sh_builds_versioned_zip_with_expected_contents():
             text=True,
             check=True,
         )
+        addon_version = ET.parse(os.path.join(REPO_ROOT, "addon.xml")).getroot().get("version")
         last_line = result.stdout.strip().splitlines()[-1]
-        zip_path = os.path.join(tmp_dist, "script.kodimate-0.1.0.zip")
+        zip_path = os.path.join(tmp_dist, "script.kodimate-%s.zip" % addon_version)
         assert last_line == "built %s" % zip_path
         assert os.path.exists(zip_path)
 
