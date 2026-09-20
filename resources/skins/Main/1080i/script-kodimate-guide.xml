@@ -978,6 +978,7 @@
                 <width>373</width>
                 <height>60</height>
                 <label>$ADDON[script.kodimate 32125]</label>
+                <font>font10</font>
                 <align>left</align>
                 <aligny>center</aligny>
                 <textcolor>ffffffff</textcolor>
@@ -1017,6 +1018,7 @@
                         <width>335</width>
                         <height>60</height>
                         <label>$INFO[ListItem.Label]</label>
+                        <font>font10</font>
                         <textcolor>ffcccccc</textcolor>
                         <align>left</align>
                         <aligny>center</aligny>
@@ -1028,6 +1030,7 @@
                         <width>363</width>
                         <height>60</height>
                         <label>$INFO[ListItem.Label]</label>
+                        <font>font10</font>
                         <textcolor>ffffffff</textcolor>
                         <align>left</align>
                         <aligny>center</aligny>
@@ -1039,6 +1042,7 @@
                         <width>30</width>
                         <height>60</height>
                         <label>+</label>
+                        <font>font10</font>
                         <textcolor>ffffffff</textcolor>
                         <align>right</align>
                         <aligny>center</aligny>
@@ -1050,6 +1054,7 @@
                         <width>30</width>
                         <height>60</height>
                         <label>-</label>
+                        <font>font10</font>
                         <textcolor>ffffffff</textcolor>
                         <align>right</align>
                         <aligny>center</aligny>
@@ -1081,6 +1086,7 @@
                         <width>335</width>
                         <height>60</height>
                         <label>$INFO[ListItem.Label]</label>
+                        <font>font10</font>
                         <textcolor>ffffffff</textcolor>
                         <align>left</align>
                         <aligny>center</aligny>
@@ -1092,6 +1098,7 @@
                         <width>363</width>
                         <height>60</height>
                         <label>$INFO[ListItem.Label]</label>
+                        <font>font10</font>
                         <textcolor>ffffffff</textcolor>
                         <align>left</align>
                         <aligny>center</aligny>
@@ -1103,6 +1110,7 @@
                         <width>30</width>
                         <height>60</height>
                         <label>+</label>
+                        <font>font10</font>
                         <textcolor>ffffffff</textcolor>
                         <align>right</align>
                         <aligny>center</aligny>
@@ -1114,6 +1122,7 @@
                         <width>30</width>
                         <height>60</height>
                         <label>-</label>
+                        <font>font10</font>
                         <textcolor>ffffffff</textcolor>
                         <align>right</align>
                         <aligny>center</aligny>
