@@ -166,7 +166,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
             self.setProperty('channel_name', self.snapshot['name'])
             self.setProperty('channel_number', str(self.snapshot['number']))
             self.setProperty('channel_logo', self.snapshot.get('logo_url') or '')
-            self.setProperty('seekable', '1' if self._catchup_window_days() else '0')
+            self.setProperty('seekable', '1' if self.catchup is None or self._catchup_window_days() else '0')
 
     @classmethod
     def open(cls, **kwargs):
@@ -296,7 +296,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
         self.setProperty('stream_vcodec', '')
         self.setProperty('stream_audio', '')
         self.setProperty('catchup', '1' if self.catchup else '0')
-        self.setProperty('seekable', '1' if self._catchup_window_days() else '0')
+        self.setProperty('seekable', '1' if self.catchup is None or self._catchup_window_days() else '0')
         self._playing = False
         if self.catchup is None and self.conn is not None:
             autoplay.remember_last_channel(
@@ -826,7 +826,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
             self._seek_timer = None
 
     def _seek_allowed(self):
-        return bool(self._catchup_window_days())
+        return self.catchup is None or bool(self._catchup_window_days())
 
     def _seek_press(self, direction):
         with self._lock:
@@ -897,9 +897,11 @@ class PlaybackWindow(xbmcgui.WindowXML):
             in_buffer = (range_end - session_start) > 0 and 0 <= time_seconds + step < range_end - session_start
         else:
             in_buffer = total_seconds > 0 and 0 <= time_seconds + step <= total_seconds
+        clamp = self.catchup is None and not self._catchup_window_days()
         log.debug(
             'Playback seek: behind={0} time={1} total={2} target={3} path={4}'.format(
-                behind, time_seconds, total_seconds, target, 'native' if in_buffer else 'rebuild'
+                behind, time_seconds, total_seconds, target,
+                'native' if in_buffer else ('clamp' if clamp else 'rebuild')
             )
         )
         if in_buffer:
@@ -907,6 +909,14 @@ class PlaybackWindow(xbmcgui.WindowXML):
                 self.player.seekTime(time_seconds + step)
             except Exception:
                 pass
+            self._update_behind_live()
+            return
+        if clamp:
+            if total_seconds > 0:
+                try:
+                    self.player.seekTime(0)
+                except Exception:
+                    pass
             self._update_behind_live()
             return
         self._rebuild_for_target(target, -1 if step < 0 else 1)

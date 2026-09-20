@@ -1803,6 +1803,49 @@ def test_seek_left_in_buffer_calls_seektime_natively(tmp_path):
     assert window.catchup is None
 
 
+def test_seek_forward_past_buffer_end_on_live_session_clamps_to_live(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    window = _window(
+        conn, snapshot, now_fn=FakeNow(now),
+        seek_steps=[-6000, 6000],
+    )
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 40
+    window.setFocusId(SEEK_ROW_ID)
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_BIG_STEP_FORWARD))
+    window.scheduler.advance(0.75)
+
+    assert window.player.seek_calls == [100]
+    assert window.getProperty('behind_live') == '0'
+    assert len(window.player.plays) == plays_before
+    assert window.catchup is None
+
+
+def test_rewind_inside_buffer_grows_behind_counter(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    window = _window(conn, snapshot, now_fn=FakeNow(now))
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 100
+    window.setFocusId(SEEK_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(0.75)
+
+    assert window.player.seek_calls == [90]
+    assert window.getProperty('behind_text') == '-00:10'
+    assert window.getProperty('behind_live') == '1'
+
+
 def test_seek_outside_buffer_rebuilds_catchup_session(tmp_path):
     conn = _conn(tmp_path)
     provider_id, snapshot = _setup_channel_with_programmes(conn)
@@ -1946,7 +1989,10 @@ def test_back_while_transition_pending_cancels_it(tmp_path):
     assert window.getProperty('state') == 'stopped'
 
 
-def test_seek_disabled_on_channel_without_catchup_window(tmp_path):
+def test_seek_left_in_buffer_on_channel_without_catchup_window_is_native(tmp_path):
+    # All live sessions now play through the ffmpegdirect timeshift buffer,
+    # so a rewind inside that buffer is native even without a Catch-up
+    # Window -- the window only gates starting a Catch-up session.
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
     window = _window(conn, snapshot)
@@ -1956,27 +2002,54 @@ def test_seek_disabled_on_channel_without_catchup_window(tmp_path):
     window.player.time = 50
     window.setFocusId(SEEK_ROW_ID)
 
-    assert window.getProperty('seekable') == '0'
+    assert window.getProperty('seekable') == '1'
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
-    assert window.getProperty('seek_step') == ''
     window.scheduler.advance(0.75)
-    assert window.player.seek_calls == []
 
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_REWIND))
-    assert window.getProperty('seek_step') == ''
-    window.scheduler.advance(0.75)
-    assert window.player.seek_calls == []
+    assert window.player.seek_calls == [40]
+    assert window.catchup is None
 
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_BIG_STEP_BACK))
-    assert window.getProperty('seek_step') == ''
-    window.scheduler.advance(0.75)
-    assert window.player.seek_calls == []
 
-    window.onClick(BTN_REWIND_ID)
-    assert window.getProperty('seek_step') == ''
+def test_seek_before_buffer_on_channel_without_catchup_window_clamps_to_buffer_start(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    calls = []
+    notify = lambda heading, message: calls.append((heading, message))
+    window = _window(conn, snapshot, notify=notify)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 5
+    window.setFocusId(SEEK_ROW_ID)
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
     window.scheduler.advance(0.75)
+
+    assert window.player.seek_calls == [0]
+    assert len(window.player.plays) == plays_before
+    assert window.catchup is None
+    assert calls == []
+
+
+def test_seek_before_buffer_not_yet_built_on_channel_without_catchup_window_does_nothing(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0
+    window.player.time = 0
+    window.setFocusId(SEEK_ROW_ID)
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(0.75)
+
     assert window.player.seek_calls == []
+    assert len(window.player.plays) == plays_before
+    assert window.catchup is None
 
 
 def test_pause_still_works_on_channel_without_catchup_window(tmp_path):
@@ -2019,15 +2092,19 @@ def test_seekable_property_set_when_channel_has_catchup_window(tmp_path):
     assert window.player.seek_calls == [40]
 
 
-def test_button_row_excludes_rewind_and_fastforward_when_not_seekable(tmp_path):
+def test_button_row_includes_rewind_and_fastforward_on_live_session_without_catchup_window(tmp_path):
+    # Every live session now plays through the ffmpegdirect timeshift
+    # buffer, so there is no longer a live state that isn't seekable; a
+    # Catch-up Window only gates starting a Catch-up session, not the
+    # buttons' visibility.
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
     window = _window(conn, snapshot)
     window.onInit()
-    assert window.getProperty('seekable') == '0'
+    assert window.getProperty('seekable') == '1'
 
-    assert BTN_REWIND_ID not in window._visible_button_row_ids()
-    assert BTN_FASTFORWARD_ID not in window._visible_button_row_ids()
+    assert BTN_REWIND_ID in window._visible_button_row_ids()
+    assert BTN_FASTFORWARD_ID in window._visible_button_row_ids()
 
 
 def test_pause_cancels_pending_seek(tmp_path):
