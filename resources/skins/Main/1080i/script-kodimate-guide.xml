@@ -193,7 +193,7 @@
                 <posx>535</posx>
                 <posy>0</posy>
                 <width>1385</width>
-                <height>220</height>
+                <height>300</height>
                 <texture>white.png</texture>
                 <colordiffuse>ff181818</colordiffuse>
             </control>
@@ -205,16 +205,16 @@
             <control type="image">
                 <posx>555</posx>
                 <posy>17</posy>
-                <width>330</width>
-                <height>185</height>
+                <width>471</width>
+                <height>265</height>
                 <texture>white.png</texture>
                 <colordiffuse>ff181818</colordiffuse>
             </control>
             <control type="image">
                 <posx>555</posx>
                 <posy>17</posy>
-                <width>330</width>
-                <height>185</height>
+                <width>471</width>
+                <height>265</height>
                 <texture fallback="channel-placeholder.png">$INFO[Window.Property(strip_image)]</texture>
                 <aspectratio>keep</aspectratio>
                 <visible>!Player.HasVideo</visible>
@@ -224,7 +224,7 @@
                  beside the name in one horizontal grouplist so hidden
                  badges collapse instead of leaving a gap. -->
             <control type="grouplist">
-                <posx>915</posx>
+                <posx>1056</posx>
                 <posy>20</posy>
                 <width>950</width>
                 <height>50</height>
@@ -329,24 +329,24 @@
                 </control>
             </control>
 
-            <!-- Row 2 (y 75-115): programme title. -->
+            <!-- Row 2 (y 90-136): programme title. -->
             <control type="label">
-                <posx>915</posx>
-                <posy>75</posy>
-                <width>975</width>
-                <height>40</height>
+                <posx>1056</posx>
+                <posy>90</posy>
+                <width>834</width>
+                <height>46</height>
                 <label>$INFO[Window.Property(strip_title)]</label>
-                <font>font12</font>
+                <font>font13</font>
                 <textcolor>ffffffff</textcolor>
                 <align>left</align>
                 <aligny>center</aligny>
             </control>
 
-            <!-- Row 3 (y 120-150): times, then the progress bar, then
+            <!-- Row 3 (y 150-180): times, then the progress bar, then
                  "remaining", all on one line. -->
             <control type="label">
-                <posx>915</posx>
-                <posy>120</posy>
+                <posx>1056</posx>
+                <posy>150</posy>
                 <width>280</width>
                 <height>30</height>
                 <label>$INFO[Window.Property(strip_times)]</label>
@@ -356,8 +356,8 @@
                 <aligny>center</aligny>
             </control>
             <control type="image">
-                <posx>1215</posx>
-                <posy>132</posy>
+                <posx>1356</posx>
+                <posy>162</posy>
                 <width>300</width>
                 <height>6</height>
                 <texture>white.png</texture>
@@ -365,8 +365,8 @@
                 <visible>String.IsEqual(Window.Property(strip_live),1)</visible>
             </control>
             <control type="image" id="531">
-                <posx>1215</posx>
-                <posy>132</posy>
+                <posx>1356</posx>
+                <posy>162</posy>
                 <width>0</width>
                 <height>6</height>
                 <texture>white.png</texture>
@@ -374,9 +374,9 @@
                 <visible>String.IsEqual(Window.Property(strip_live),1)</visible>
             </control>
             <control type="label">
-                <posx>1530</posx>
-                <posy>120</posy>
-                <width>350</width>
+                <posx>1671</posx>
+                <posy>150</posy>
+                <width>219</width>
                 <height>30</height>
                 <label>$INFO[Window.Property(strip_remaining)]</label>
                 <font>font10</font>
@@ -386,12 +386,12 @@
                 <visible>String.IsEqual(Window.Property(strip_live),1)</visible>
             </control>
 
-            <!-- Row 4 (y 155-211): two-line truncated description. -->
+            <!-- Row 4 (y 195-285): three-line truncated description. -->
             <control type="textbox">
-                <posx>915</posx>
-                <posy>155</posy>
-                <width>975</width>
-                <height>56</height>
+                <posx>1056</posx>
+                <posy>195</posy>
+                <width>834</width>
+                <height>90</height>
                 <label>$INFO[Window.Property(strip_description)]</label>
                 <font>font10</font>
                 <textcolor>ff8a8a8a</textcolor>
@@ -423,7 +423,7 @@
 
         <control type="label">
             <posx>535</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>150</width>
             <height>60</height>
             <label>$INFO[Window.Property(strip_date)]</label>
@@ -435,7 +435,7 @@
         </control>
         <control type="label" id="510">
             <posx>685</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>206</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header0)]</label>
@@ -446,7 +446,7 @@
         </control>
         <control type="label">
             <posx>685</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>206</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header0)]</label>
@@ -458,7 +458,7 @@
         </control>
         <control type="label" id="511">
             <posx>891</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>206</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header1)]</label>
@@ -469,7 +469,7 @@
         </control>
         <control type="label">
             <posx>891</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>206</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header1)]</label>
@@ -481,7 +481,7 @@
         </control>
         <control type="label" id="512">
             <posx>1097</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>206</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header2)]</label>
@@ -492,7 +492,7 @@
         </control>
         <control type="label">
             <posx>1097</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>206</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header2)]</label>
@@ -504,7 +504,7 @@
         </control>
         <control type="label" id="513">
             <posx>1303</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>206</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header3)]</label>
@@ -515,7 +515,7 @@
         </control>
         <control type="label">
             <posx>1303</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>206</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header3)]</label>
@@ -527,7 +527,7 @@
         </control>
         <control type="label" id="514">
             <posx>1509</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>206</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header4)]</label>
@@ -538,7 +538,7 @@
         </control>
         <control type="label">
             <posx>1509</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>206</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header4)]</label>
@@ -550,7 +550,7 @@
         </control>
         <control type="label" id="515">
             <posx>1715</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>205</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header5)]</label>
@@ -561,7 +561,7 @@
         </control>
         <control type="label">
             <posx>1715</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>205</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_header5)]</label>
@@ -574,7 +574,7 @@
 
         <control type="image" id="516">
             <posx>0</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>80</width>
             <height>36</height>
             <texture>white.png</texture>
@@ -583,7 +583,7 @@
         </control>
         <control type="label" id="517">
             <posx>0</posx>
-            <posy>220</posy>
+            <posy>300</posy>
             <width>80</width>
             <height>36</height>
             <label>$INFO[Window.Property(guide_now_label)]</label>
@@ -596,23 +596,23 @@
 
         <control type="list" id="500">
             <posx>535</posx>
-            <posy>280</posy>
+            <posy>360</posy>
             <width>150</width>
-            <!-- 11 rows * 66px row height (row budget: 1080 - 220 strip -
+            <!-- 6 rows * 107px row height (row budget: 1080 - 300 strip -
                  60 header - 60 hint bar, see _VISIBLE_ROWS in guide.py). -->
-            <height>726</height>
+            <height>642</height>
             <onleft>500</onleft>
             <onright>500</onright>
             <onup>500</onup>
             <ondown>500</ondown>
             <onback>9000</onback>
             <scrolltime>0</scrolltime>
-            <itemlayout width="150" height="66">
+            <itemlayout width="150" height="107">
                 <control type="image">
                     <posx>0</posx>
                     <posy>0</posy>
                     <width>4</width>
-                    <height>66</height>
+                    <height>107</height>
                     <texture>white.png</texture>
                     <colordiffuse>ff3a6ea5</colordiffuse>
                     <visible>String.IsEqual(ListItem.Property(playing),1)</visible>
@@ -621,16 +621,16 @@
                     <posx>12</posx>
                     <posy>0</posy>
                     <width>76</width>
-                    <height>66</height>
+                    <height>107</height>
                     <label>$INFO[ListItem.Property(number)]</label>
-                    <font>font10</font>
+                    <font>font12</font>
                     <textcolor>ffcccccc</textcolor>
                     <align>left</align>
                     <aligny>center</aligny>
                 </control>
                 <control type="image">
                     <posx>90</posx>
-                    <posy>9</posy>
+                    <posy>30</posy>
                     <width>48</width>
                     <height>48</height>
                     <aspectratio>keep</aspectratio>
@@ -639,7 +639,7 @@
                 </control>
                 <control type="image">
                     <posx>90</posx>
-                    <posy>9</posy>
+                    <posy>30</posy>
                     <width>48</width>
                     <height>48</height>
                     <texture>white.png</texture>
@@ -648,7 +648,7 @@
                 </control>
                 <control type="label">
                     <posx>82</posx>
-                    <posy>9</posy>
+                    <posy>30</posy>
                     <width>64</width>
                     <height>48</height>
                     <label>$INFO[ListItem.Property(initials)]</label>
@@ -659,12 +659,12 @@
                     <visible>String.IsEmpty(ListItem.Property(logo))</visible>
                 </control>
             </itemlayout>
-            <focusedlayout width="150" height="66">
+            <focusedlayout width="150" height="107">
                 <control type="image">
                     <posx>0</posx>
                     <posy>0</posy>
                     <width>150</width>
-                    <height>64</height>
+                    <height>105</height>
                     <texture>white.png</texture>
                     <colordiffuse>ff3a6ea5</colordiffuse>
                 </control>
@@ -672,7 +672,7 @@
                     <posx>0</posx>
                     <posy>0</posy>
                     <width>4</width>
-                    <height>66</height>
+                    <height>107</height>
                     <texture>white.png</texture>
                     <colordiffuse>ffffffff</colordiffuse>
                     <visible>String.IsEqual(ListItem.Property(playing),1)</visible>
@@ -681,16 +681,16 @@
                     <posx>12</posx>
                     <posy>0</posy>
                     <width>76</width>
-                    <height>66</height>
+                    <height>107</height>
                     <label>$INFO[ListItem.Property(number)]</label>
-                    <font>font10</font>
+                    <font>font12</font>
                     <textcolor>ffffffff</textcolor>
                     <align>left</align>
                     <aligny>center</aligny>
                 </control>
                 <control type="image">
                     <posx>90</posx>
-                    <posy>9</posy>
+                    <posy>30</posy>
                     <width>48</width>
                     <height>48</height>
                     <aspectratio>keep</aspectratio>
@@ -699,7 +699,7 @@
                 </control>
                 <control type="image">
                     <posx>90</posx>
-                    <posy>9</posy>
+                    <posy>30</posy>
                     <width>48</width>
                     <height>48</height>
                     <texture>white.png</texture>
@@ -708,7 +708,7 @@
                 </control>
                 <control type="label">
                     <posx>82</posx>
-                    <posy>9</posy>
+                    <posy>30</posy>
                     <width>64</width>
                     <height>48</height>
                     <label>$INFO[ListItem.Property(initials)]</label>
@@ -723,9 +723,9 @@
 
         <control type="image">
             <posx>683</posx>
-            <posy>280</posy>
+            <posy>360</posy>
             <width>2</width>
-            <height>726</height>
+            <height>642</height>
             <texture>white.png</texture>
             <colordiffuse>ff3a3a3a</colordiffuse>
         </control>

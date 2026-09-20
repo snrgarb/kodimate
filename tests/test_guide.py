@@ -646,8 +646,8 @@ def test_visible_rows_at_least_one():
     assert guide.visible_rows(50, 98) == 1
 
 
-def test_visible_rows_dense_row_height_fits_eleven_rows():
-    assert guide.visible_rows(740, 66) == 11
+def test_visible_rows_dense_row_height_fits_six_rows():
+    assert guide.visible_rows(660, 107) == 6
 
 
 # -- date_label (issue #54) ---------------------------------------------------

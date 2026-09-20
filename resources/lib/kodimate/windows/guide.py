@@ -33,11 +33,11 @@ _RAIL_WIDTH = 150
 _PANEL_WIDTH = 385
 _LEFT_COL_WIDTH = 150
 _GRID_X = _RAIL_WIDTH + _PANEL_WIDTH + _LEFT_COL_WIDTH
-_STRIP_HEIGHT = 220
+_STRIP_HEIGHT = 300
 _HEADER_HEIGHT = 60
 _HINT_BAR_HEIGHT = 60
 _HINT_SLOT_COUNT = 5
-_ROW_HEIGHT = 66
+_ROW_HEIGHT = 107
 _GRID_WIDTH = 1920 - _GRID_X
 _POOL_COLS = 28  # real EPG data can pack ~24 short programmes into a 3h window
 
@@ -73,7 +73,7 @@ _DESC_TEXT_COLOR = 'FF8A8A8A'
 _DESC_CURSOR_TEXT_COLOR = 'FFE0E0E0'
 _DESC_PAST_TEXT_COLOR = 'FF606060'
 
-_TITLE_HEIGHT = 34
+_TITLE_HEIGHT = 40
 
 # Real Kodi's xbmcgui module does not export these action-id constants (only
 # xbmcgui.ACTION_MOVE_LEFT/RIGHT/UP/DOWN, ACTION_NAV_BACK, ACTION_PREVIOUS_MENU
@@ -648,8 +648,8 @@ class GuideWindow(BaseWindow):
                 image.setColorDiffuse(_CELL_COLOR)
                 progress = xbmcgui.ControlImage(0, 0, 1, _PROGRESS_HEIGHT, self._tex_cell)
                 progress.setColorDiffuse(_PROGRESS_COLOR)
-                label = xbmcgui.ControlLabel(0, 0, 1, _TITLE_HEIGHT, '', font='font10')
-                desc_label = xbmcgui.ControlLabel(0, 0, 1, _ROW_HEIGHT - _TITLE_HEIGHT, '', font='font20_title')
+                label = xbmcgui.ControlLabel(0, 0, 1, _TITLE_HEIGHT, '', font='font12')
+                desc_label = xbmcgui.ControlLabel(0, 0, 1, _ROW_HEIGHT - _TITLE_HEIGHT, '', font='font10')
                 added.append(image)
                 added.append(progress)
                 added.append(label)
