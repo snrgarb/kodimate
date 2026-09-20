@@ -1038,6 +1038,49 @@ def test_catchup_bar_width_survives_getTime_raising(tmp_path):
     assert window.getControl(704).getWidth() == 0
 
 
+def test_catchup_elapsed_after_rebuild_uses_getTime_directly_not_doubled(tmp_path):
+    # ffmpegdirect catchup mode already includes the session's buffer
+    # offset in getTime(): elapsed must be getTime() alone once AV has
+    # started, not offset + getTime() (which would double-count it).
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    snapshot['catchup_mode'] = 'shift'
+    start_dt = datetime(2026, 1, 1, 10, 0)
+    end_dt = datetime(2026, 1, 1, 11, 0)
+    catchup = {'start': 0, 'end': 3600, 'now': 3600, 'title': 'Old Show',
+               'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None, 'offset': 600}
+    window = _window(conn, snapshot, catchup=catchup)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.time = 610  # N + 10
+
+    assert window._catchup_elapsed_seconds() == 610
+
+
+def test_catchup_native_seek_within_programme_with_nonzero_offset_session(tmp_path):
+    conn = _conn(tmp_path)
+    provider_id, snapshot = _setup_channel_with_programmes(conn)
+    now = datetime(2026, 1, 1, 12, 30)
+    start_dt = datetime(2026, 1, 1, 12, 0)  # Show3 12:00-13:00, airing now
+    end_dt = datetime(2026, 1, 1, 13, 0)
+    catchup_dict = {
+        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
+        'title': 'Show3', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
+        'offset': 600,
+    }
+    window = _window(conn, snapshot, now_fn=FakeNow(now), catchup=catchup_dict)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 0
+    window.player.time = 700  # absolute elapsed position within the programme
+    window.setFocusId(SEEK_ROW_ID)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(0.75)
+
+    assert window.player.seek_calls == [690]
+    assert window.catchup is catchup_dict  # unchanged: native seek, no rebuild
+
 
 # -- generation change (issue #32) --------------------------------------
 

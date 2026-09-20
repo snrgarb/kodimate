@@ -6,6 +6,8 @@ testable without the Kodi fakes. `zone_offset_seconds` never raises --
 an unresolvable zone name (missing `zoneinfo`, unknown name, falsy
 input) yields an offset of 0, with a warning logged once per process.
 """
+import calendar
+import time
 from datetime import datetime, timezone
 
 _warned_zones = set()
@@ -34,3 +36,15 @@ def zone_offset_seconds(zone_name, epoch_utc):
     except Exception:
         _warn_once(zone_name)
         return 0
+
+
+def host_offset_seconds(epoch_utc):
+    """Seconds east of UTC that the Kodi host's local timezone observes at
+    `epoch_utc`.
+
+    Deliberate exception to urls.py's "never the host machine's local
+    timezone" convention: ffmpegdirect expands catchup wall-clock tokens in
+    the host's own localtime, so Kodimate must supply a matching
+    `timezone_shift` computed from this offset.
+    """
+    return calendar.timegm(time.localtime(epoch_utc)) - int(epoch_utc)

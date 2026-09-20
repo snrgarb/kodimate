@@ -539,10 +539,8 @@ class PlaybackWindow(xbmcgui.WindowXML):
             self._catchup_elapsed_seconds(), self._catchup_duration_seconds(),
         ))
         self.setProperty('next_title', '')
-        offset_seconds = self.session.catchup_offset_seconds if self.session is not None else 0
-        player_seconds = self._player_time_seconds()
         fraction = osd.catchup_progress_fraction(
-            self.catchup['start'], self.catchup['end'], offset_seconds, player_seconds,
+            self.catchup['start'], self.catchup['end'], 0, self._catchup_elapsed_seconds(),
         )
         self._set_progress(fraction)
 
@@ -552,8 +550,14 @@ class PlaybackWindow(xbmcgui.WindowXML):
         return max(0, self.catchup['end'] - self.catchup['start'])
 
     def _catchup_elapsed_seconds(self):
-        offset_seconds = self.session.catchup_offset_seconds if self.session is not None else 0
-        return offset_seconds + self._player_time_seconds()
+        # ffmpegdirect's catchup mode already includes the Attempt's buffer
+        # offset in getTime() (it adds catchup_buffer_offset to every pts),
+        # so once AV has started that call alone is the elapsed position
+        # within the programme; before it, fall back to the session's own
+        # offset (e.g. a rebuild landing mid-programme before playback begins).
+        if self._playing:
+            return self._player_time_seconds()
+        return self.session.catchup_offset_seconds if self.session is not None else 0
 
     def _near_catchup_end(self):
         duration = self._catchup_duration_seconds()
@@ -800,8 +804,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
 
     def _behind_live_seconds(self):
         if self.catchup:
-            offset_seconds = self.session.catchup_offset_seconds if self.session is not None else 0
-            position = self.catchup['start'] + offset_seconds + self._player_time_seconds()
+            position = self.catchup['start'] + self._catchup_elapsed_seconds()
             return max(0, _epoch(self.now_fn()) - position)
         total = self._player_total_seconds()
         return max(0, total - self._player_time_seconds())
@@ -887,14 +890,12 @@ class PlaybackWindow(xbmcgui.WindowXML):
             self._go_live_if_needed()
             return
         if self.catchup is not None and self.session is not None:
-            # A Catch-up stream is a fixed range [session_start, end] (the
-            # whole programme) requested from the Provider; Kodi's
-            # getTotalTime() for an HTTP TS file is frequently 0, so the
-            # range from our own Catch-up dict is the buffer, not
-            # getTotalTime().
-            session_start = self.catchup['start'] + self.session.catchup_offset_seconds
-            range_end = self.catchup['end']
-            in_buffer = (range_end - session_start) > 0 and 0 <= time_seconds + step < range_end - session_start
+            # ffmpegdirect catchup mode seeks within the programme itself
+            # (it expands catchup_url_format_string on every seek), so the
+            # natively seekable range is the whole programme; only leaving
+            # the programme replaces the session.
+            duration = self._catchup_duration_seconds()
+            in_buffer = duration > 0 and 0 <= time_seconds + step < duration
         else:
             in_buffer = total_seconds > 0 and 0 <= time_seconds + step <= total_seconds
         clamp = self.catchup is None and not self._catchup_window_days()

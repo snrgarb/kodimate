@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import time
 from datetime import datetime, timezone
 
 from kodimate import tz
@@ -26,3 +27,22 @@ def test_falsy_zone_name_is_zero():
 
 def test_unknown_zone_name_is_zero():
     assert tz.zone_offset_seconds('Not/AZone', _SEPTEMBER) == 0
+
+
+# ---------------------------------------------------------------------------
+# host_offset_seconds
+# ---------------------------------------------------------------------------
+
+def test_host_offset_seconds_matches_localtime(monkeypatch):
+    import time as time_module
+
+    def fake_localtime(epoch):
+        return time_module.gmtime(epoch - 14400)  # pretend host is UTC-4
+
+    monkeypatch.setattr(tz.time, 'localtime', fake_localtime)
+    assert tz.host_offset_seconds(_SEPTEMBER) == -14400
+
+
+def test_host_offset_seconds_utc_host_is_zero(monkeypatch):
+    monkeypatch.setattr(tz.time, 'localtime', time.gmtime)
+    assert tz.host_offset_seconds(_SEPTEMBER) == 0

@@ -880,6 +880,13 @@ def test_live_reconnect_attempt_carries_timeshift_properties():
     assert player.properties[1] == _TIMESHIFT_PROPERTIES
 
 
+_CATCHUP_PROPERTIES = {
+    'inputstream': 'inputstream.ffmpegdirect',
+    'inputstream.ffmpegdirect.stream_mode': 'catchup',
+    'inputstream.ffmpegdirect.is_realtime_stream': 'true',
+}
+
+
 def test_catchup_attempt_carries_no_timeshift_properties():
     catchup = {'start': 1000, 'end': 4600, 'now': 1500, 'offset': 0}
     session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
@@ -887,7 +894,177 @@ def test_catchup_attempt_carries_no_timeshift_properties():
 
     session.start()
 
-    assert player.properties[0] is None
+    properties = player.properties[0]
+    for key, value in _CATCHUP_PROPERTIES.items():
+        assert properties[key] == value
+    assert 'inputstream.ffmpegdirect.stream_mode' in properties
+    assert properties['inputstream.ffmpegdirect.stream_mode'] != 'timeshift'
+
+
+def test_catchup_attempt_xtream_path_and_query_format_strings_differ():
+    catchup = {'start': 1000, 'end': 4600, 'now': 1500, 'offset': 0}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(
+            _catchup_xtream_snapshot(catchup_url_form='path'), catchup, probe_results=[404],
+        )
+
+    session.start()
+    session.on_error()
+
+    assert len(player.plays) == 2
+    format1 = player.properties[0]['inputstream.ffmpegdirect.catchup_url_format_string']
+    format2 = player.properties[1]['inputstream.ffmpegdirect.catchup_url_format_string']
+    assert format1 != format2
+    assert '/timeshift/' in format1
+    assert '/streaming/timeshift.php' in format2
+    for properties in (player.properties[0], player.properties[1]):
+        for key, value in _CATCHUP_PROPERTIES.items():
+            assert properties[key] == value
+
+
+def test_catchup_attempt_m3u_shift_mode_carries_catchup_properties():
+    catchup = {'start': 1000, 'end': 4600, 'now': 1500, 'offset': 0}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(
+            _catchup_m3u_snapshot(
+                stream_url='http://host/live/u/p/42.ts', catchup_mode='shift',
+            ),
+            catchup,
+        )
+
+    session.start()
+
+    properties = player.properties[0]
+    for key, value in _CATCHUP_PROPERTIES.items():
+        assert properties[key] == value
+    assert 'utc={utc}' in properties['inputstream.ffmpegdirect.catchup_url_format_string']
+
+
+def test_catchup_timezone_shift_wall_clock_xtream():
+    september_start = 1789473600  # 2026-09-15 12:00 UTC -- America/Toronto is EDT (-14400)
+    catchup = {
+        'start': september_start, 'end': september_start + 3600, 'now': september_start + 500,
+        'offset': 0,
+    }
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(
+            _catchup_xtream_snapshot(
+                server_timezone='America/Toronto', provider_catchup_correction_hours=1.0,
+            ),
+            catchup,
+        )
+    session.host_offset = lambda epoch: 3600
+
+    session.start()
+
+    properties = player.properties[0]
+    # host_offset(3600) - zone_offset(-14400, EDT) + correction(3600) = 3600+14400+3600
+    assert properties['inputstream.ffmpegdirect.timezone_shift'] == str(3600 + 14400 + 3600)
+
+
+def test_catchup_timezone_shift_epoch_only_m3u_is_correction_only():
+    catchup = {'start': 1000, 'end': 4600, 'now': 1500, 'offset': 0}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(
+            _catchup_m3u_snapshot(
+                stream_url='http://host/live/u/p/42.ts', catchup_mode='shift',
+                provider_catchup_correction_hours=2.0,
+            ),
+            catchup,
+        )
+    session.host_offset = lambda epoch: 9999  # must be ignored (epoch-only template)
+
+    session.start()
+
+    properties = player.properties[0]
+    assert properties['inputstream.ffmpegdirect.timezone_shift'] == str(2 * 3600)
+
+
+def test_catchup_playback_as_live_true_for_airing_programme():
+    catchup = {'start': 1000, 'end': 4600, 'now': 1500, 'offset': 0}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup)
+
+    session.start()
+
+    assert player.properties[0]['inputstream.ffmpegdirect.playback_as_live'] == 'true'
+
+
+def test_catchup_playback_as_live_false_for_past_programme():
+    catchup = {'start': 1000, 'end': 1200, 'now': 5000, 'offset': 0}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup)
+
+    session.start()
+
+    assert player.properties[0]['inputstream.ffmpegdirect.playback_as_live'] == 'false'
+
+
+def test_catchup_programme_catchup_id_present_only_when_set():
+    catchup = {'start': 1000, 'end': 4600, 'now': 1500, 'offset': 0, 'catchup_id': 'abc123'}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup)
+
+    session.start()
+
+    assert player.properties[0]['inputstream.ffmpegdirect.programme_catchup_id'] == 'abc123'
+
+
+def test_catchup_programme_catchup_id_absent_when_not_set():
+    catchup = {'start': 1000, 'end': 4600, 'now': 1500, 'offset': 0}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup)
+
+    session.start()
+
+    assert 'inputstream.ffmpegdirect.programme_catchup_id' not in player.properties[0]
+
+
+def test_catchup_header_pipe_appended_to_format_string_and_default_url():
+    catchup = {'start': 1000, 'end': 4600, 'now': 1500, 'offset': 0}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(
+            _catchup_xtream_snapshot(user_agent='Kodimate/1.0'), catchup,
+        )
+
+    session.start()
+
+    properties = player.properties[0]
+    assert '|User-Agent=Kodimate%2F1.0' in properties['inputstream.ffmpegdirect.catchup_url_format_string']
+    assert '|User-Agent=Kodimate%2F1.0' in properties['inputstream.ffmpegdirect.default_url']
+
+
+def test_catchup_source_own_pipe_is_not_doubled_by_headers_pipe():
+    catchup = {'start': 1000, 'end': 4600, 'now': 1500, 'offset': 0}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(
+            _catchup_m3u_snapshot(
+                stream_url='http://host/live/u/p/42.ts',
+                catchup_mode='default',
+                catchup_source='http://foo/x?u={utc}|Referer=x',
+                user_agent='Kodimate/1.0',
+            ),
+            catchup,
+        )
+
+    session.start()
+
+    format_string = player.properties[0]['inputstream.ffmpegdirect.catchup_url_format_string']
+    assert format_string.endswith('|Referer=x')
+    assert format_string.count('|') == 1
+
+
+def test_catchup_m3u8_template_gets_manifest_type_hls():
+    catchup = {'start': 1000, 'end': 4600, 'now': 1500, 'offset': 0}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(
+            _catchup_xtream_snapshot(stream_format='m3u8'), catchup,
+        )
+
+    session.start()
+
+    assert player.properties[0]['inputstream.ffmpegdirect.manifest_type'] == 'hls'
+    assert player.mime_types[0] == 'application/x-mpegURL'
 
 
 def test_reconnect_attempt_calls_resolver_again():

@@ -14,9 +14,10 @@ import json
 import threading
 
 try:
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, urlencode
 except ImportError:  # pragma: no cover - Python 2 fallback, unused on target
     from urlparse import urlparse
+    from urllib import urlencode
 
 from . import fetch
 from . import log as log_module
@@ -96,12 +97,13 @@ def resolve_redirect(url, headers):
     return fetch.resolve_redirect(url, headers=headers)
 
 
-def _mime_type_for(url):
+def _apply_manifest_mime(url, properties):
     path = urlparse(url).path
     if path.endswith('.ts'):
         return 'video/mp2t'
     if path.endswith('.m3u8'):
-        return 'application/vnd.apple.mpegurl'
+        properties['inputstream.ffmpegdirect.manifest_type'] = 'hls'
+        return 'application/x-mpegURL'
     return None
 
 
@@ -111,18 +113,18 @@ _TIMESHIFT_PROPERTIES = {
     'inputstream.ffmpegdirect.is_realtime_stream': 'true',
 }
 
+_CATCHUP_PROPERTIES = {
+    'inputstream': 'inputstream.ffmpegdirect',
+    'inputstream.ffmpegdirect.stream_mode': 'catchup',
+    'inputstream.ffmpegdirect.is_realtime_stream': 'true',
+}
+
 
 def _live_mime_and_properties(url):
     """Every live Attempt hands off to inputstream.ffmpegdirect in timeshift
     mode (issue #73) so pause/resume is native."""
-    path = urlparse(url).path
     properties = dict(_TIMESHIFT_PROPERTIES)
-    if path.endswith('.ts'):
-        return 'video/mp2t', properties
-    if path.endswith('.m3u8'):
-        properties['inputstream.ffmpegdirect.manifest_type'] = 'hls'
-        return 'application/x-mpegURL', properties
-    return None, properties
+    return _apply_manifest_mime(url, properties), properties
 
 
 class _TimerHandle(object):
@@ -154,13 +156,15 @@ def _classify(probe_status, kind):
 class PlaybackSession(object):
     def __init__(self, snapshot, player, probe, scheduler, clock,
                  persist_learned_form, on_state, logger=None,
-                 catchup=None, persist_catchup_form=None, resolver=None):
+                 catchup=None, persist_catchup_form=None, resolver=None,
+                 host_offset=None):
         self.snapshot = snapshot
         self.player = player
         self.probe = probe
         self.scheduler = scheduler
         self.clock = clock
         self.resolver = resolver if resolver is not None else resolve_redirect
+        self.host_offset = host_offset if host_offset is not None else tz.host_offset_seconds
         self.persist_learned_form = persist_learned_form
         self.on_state = on_state
         self.logger = logger if logger is not None else log_module
@@ -402,7 +406,7 @@ class PlaybackSession(object):
         if self.catchup is None:
             mime_type, properties = _live_mime_and_properties(self._current_url)
         else:
-            mime_type, properties = _mime_type_for(self._current_url), None
+            mime_type, properties = self._catchup_mime_and_properties(self._form)
         self.player.play(play_url, self._current_headers, mime_type=mime_type, properties=properties)
         self._arm_start_timer()
         self.on_state(self.state, None)
@@ -466,6 +470,79 @@ class PlaybackSession(object):
         if 'User-Agent' not in headers and snapshot.get('user_agent'):
             headers['User-Agent'] = snapshot['user_agent']
         return url, headers
+
+    def _catchup_mime_and_properties(self, form):
+        """Catch-up Attempt property set (issue #75 part 2): hands
+        ffmpegdirect the catchup-mode format string and programme/buffer
+        times so it performs seeking/skipping itself. `spec` is guaranteed
+        non-None here -- it is None in exactly the cases
+        `_catchup_url_and_headers` already returns None for, which
+        `_begin_attempt` has already failed the Attempt on before this is
+        called."""
+        snapshot = self.snapshot
+        spec = urls.catchup_format_spec(snapshot, form)
+        headers = dict(snapshot.get('headers') or {})
+        if 'User-Agent' not in headers and snapshot.get('user_agent'):
+            headers['User-Agent'] = snapshot['user_agent']
+        pipe = '|' + urlencode(headers) if headers else ''
+
+        properties = dict(_CATCHUP_PROPERTIES)
+        mime_type = _apply_manifest_mime(self._current_url, properties)
+
+        if snapshot['kind'] == 'xtream':
+            correction = urls.correction_seconds(None, snapshot.get('provider_catchup_correction_hours'))
+            default_url = urls.xtream_live_url(
+                snapshot['xtream_host'], snapshot['xtream_username'],
+                snapshot['xtream_password'], snapshot['channel_key'],
+                urls.live_form(snapshot, snapshot.get('allowed_output_formats')),
+            )
+        else:
+            correction = urls.correction_seconds(
+                snapshot.get('catchup_correction_hours'), snapshot.get('provider_catchup_correction_hours'),
+            )
+            default_url = urls.m3u_live_url(snapshot)
+
+        start = self.catchup['start']
+        if spec['wall_clock']:
+            shift = (
+                self.host_offset(start)
+                - tz.zone_offset_seconds(snapshot.get('server_timezone'), start)
+                + correction
+            )
+        else:
+            shift = correction
+
+        _, _, now = self._catchup_times()
+        # A user catchup-source template may already carry its own
+        # '|Key=Value' pipe (urls.m3u_catchup_template keeps it verbatim);
+        # only append ours when the string doesn't already have one, same
+        # rule as urls._finish.
+        properties['inputstream.ffmpegdirect.default_url'] = (
+            default_url if '|' in default_url else default_url + pipe
+        )
+        properties['inputstream.ffmpegdirect.playback_as_live'] = (
+            'true' if self.catchup['end'] > now else 'false'
+        )
+        properties['inputstream.ffmpegdirect.programme_start_time'] = str(self.catchup['start'])
+        properties['inputstream.ffmpegdirect.programme_end_time'] = str(self.catchup['end'])
+        format_string = spec['format_string']
+        properties['inputstream.ffmpegdirect.catchup_url_format_string'] = (
+            format_string if '|' in format_string else format_string + pipe
+        )
+        properties['inputstream.ffmpegdirect.catchup_buffer_start_time'] = str(self.catchup['start'])
+        properties['inputstream.ffmpegdirect.catchup_buffer_end_time'] = str(self.catchup['end'])
+        properties['inputstream.ffmpegdirect.catchup_buffer_offset'] = str(self._catchup_offset_seconds)
+        properties['inputstream.ffmpegdirect.catchup_granularity'] = str(spec['granularity'])
+        properties['inputstream.ffmpegdirect.catchup_terminates'] = (
+            'true' if urls.catchup_terminates(spec['format_string']) else 'false'
+        )
+        properties['inputstream.ffmpegdirect.timezone_shift'] = str(shift)
+        properties['inputstream.ffmpegdirect.default_programme_duration'] = '14400'
+        catchup_id = self.catchup.get('catchup_id')
+        if catchup_id is not None:
+            properties['inputstream.ffmpegdirect.programme_catchup_id'] = str(catchup_id)
+
+        return mime_type, properties
 
     def _url_and_headers(self, form):
         if self.catchup is not None:

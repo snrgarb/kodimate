@@ -146,18 +146,6 @@ def _finish(result, template_has_pipe, pipe):
     return result
 
 
-def _append_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds=0):
-    if source:
-        appended = substitute_template(source, start, end, now, catchup_id, local_offset_seconds)
-        has_own_pipe = '|' in source
-    else:
-        appended = substitute_template(
-            '?utc={utc}&lutc={lutc}', start, end, now, catchup_id, local_offset_seconds
-        )
-        has_own_pipe = False
-    return _finish(live_url + appended, has_own_pipe, pipe)
-
-
 # Xtream-Codes-style live URL: http://host/[live/]user/pass/id[.ext]
 _XC_LIVE_RE = re.compile(
     r'^(?P<host>https?://[^/]+)/(?:live/)?(?P<user>[^/]+)/(?P<pass>[^/]+)'
@@ -204,22 +192,22 @@ def _flussonic_template(live_url, mode):
     return base + suffix + query
 
 
-def _default_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds=0):
+def _default_template(live_url, source, pipe):
     if source:
-        result = substitute_template(source, start, end, now, catchup_id, local_offset_seconds)
-        return _finish(result, '|' in source, pipe)
+        return _finish(source, '|' in source, pipe)
     # No catchup-source: only an XC-shaped live URL can produce a Catch-up
     # URL here. pvr.iptvsimple's own `?utc=&lutc=` append is SHIFT-mode-only
     # and is never used as a `default` fallback (docs/research/xtream-timeshift-over-m3u.md).
     template = _xc_template(live_url)
     if template is None:
         return None
-    result = substitute_template(template, start, end, now, catchup_id, local_offset_seconds)
-    return _finish(result, '|' in template, pipe)
+    return _finish(template, '|' in template, pipe)
 
 
-def m3u_catchup_url(channel, start, end, now, catchup_id=None, local_offset_seconds=0):
-    """Build the catch-up URL for an M3U channel, dispatching on catchup_mode.
+def m3u_catchup_template(channel):
+    """Return the unexpanded catch-up URL template for an M3U `channel`,
+    dispatching on catchup_mode -- the same template `m3u_catchup_url`
+    expands, including the `_finish` pipe-suffix behaviour.
 
     Returns None when the channel's mode cannot produce a Catch-up URL
     (`default` mode, no `catchup_source`, and a non-XC-shaped live URL).
@@ -233,37 +221,46 @@ def m3u_catchup_url(channel, start, end, now, catchup_id=None, local_offset_seco
     source = channel.get('catchup_source')
 
     if mode == 'append':
-        return _append_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds)
+        if source:
+            return _finish(live_url + source, '|' in source, pipe)
+        return _finish(live_url + '?utc={utc}&lutc={lutc}', False, pipe)
 
     if mode in ('shift', 'timeshift'):
         sep = '&' if '?' in live_url else '?'
         template = live_url + sep + 'utc={utc}&lutc={lutc}'
-        result = substitute_template(template, start, end, now, catchup_id, local_offset_seconds)
-        return _finish(result, False, pipe)
+        return _finish(template, False, pipe)
 
     if mode in ('flussonic', 'flussonic-hls', 'flussonic-ts', 'fs'):
         template = _flussonic_template(live_url, mode)
         if template is None:
-            return _default_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds)
-        result = substitute_template(template, start, end, now, catchup_id, local_offset_seconds)
-        return _finish(result, '|' in template, pipe)
+            return _default_template(live_url, source, pipe)
+        return _finish(template, '|' in template, pipe)
 
     if mode == 'xc':
         template = _xc_template(live_url)
         if template is None:
-            return _default_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds)
-        result = substitute_template(template, start, end, now, catchup_id, local_offset_seconds)
-        return _finish(result, '|' in template, pipe)
+            return _default_template(live_url, source, pipe)
+        return _finish(template, '|' in template, pipe)
 
     if mode == 'vod':
         if source:
-            result = substitute_template(source, start, end, now, catchup_id, local_offset_seconds)
-            return _finish(result, '|' in source, pipe)
-        result = substitute_template('{catchup-id}', start, end, now, catchup_id, local_offset_seconds)
-        return _finish(result, False, pipe)
+            return _finish(source, '|' in source, pipe)
+        return _finish('{catchup-id}', False, pipe)
 
     # 'default' (and anything unrecognized, normalized above)
-    return _default_mode(live_url, source, start, end, now, catchup_id, pipe, local_offset_seconds)
+    return _default_template(live_url, source, pipe)
+
+
+def m3u_catchup_url(channel, start, end, now, catchup_id=None, local_offset_seconds=0):
+    """Build the catch-up URL for an M3U channel, dispatching on catchup_mode.
+
+    Returns None when the channel's mode cannot produce a Catch-up URL
+    (`default` mode, no `catchup_source`, and a non-XC-shaped live URL).
+    """
+    template = m3u_catchup_template(channel)
+    if template is None:
+        return None
+    return substitute_template(template, start, end, now, catchup_id, local_offset_seconds)
 
 
 _FINE_GRAIN_TOKEN_RE = re.compile(r'\$?\{(?:utc|start)\}|\$?\{S\}')
@@ -297,32 +294,7 @@ def catchup_granularity_seconds(snapshot):
     this granularity before rebuilding."""
     if snapshot.get('kind') != 'm3u':
         return 60  # Xtream: '%Y-%m-%d:%H-%M' path/query stamp, minute precision
-    stream_url = snapshot.get('stream_url') or ''
-    live_url, _pipe = _split_pipe(stream_url)
-    mode = (snapshot.get('catchup_mode') or 'default').strip().lower()
-    if mode not in _KNOWN_MODES:
-        mode = 'default'
-    source = snapshot.get('catchup_source')
-
-    if mode == 'append':
-        return _template_granularity_seconds(source or '?utc={utc}&lutc={lutc}')
-    if mode in ('shift', 'timeshift'):
-        sep = '&' if '?' in live_url else '?'
-        return _template_granularity_seconds(live_url + sep + 'utc={utc}&lutc={lutc}')
-    if mode in ('flussonic', 'flussonic-hls', 'flussonic-ts', 'fs'):
-        template = _flussonic_template(live_url, mode)
-        return _template_granularity_seconds(template) if template is not None else 60
-    if mode == 'xc':
-        template = _xc_template(live_url)
-        return _template_granularity_seconds(template) if template is not None else 60
-    if mode == 'vod':
-        return _template_granularity_seconds(source or '{catchup-id}')
-
-    # 'default'
-    if source:
-        return _template_granularity_seconds(source)
-    template = _xc_template(live_url)
-    return _template_granularity_seconds(template) if template is not None else 60
+    return _template_granularity_seconds(m3u_catchup_template(snapshot))
 
 
 def m3u_catchup_supported(channel):
@@ -363,3 +335,116 @@ def xtream_local_start(start_epoch, tz_offset_seconds, provider):
         - int(float(provider.get('catchup_correction_hours') or 0) * 3600)
     )
     return datetime.utcfromtimestamp(corrected)
+
+
+# Same token grammar as _TOKEN_RE, but with the leading '$' captured
+# separately so `to_ffmpegdirect_format` can tell which spelling was used.
+_REWRITE_TOKEN_RE = re.compile(
+    r'(?P<dollar>\$)?\{(?P<name>utc|utcend|lutc|start|end|now|timestamp'
+    r'|duration|offset|catchup-id|Y|m|d|H|M|S)(?::(?P<fmt>[^}]*))?\}'
+)
+
+# name -> ffmpegdirect's bare-epoch token name (no `:fmt`)
+_FFMPEGDIRECT_EPOCH_NAME = {
+    'utc': 'utc', 'start': 'utc',
+    'utcend': 'utcend', 'end': 'utcend',
+    'lutc': 'lutc', 'now': 'lutc', 'timestamp': 'lutc',
+}
+
+# name -> ffmpegdirect's `:fmt` mini-language token name, for the names
+# that ffmpegdirect only accepts in `${name:fmt}` form
+_FFMPEGDIRECT_DOLLAR_FMT_NAME = {'start': 'start', 'end': 'end', 'now': 'now', 'timestamp': 'now'}
+
+
+def to_ffmpegdirect_format(template):
+    """Rewrite every Kodimate-accepted catch-up token in `template` to
+    ffmpegdirect's exact expected spelling (see FFmpegCatchupStream.cpp).
+    Tokens outside its vocabulary (bare `{offset}`/`{start}`/`{end}`/
+    `{now}`/`{timestamp}`, `${utc}`/`${lutc}`/`${utcend}`, `${Y}`.., the
+    `$`-less `{start:fmt}`/`{end:fmt}`/`{now:fmt}`/`{timestamp:fmt}`, and
+    `${offset:N}`/`${duration:N}`) are converted to the spelling it does
+    support. Anything else is left untouched."""
+    def _repl(m):
+        name = m.group('name')
+        fmt = m.group('fmt')
+
+        if name == 'catchup-id':
+            return '{catchup-id}'
+
+        if name in ('Y', 'm', 'd', 'H', 'M', 'S'):
+            return '{' + name + ('' if fmt is None else ':' + fmt) + '}'
+
+        if name == 'duration':
+            return '{duration' + ('' if fmt is None else ':' + fmt) + '}'
+
+        if name == 'offset':
+            if fmt is not None:
+                return '{offset:' + fmt + '}'
+            return '${offset}'
+
+        if fmt is not None:
+            if name in _FFMPEGDIRECT_DOLLAR_FMT_NAME:
+                return '${' + _FFMPEGDIRECT_DOLLAR_FMT_NAME[name] + ':' + fmt + '}'
+            return '{' + name + ':' + fmt + '}'
+        return '{' + _FFMPEGDIRECT_EPOCH_NAME[name] + '}'
+
+    return _REWRITE_TOKEN_RE.sub(_repl, template)
+
+
+def xtream_catchup_format(host, username, password, stream_id, form='path', ext='ts'):
+    """Xtream catch-up format string, in ffmpegdirect's own token
+    vocabulary, path or query form. `{duration:60}` and
+    `{Y}-{m}-{d}:{H}-{M}` are already ffmpegdirect-native spellings --
+    they render the same minute-stamped path/duration as
+    `xtream_catchup_url`."""
+    host = _strip_trailing_slash(host)
+    if form == 'query':
+        return (
+            '{0}/streaming/timeshift.php?username={1}&password={2}'
+            '&stream={3}&start={{Y}}-{{m}}-{{d}}:{{H}}-{{M}}&duration={{duration:60}}'
+        ).format(host, username, password, stream_id)
+    return '{0}/timeshift/{1}/{2}/{{duration:60}}/{{Y}}-{{m}}-{{d}}:{{H}}-{{M}}/{3}.{4}'.format(
+        host, username, password, stream_id, ext
+    )
+
+
+_WALL_CLOCK_RE = re.compile(
+    r'\{[YmdHMS]\}|\{utc:|\$\{start:|\{utcend:|\$\{end:|\{lutc:|\$\{now:|\$\{timestamp:'
+)
+
+
+def template_wall_clock(format_string):
+    """True iff `format_string` (already in ffmpegdirect's token
+    vocabulary) renders a host-localtime wall-clock component: a bare
+    Y/m/d/H/M/S component or a `:fmt` mini-language token."""
+    return bool(format_string) and bool(_WALL_CLOCK_RE.search(format_string))
+
+
+def catchup_format_spec(snapshot, form='path'):
+    """`{'format_string', 'granularity', 'wall_clock'}` ffmpegdirect can
+    expand for the Playback Session `snapshot`'s catch-up window, or None
+    when no template can be built for it."""
+    if snapshot.get('kind') == 'xtream':
+        ext = live_form(snapshot, snapshot.get('allowed_output_formats'))
+        format_string = xtream_catchup_format(
+            snapshot.get('xtream_host'), snapshot.get('xtream_username'),
+            snapshot.get('xtream_password'), snapshot.get('channel_key'), form, ext,
+        )
+        return {'format_string': format_string, 'granularity': 60, 'wall_clock': True}
+
+    template = m3u_catchup_template(snapshot)
+    if template is None:
+        return None
+    format_string = to_ffmpegdirect_format(template)
+    return {
+        'format_string': format_string,
+        'granularity': _template_granularity_seconds(template),
+        'wall_clock': template_wall_clock(format_string),
+    }
+
+
+def catchup_terminates(format_string):
+    """True iff `format_string` contains a `{duration` token: such a
+    stream ends at the requested duration, so ffmpegdirect must chain a
+    continuing stream at EOF."""
+    return bool(format_string) and '{duration' in format_string
