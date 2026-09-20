@@ -64,11 +64,11 @@ so the `pages` job fails on a tag push until you add a tag rule: Settings ->
 Environments -> github-pages -> Deployment branches and tags -> add `v*`
 (or `gh api -X POST repos/snrgarb/kodimate/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag`).
 
-To install as a Kodi user: open `https://snrgarb.github.io/kodimate/` and
-download the repository zip linked there (`index.html` links to the current
-`repository.kodimate-<version>.zip`), "Install from zip" in Kodi, then
-install Kodimate from the "Kodimate Repository" that appears. Updates to
-Kodimate arrive automatically through the repository.
+To install as a Kodi user: Settings -> File manager -> Add source ->
+`https://snrgarb.github.io/kodimate/` (name it e.g. `kodimate`) -> Add-ons ->
+Install from zip file -> `kodimate` -> `repository.kodimate` -> the zip ->
+then Install from repository -> Kodimate Repository -> Video add-ons ->
+Kodimate. Updates to Kodimate arrive automatically through the repository.
 
 For a local preview of the site, run `scripts/release/build_site.py
 --addon-zip dist/script.kodimate-<version>.zip --out site` and serve it with

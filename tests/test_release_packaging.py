@@ -159,5 +159,46 @@ def test_build_site_produces_expected_layout(tmp_path):
     assert "repository.kodimate/addon.xml" in names
 
     index_html = (out_dir / "index.html").read_text()
-    assert "script.kodimate-0.1.0.zip" in index_html
-    assert "repository.kodimate-1.0.0.zip" in index_html
+    assert "repository.kodimate/" in index_html
+    assert "script.kodimate/" in index_html
+
+
+def test_root_index_html_links_are_kodi_httpdirectory_compatible(tmp_path):
+    """Kodi's CHTTPDirectory only follows <a href> links that are a bare
+    filename or a bare directory name ending in "/" -- no nested paths."""
+    import build_site
+
+    addon_zip = tmp_path / "script.kodimate-0.1.0.zip"
+    _make_fake_addon_zip(str(addon_zip))
+    out_dir = tmp_path / "site"
+
+    build_site.main(["--addon-zip", str(addon_zip), "--out", str(out_dir)])
+
+    index_html = (out_dir / "index.html").read_text()
+    hrefs = re.findall(r'href="([^"]+)"', index_html)
+    assert "repository.kodimate/" in hrefs
+    assert "script.kodimate/" in hrefs
+    assert "addons.xml" in hrefs
+    assert "addons.xml.md5" in hrefs
+    for href in hrefs:
+        assert not (href.startswith(".") or href.startswith("/")), href
+        if "/" in href:
+            assert href.endswith("/") and href.count("/") == 1, href
+
+
+def test_subdirectory_index_html_files_exist(tmp_path):
+    import build_site
+
+    addon_zip = tmp_path / "script.kodimate-0.1.0.zip"
+    _make_fake_addon_zip(str(addon_zip))
+    out_dir = tmp_path / "site"
+
+    build_site.main(["--addon-zip", str(addon_zip), "--out", str(out_dir)])
+
+    repo_index = (out_dir / "repository.kodimate" / "index.html").read_text()
+    assert 'href="repository.kodimate-1.0.0.zip"' in repo_index
+    assert 'href="icon.png"' in repo_index
+
+    script_index = (out_dir / "script.kodimate" / "index.html").read_text()
+    assert 'href="script.kodimate-0.1.0.zip"' in script_index
+    assert 'href="icon.png"' in script_index
