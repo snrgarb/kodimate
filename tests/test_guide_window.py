@@ -184,11 +184,17 @@ def _third_of_grid(grid_width):
     return int(round(grid_width / 3.0))
 
 
-def test_empty_row_shows_next_programme_hint(tmp_path):
+def test_empty_row_shows_next_programme_hint(tmp_path, monkeypatch):
     # Issue #62: a channel with no Programme anywhere in the 3-hour
     # viewport gets a spanning filler that reads "No Event Scheduled" plus
     # a "Next: ..." hint for the first later Programme, instead of the
     # plain "No information" filler.
+    #
+    # The clock is frozen (rather than using the real wall clock) so the
+    # expected "Later Show (String 32130 HH:MM)" label doesn't drift with
+    # the time of day the test happens to run.
+    monkeypatch.setattr(win_guide, 'datetime', _FakeDatetime)
+    _FakeDatetime._now = datetime(2026, 1, 5, 12, 0)
     conn = _conn(tmp_path)
     try:
         pid = _provider(conn)
@@ -196,7 +202,8 @@ def test_empty_row_shows_next_programme_hint(tmp_path):
         eid = _epg_source(conn, pid)
         window = _window(conn)
         viewport_start = window._viewport_start
-        _programme(conn, eid, "x1", guide.format_iso(viewport_start + timedelta(hours=5)),
+        programme_start = viewport_start + timedelta(hours=5)
+        _programme(conn, eid, "x1", guide.format_iso(programme_start),
                    guide.format_iso(viewport_start + timedelta(hours=6)), "Later Show")
         window._load_programmes()
         window._relayout()
@@ -209,8 +216,14 @@ def test_empty_row_shows_next_programme_hint(tmp_path):
         assert 'String 32140' not in cells[0]['secondary']
         # The fake addon's strings.po has no '%s' placeholder, so the
         # fallback returns the hint unformatted rather than fabricating
-        # English text (mirrors _format_remaining's own fallback).
-        assert cells[0]['secondary'] == 'Later Show (String 32130 18:00)'
+        # English text (mirrors _format_remaining's own fallback). The
+        # expected hint is computed the same way the window builds it, so
+        # the assertion stays correct regardless of the machine's timezone.
+        expected_hint = guide.next_programme_hint(
+            [{'start': programme_start, 'title': 'Later Show'}],
+            guide.viewport_end(viewport_start), _FakeDatetime._now, 'String 32130', tz=window._tz,
+        )
+        assert cells[0]['secondary'] == expected_hint
 
         _no_event_image, no_event_label, no_event_desc = window._pool[0][0]
         assert no_event_label.getLabel() == '[COLOR FFCCCCCC]String 32139[/COLOR]'
