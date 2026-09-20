@@ -5,6 +5,7 @@
        provider-name="snrgarb">
     <requires>
         <import addon="xbmc.python" version="3.0.0"/>
+        <import addon="inputstream.ffmpegdirect" version="21.3.8"/>
     </requires>
     <extension point="xbmc.python.script" library="default.py">
         <provides>video</provides>
