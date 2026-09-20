@@ -43,33 +43,78 @@ class EpgTooLarge(Exception):
 
 _DOCTYPE_NEEDLE = b'<!DOCTYPE'
 
+# A legitimate XMLTV DOCTYPE is one short line; an unresolved declaration
+# longer than this is treated as malformed rather than buffered indefinitely.
+_MAX_DOCTYPE_BYTES = 4096
+
 
 class _GuardedReader(object):
     """Wraps the (possibly decompressed) XMLTV file object: raises
     EpgTooLarge once cumulative bytes read exceed MAX_XMLTV_BYTES (checked
     against the module attribute on every call, so tests can lower it), and
-    raises ET.ParseError on a DOCTYPE prologue (blocks entity-expansion /
-    billion-laughs attacks; XMLTV feeds never need a DTD). ET.XMLParser's
-    C-accelerated implementation doesn't expose the underlying expat parser
-    for a StartDoctypeDeclHandler, so this is a stream-level check instead;
-    keeps the last few bytes of each chunk to catch a needle split across a
-    read boundary."""
+    raises ET.ParseError on a DOCTYPE with an internal subset (a `[` outside
+    any quoted literal, before the declaration's closing `>`, also outside
+    any quoted literal), which is what entity-expansion / billion-laughs
+    attacks require; a DOCTYPE that only references an external DTD (name /
+    PUBLIC / SYSTEM literals, no unquoted `[...]`) is harmless with expat,
+    which never fetches external DTDs by default, and is passed through
+    unchanged. The scan is quote-aware (a `'...'` or `"..."` literal may
+    itself contain `[` or `>` without those counting) and size-capped at
+    _MAX_DOCTYPE_BYTES, so a declaration that never resolves can't be used to
+    stall the guard. ET.XMLParser's C-accelerated implementation doesn't
+    expose the underlying expat parser for a StartDoctypeDeclHandler, so this
+    is a stream-level check instead; it buffers from the point the DOCTYPE
+    needle is seen until the declaration's unquoted `[` or `>` is found, so
+    both the needle and the declaration itself may straddle a read
+    boundary."""
 
     def __init__(self, fileobj):
         self._fileobj = fileobj
         self._count = 0
         self._tail = b''
+        self._pending = None
 
     def read(self, *args, **kwargs):
         chunk = self._fileobj.read(*args, **kwargs)
         self._count += len(chunk)
         if self._count > MAX_XMLTV_BYTES:
             raise EpgTooLarge('EPG document exceeds max size')
-        window = self._tail + chunk
-        if _DOCTYPE_NEEDLE in window:
-            raise ET.ParseError('DOCTYPE not allowed')
-        self._tail = window[-(len(_DOCTYPE_NEEDLE) - 1):]
+        if self._pending is not None:
+            self._pending += chunk
+            self._resolve_pending()
+        else:
+            self._scan_window(self._tail + chunk)
         return chunk
+
+    def _scan_window(self, window):
+        idx = window.find(_DOCTYPE_NEEDLE)
+        if idx == -1:
+            self._tail = window[-(len(_DOCTYPE_NEEDLE) - 1):]
+        else:
+            self._pending = window[idx:]
+            self._resolve_pending()
+
+    def _resolve_pending(self):
+        quote = None
+        i = 0
+        n = len(self._pending)
+        while i < n:
+            if i >= _MAX_DOCTYPE_BYTES:
+                raise ET.ParseError('DOCTYPE not allowed')
+            ch = self._pending[i:i + 1]
+            if quote is not None:
+                if ch == quote:
+                    quote = None
+            elif ch in (b'"', b"'"):
+                quote = ch
+            elif ch == b'[':
+                raise ET.ParseError('DOCTYPE not allowed')
+            elif ch == b'>':
+                remainder = self._pending[i + 1:]
+                self._pending = None
+                self._scan_window(remainder)
+                return
+            i += 1
 
 
 def strip_source_suffix(value):

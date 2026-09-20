@@ -214,6 +214,145 @@ def test_doctype_prologue_raises_parse_error_and_leaves_programme_untouched(tmp_
         conn.execute("SELECT * FROM programme_staging")
 
 
+def test_dtd_only_doctype_loads_successfully(tmp_path):
+    conn, src = _make_conn(tmp_path)
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE tv SYSTEM "xmltv.dtd">\n'
+    ) + _XML.split('\n', 1)[1]
+
+    epg.load_xmltv(conn, src, _stream(xml), '2024-01-01T00:00:00Z')
+
+    assert len(_programme_rows(conn, src)) == 1
+
+
+class _TinyChunkReader(object):
+    """Wraps a bytes payload, returning at most `chunk_size` bytes per read
+    regardless of the size requested, to force a DOCTYPE declaration to
+    straddle multiple _GuardedReader.read() calls."""
+
+    def __init__(self, data, chunk_size=7):
+        self._buf = io.BytesIO(data)
+        self._chunk_size = chunk_size
+
+    def read(self, *args, **kwargs):
+        return self._buf.read(self._chunk_size)
+
+
+def test_dtd_only_doctype_split_across_chunk_boundary_loads_successfully():
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE tv SYSTEM "xmltv.dtd">\n'
+    ) + _XML.split('\n', 1)[1]
+    data = xml.encode('utf-8')
+
+    reader = epg._GuardedReader(_TinyChunkReader(data))
+    collected = b''.join(iter(lambda: reader.read(4096), b''))
+
+    assert collected == data
+
+
+def test_internal_subset_doctype_split_across_chunk_boundary_raises_parse_error():
+    data = (
+        '<?xml version="1.0"?>'
+        '<!DOCTYPE tv [<!ENTITY a "x">]>'
+        '<tv></tv>'
+    ).encode('utf-8')
+
+    reader = epg._GuardedReader(_TinyChunkReader(data))
+    with pytest.raises(ET.ParseError):
+        while reader.read(4096):
+            pass
+
+
+def _read_all(reader, chunk_request_size):
+    while reader.read(chunk_request_size):
+        pass
+
+
+def test_quoted_close_bracket_bypass_double_quotes_raises_parse_error():
+    data = b'<!DOCTYPE tv SYSTEM "a>b" [<!ENTITY a "x">]>'
+
+    for chunk_request_size in (7, 4096):
+        reader = epg._GuardedReader(_TinyChunkReader(data, chunk_size=7))
+        with pytest.raises(ET.ParseError):
+            _read_all(reader, chunk_request_size)
+
+
+def test_quoted_close_bracket_bypass_single_quotes_raises_parse_error():
+    data = b"<!DOCTYPE tv SYSTEM 'a>b' [<!ENTITY a \"x\">]>"
+
+    reader = epg._GuardedReader(_TinyChunkReader(data, chunk_size=7))
+    with pytest.raises(ET.ParseError):
+        _read_all(reader, 4096)
+
+
+def test_quoted_close_bracket_bypass_raises_via_load_xmltv(tmp_path):
+    conn, src = _make_conn(tmp_path)
+    epg.load_xmltv(conn, src, _stream(_XML), '2024-01-01T00:00:00Z')
+
+    malicious = (
+        '<?xml version="1.0"?>'
+        '<!DOCTYPE tv SYSTEM "a>b" [<!ENTITY a "x">]>'
+        '<tv><channel id="c1"><display-name>C1</display-name></channel></tv>'
+    )
+    with pytest.raises(ET.ParseError):
+        epg.load_xmltv(conn, src, _stream(malicious), '2024-01-01T00:00:00Z')
+
+    assert len(_programme_rows(conn, src)) == 1
+
+
+def test_bracket_inside_quoted_literal_is_not_an_internal_subset():
+    data = b'<!DOCTYPE tv PUBLIC "-//x[y//EN" "xmltv.dtd">'
+
+    reader = epg._GuardedReader(_TinyChunkReader(data, chunk_size=7))
+    collected = b''.join(iter(lambda: reader.read(4096), b''))
+
+    assert collected == data
+
+
+def test_unresolved_doctype_longer_than_max_bytes_raises_parse_error():
+    data = b'<!DOCTYPE tv SYSTEM "' + b'a' * 5000
+
+    reader = epg._GuardedReader(_TinyChunkReader(data, chunk_size=7))
+    with pytest.raises(ET.ParseError):
+        _read_all(reader, 4096)
+
+
+def test_dtd_only_doctype_immediately_followed_by_internal_subset_doctype_raises():
+    data = (
+        b'<!DOCTYPE tv SYSTEM "xmltv.dtd">'
+        b'<!DOCTYPE tv [<!ENTITY a "x">]>'
+    )
+
+    reader = epg._GuardedReader(_TinyChunkReader(data, chunk_size=7))
+    with pytest.raises(ET.ParseError):
+        _read_all(reader, 4096)
+
+
+def test_dtd_only_doctype_with_large_body_in_same_chunk_loads_successfully(tmp_path):
+    # Real-world feeds are read by iterparse in ~16 KiB chunks; a DTD-only
+    # DOCTYPE followed by a body that pushes the first chunk (and therefore
+    # _pending) past _MAX_DOCTYPE_BYTES must still load, because the cap
+    # bounds the DOCTYPE declaration itself, not whatever else shares the
+    # buffer with it.
+    conn, src = _make_conn(tmp_path)
+    channels = ''.join(
+        '<channel id="c{0}"><display-name>Channel {0}</display-name></channel>'.format(i)
+        for i in range(400)
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE tv SYSTEM "xmltv.dtd">\n'
+        '<tv>' + channels
+    ) + _XML.split('<tv>', 1)[1]
+    assert len(xml) > 20000
+
+    epg.load_xmltv(conn, src, _stream(xml), '2024-01-01T00:00:00Z')
+
+    assert len(_programme_rows(conn, src)) == 1
+
+
 def test_oversized_document_raises_epg_too_large_and_drops_staging(tmp_path, monkeypatch):
     conn, src = _make_conn(tmp_path)
     epg.load_xmltv(conn, src, _stream(_XML), '2024-01-01T00:00:00Z')
