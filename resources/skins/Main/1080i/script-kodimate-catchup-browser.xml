@@ -352,7 +352,7 @@
             <height>920</height>
             <onup>201</onup>
             <ondown>201</ondown>
-            <onleft>200</onleft>
+            <onleft>201</onleft>
             <onright>201</onright>
             <onback>9000</onback>
             <scrolltime>0</scrolltime>

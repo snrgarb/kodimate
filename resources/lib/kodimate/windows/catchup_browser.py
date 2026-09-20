@@ -66,6 +66,7 @@ class CatchupBrowserWindow(BaseWindow):
         self._render_programmes()
         self.setProperty('rail_selected', 'catchup')
         self._watcher = ipc.GenerationWatcher(self._on_generation_change)
+        self.setFocusId(CHANNEL_LIST_ID)
         self._initialised = True
 
     def _on_generation_change(self, generation):
@@ -143,6 +144,8 @@ class CatchupBrowserWindow(BaseWindow):
     def _handle_left(self):
         if self.getFocusId() == CHANNEL_LIST_ID:
             self.setFocusId(self._rail_focus_id)
+        elif self.getFocusId() == PROGRAMME_LIST_ID:
+            self.setFocusId(CHANNEL_LIST_ID)
 
     def _handle_right(self):
         focus_id = self.getFocusId()

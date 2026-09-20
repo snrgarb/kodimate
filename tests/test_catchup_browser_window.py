@@ -685,6 +685,32 @@ def test_right_from_rail_returns_to_channel_list(tmp_path):
         conn.close()
 
 
+def test_left_from_programme_list_focuses_channel_list(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, catchup_days=3)
+        window = _window(conn)
+        window.setFocusId(PROGRAMME_LIST_ID)
+
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+
+        assert window.getFocusId() == CHANNEL_LIST_ID
+    finally:
+        conn.close()
+
+
+def test_channel_list_focused_after_init(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        _channel(conn, pid, "a", "Alpha", 0, catchup_days=3)
+        window = _window(conn)
+        assert window.getFocusId() == CHANNEL_LIST_ID
+    finally:
+        conn.close()
+
+
 def test_ok_on_livetv_rail_closes_window(tmp_path):
     conn = _conn(tmp_path)
     try:
@@ -729,6 +755,7 @@ def test_skin_pins_rail_and_list_horizontal_navigation():
         assert control.find('onright').text == control_id
     assert controls_by_id['200'].find('onleft').text == '200'
     assert controls_by_id['201'].find('onright').text == '201'
+    assert controls_by_id['201'].find('onleft').text == '201'
 
 
 def test_skin_panes_fill_the_screen_to_y_1040_and_clear_the_rail():
