@@ -33,3 +33,17 @@ def test_play_is_windowed_so_kodi_does_not_switch_to_fullscreenvideo():
     p.play('http://edge.example/1.ts')
 
     assert xbmc.play_calls[-1][2] is True
+
+
+def test_play_sets_properties_on_the_listitem_when_given():
+    xbmc.play_calls[:] = []
+    p = player.KodimatePlayer()
+
+    p.play('http://edge.example/1.ts', properties={
+        'inputstream': 'inputstream.ffmpegdirect',
+        'inputstream.ffmpegdirect.stream_mode': 'timeshift',
+    })
+
+    listitem = xbmc.play_calls[-1][1]
+    assert listitem.getProperty('inputstream') == 'inputstream.ffmpegdirect'
+    assert listitem.getProperty('inputstream.ffmpegdirect.stream_mode') == 'timeshift'

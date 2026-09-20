@@ -105,6 +105,26 @@ def _mime_type_for(url):
     return None
 
 
+_TIMESHIFT_PROPERTIES = {
+    'inputstream': 'inputstream.ffmpegdirect',
+    'inputstream.ffmpegdirect.stream_mode': 'timeshift',
+    'inputstream.ffmpegdirect.is_realtime_stream': 'true',
+}
+
+
+def _live_mime_and_properties(url):
+    """Every live Attempt hands off to inputstream.ffmpegdirect in timeshift
+    mode (issue #73) so pause/resume is native."""
+    path = urlparse(url).path
+    properties = dict(_TIMESHIFT_PROPERTIES)
+    if path.endswith('.ts'):
+        return 'video/mp2t', properties
+    if path.endswith('.m3u8'):
+        properties['inputstream.ffmpegdirect.manifest_type'] = 'hls'
+        return 'application/x-mpegURL', properties
+    return None, properties
+
+
 class _TimerHandle(object):
     def __init__(self, timer):
         self._timer = timer
@@ -379,8 +399,11 @@ class PlaybackSession(object):
             self.logger.debug(
                 'Playback redirect resolved for attempt {0}'.format(attempt_number)
             )
-        mime_type = _mime_type_for(self._current_url)
-        self.player.play(play_url, self._current_headers, mime_type=mime_type)
+        if self.catchup is None:
+            mime_type, properties = _live_mime_and_properties(self._current_url)
+        else:
+            mime_type, properties = _mime_type_for(self._current_url), None
+        self.player.play(play_url, self._current_headers, mime_type=mime_type, properties=properties)
         self._arm_start_timer()
         self.on_state(self.state, None)
 

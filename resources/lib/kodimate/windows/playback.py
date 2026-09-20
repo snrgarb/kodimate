@@ -31,7 +31,6 @@ _STR_NO_INFO = 32083
 _STR_ALL_CHANNELS = 32038
 _STR_FAVOURITES = 32039
 _STR_CATCHUP_UNAVAILABLE = 32093
-_STR_PAUSED = 32143
 
 _REASON_STRINGS = {
     'unavailable': _STR_UNAVAILABLE,
@@ -65,7 +64,6 @@ _BUTTON_ROW_IDS = (BTN_REWIND_ID, BTN_PLAYPAUSE_ID, BTN_FASTFORWARD_ID, BTN_LIVE
 _DEFAULT_OSD_HIDE_SECONDS = 3
 _DEFAULT_NUMBER_COMMIT_DELAY = 1.5
 _BEHIND_LIVE_TOLERANCE_SECONDS = 1
-_PAUSE_GRACE_SECONDS = 30
 
 # Wide enough to step (Left/Right) back through a Catch-up window.
 _PROGRAMME_WINDOW_BEFORE = timedelta(days=7)
@@ -134,13 +132,9 @@ class PlaybackWindow(xbmcgui.WindowXML):
         self._pending_transition_fallback_timer = None
         self._lock = threading.RLock()
         self._paused = False
-        self._paused_at = None
-        self._behind_at_pause = 0
         self._seek_timer = None
         self._seek_stepper = None
         self._screensaver_inhibited = False
-        self._live_lag_seconds = 0
-        self._pause_emulated = False
         if self.osd_position is None:
             self.osd_position = self._addon_setting_string('osd_position', 'top')
         if self.osd_position != 'bottom':
@@ -478,9 +472,6 @@ class PlaybackWindow(xbmcgui.WindowXML):
 
     def _reset_transient_playback_state(self):
         self._paused = False
-        self._paused_at = None
-        self._live_lag_seconds = 0
-        self._pause_emulated = False
         self.setProperty('paused', '0')
         self._cancel_seek_timer()
         if self._seek_stepper is not None:
@@ -810,11 +801,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
             offset_seconds = self.session.catchup_offset_seconds if self.session is not None else 0
             position = self.catchup['start'] + offset_seconds + self._player_time_seconds()
             return max(0, _epoch(self.now_fn()) - position)
-        if self._paused:
-            return self._behind_at_pause + (_epoch(self.now_fn()) - _epoch(self._paused_at))
         total = self._player_total_seconds()
-        if total <= 0:
-            return self._live_lag_seconds
         return max(0, total - self._player_time_seconds())
 
     def _update_behind_live(self):
@@ -923,8 +910,24 @@ class PlaybackWindow(xbmcgui.WindowXML):
         self._rebuild_for_target(target, -1 if step < 0 else 1)
 
     def _go_live_if_needed(self):
-        if self.catchup is not None or self._behind_live_seconds() > _BEHIND_LIVE_TOLERANCE_SECONDS:
+        if self.catchup is not None:
             self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
+            return
+        if self._behind_live_seconds() > _BEHIND_LIVE_TOLERANCE_SECONDS:
+            self._go_live()
+
+    def _go_live(self):
+        total = self._player_total_seconds()
+        if total > 0:
+            try:
+                self.player.seekTime(total)
+            except Exception:
+                pass
+        if self._paused:
+            self._paused = False
+            self.setProperty('paused', '0')
+            self._set_player_paused(False)
+        self._update_behind_live()
 
     @staticmethod
     def _snap_catchup_offset(offset, granularity, direction):
@@ -948,9 +951,8 @@ class PlaybackWindow(xbmcgui.WindowXML):
         rebuilds a Catch-up URL. The offset is snapped to the Provider's
         URL-rebuild granularity (floor for a rewind, ceil for a forward
         seek; `direction` 0 floors) so a step smaller than that granularity
-        still yields a URL Kodi hasn't already got open. Shared by a
-        seek/big-step commit that lands outside the player's buffer and a
-        resume past the buffer after a pause."""
+        still yields a URL Kodi hasn't already got open. Used by a
+        seek/big-step commit that lands outside the player's buffer."""
         self._load_programmes()
         programme = self._programme_containing(target_epoch)
         window_days = self._catchup_window_days()
@@ -989,12 +991,6 @@ class PlaybackWindow(xbmcgui.WindowXML):
         except Exception:
             return None
 
-    def _player_can_pause(self):
-        try:
-            return bool(xbmc.getCondVisibility('Player.CanPause'))
-        except Exception:
-            return None
-
     def _set_player_paused(self, desired):
         if self._player_paused() == desired:
             return
@@ -1017,68 +1013,17 @@ class PlaybackWindow(xbmcgui.WindowXML):
                 self._cancel_seek_timer()
                 self._seek_stepper.reset()
                 self.setProperty('seek_step', '')
-                self._behind_at_pause = self._behind_live_seconds()
                 self._paused = True
-                self._paused_at = self.now_fn()
-                if self._player_can_pause() is False:
-                    # Kodi can't pause this stream (live/Catch-up .ts with no
-                    # duration -- Player.CanPause is false, so player.pause()
-                    # and Kodi's own ACTION_PAUSE are silent no-ops): emulate
-                    # a pause by stopping the stream outright and holding a
-                    # visible 'paused' state; resume rebuilds from where we
-                    # left off (see the beyond-buffer path below).
-                    self._pause_emulated = True
-                    session = self.session
-                    if session is not None and self.getProperty('state') in _ALIVE_STATES:
-                        session.abort()
-                        self.player.detach(session)
-                    self._playing = False
-                    addon = xbmcaddon.Addon()
-                    self.setProperty('state', 'paused')
-                    self.setProperty('status_text', addon.getLocalizedString(_STR_PAUSED))
-                else:
-                    self._set_player_paused(True)
+                self._set_player_paused(True)
                 self.setProperty('paused', '1')
                 self._update_behind_live()
                 self._show_bar(arm_hide=False)
                 return
-            behind_now = self._behind_at_pause + (
-                _epoch(self.now_fn()) - _epoch(self._paused_at)
-            )
-            pause_emulated = self._pause_emulated
-            self._pause_emulated = False
             self._paused = False
-            self._paused_at = None
             self.setProperty('paused', '0')
-            if pause_emulated:
-                self._resume_beyond_buffer(behind_now, emulated=True)
-                return
-            total_seconds = self._player_total_seconds()
-            native_resume = self.catchup is not None or behind_now <= _PAUSE_GRACE_SECONDS or (
-                total_seconds > 0 and behind_now <= total_seconds
-            )
-            if native_resume:
-                if self.catchup is None and total_seconds <= 0:
-                    self._live_lag_seconds = behind_now
-                self._set_player_paused(False)
-                self._update_behind_live()
-                self._show_bar(arm_hide=True)
-                return
-            self._resume_beyond_buffer(behind_now)
-
-    def _resume_beyond_buffer(self, behind_now, emulated=False):
-        target_epoch = _epoch(self.now_fn()) - behind_now
-
-        def unavailable():
-            if emulated:
-                # No alive session to fall back on: an emulated pause always
-                # stops the stream, so staying put would leave the window
-                # stuck showing 'paused' forever.
-                self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
-            else:
-                self._go_live_if_needed()
+            self._set_player_paused(False)
+            self._update_behind_live()
             self._show_bar(arm_hide=True)
-        self._rebuild_at_target(target_epoch, unavailable)
 
     # -- OSD focus row navigation --------------------------------------
 
@@ -1199,8 +1144,6 @@ class PlaybackWindow(xbmcgui.WindowXML):
         if self._stopped():
             return
         try:
-            if self._paused:
-                self._update_behind_live()
             if not self._playing:
                 return
             self._update_stream_info()
@@ -1351,7 +1294,10 @@ class PlaybackWindow(xbmcgui.WindowXML):
             elif control_id == BTN_FASTFORWARD_ID:
                 self._seek_press(1)
             elif control_id == BTN_LIVE_ID:
-                self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
+                if self.catchup is not None:
+                    self._zap(self.snapshot['provider_id'], self.snapshot['channel_key'])
+                else:
+                    self._go_live()
 
     # -- number entry --------------------------------------------------
 

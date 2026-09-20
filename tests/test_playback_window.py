@@ -43,7 +43,7 @@ class FakePlayer(object):
         self.seek_calls = []
         self.pause_calls = 0
 
-    def play(self, url, headers, mime_type=None):
+    def play(self, url, headers, mime_type=None, properties=None):
         self.plays.append((url, headers))
 
     def stop(self):
@@ -2378,30 +2378,6 @@ def test_resume_within_buffer_is_native_toggle(tmp_path):
     assert len(window.player.plays) == plays_before
 
 
-def test_resume_beyond_buffer_starts_catchup_session(tmp_path):
-    conn = _conn(tmp_path)
-    provider_id, snapshot = _setup_channel_with_programmes(conn)
-    now = FakeNow(datetime(2026, 1, 1, 12, 30))  # Show3 12:00-13:00 airing
-    window = _window(conn, snapshot, now_fn=now)
-    window.onInit()
-    window.session.on_av_started()
-    window.player.total_time = 10
-    window.player.time = 5
-    plays_before = len(window.player.plays)
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    assert window.getProperty('paused') == '1'
-
-    now.value = now.value + timedelta(hours=1)
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
-    window.on_stopped()  # old stream's stop callback, arriving after abort()
-
-    assert window.getProperty('paused') == '0'
-    assert window.catchup is not None
-    assert window.catchup['title'] == 'Show3'
-    assert len(window.player.plays) == plays_before + 1
-
-
 def test_catchup_session_pause_resume_is_always_native_toggle(tmp_path):
     conn = _conn(tmp_path)
     provider_id, snapshot = _setup_channel_with_programmes(conn)
@@ -2499,28 +2475,6 @@ def test_behind_live_property_zero_when_at_live_edge(tmp_path):
     assert window.getProperty('behind_text') == ''
 
 
-def test_pause_grace_within_30s_resumes_native_and_shows_behind_live(tmp_path):
-    conn = _conn(tmp_path)
-    _, snapshot = _setup_channel(conn)
-    now = FakeNow(datetime(2026, 1, 1, 12, 30))
-    window = _window(conn, snapshot, now_fn=now)
-    window.onInit()
-    window.session.on_av_started()
-    window.player.total_time = 0  # live HTTP TS: getTotalTime() reports 0
-    plays_before = len(window.player.plays)
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    now.value = now.value + timedelta(seconds=20)
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
-
-    assert window.getProperty('paused') == '0'
-    assert window.player.pause_calls == 2
-    assert window.catchup is None
-    assert len(window.player.plays) == plays_before
-    assert window.getProperty('behind_live') == '1'
-    assert window.getProperty('behind_text') == '-00:20'
-
-
 def test_pause_action_skips_extra_toggle_when_kodi_already_paused(tmp_path):
     # Real Kodi 21: ACTION_PAUSE/PLAYPAUSE reach our onAction *and* are then
     # handled by CApplication::OnAction, which pauses the player itself
@@ -2576,172 +2530,75 @@ def test_click_playpause_still_toggles_player(tmp_path):
     assert window.player.pause_calls == 1
 
 
-def test_pause_emulated_when_player_cannot_pause(tmp_path):
-    # Live/Catch-up .ts with no duration: Player.CanPause is false, so
-    # player.pause() (and Kodi's own ACTION_PAUSE) would be a silent no-op.
-    # We must stop the stream instead and hold a visible 'paused' state.
+def test_pause_on_live_session_pauses_natively_even_when_player_cannot_pause(tmp_path):
+    # inputstream.ffmpegdirect in timeshift mode reports Player.CanPause as
+    # false even though pausing works fine -- it must not gate pausing.
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
     window = _window(conn, snapshot)
     window.onInit()
     window.session.on_av_started()
     xbmc.set_condition('Player.CanPause', False)
-    stop_calls_before = window.player.stop_calls
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
 
     assert window.getProperty('paused') == '1'
-    assert window.getProperty('state') == 'paused'
-    assert window.player.pause_calls == 0
-    assert window.player.stop_calls == stop_calls_before + 1
-    assert window.getProperty('bar_visible') == '1'
+    assert window.getProperty('state') == 'playing'
+    assert window.player.pause_calls == 1
 
 
-def test_pause_emulated_behind_live_keeps_counting_on_tick(tmp_path):
+def test_behind_text_grows_on_tick_while_paused_as_buffer_advances(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
-    now = FakeNow(datetime(2026, 1, 1, 12, 30))
-    window = _window(conn, snapshot, now_fn=now)
+    window = _window(conn, snapshot)
     window.onInit()
     window.session.on_av_started()
-    xbmc.set_condition('Player.CanPause', False)
+    window.player.total_time = 60
+    window.player.time = 0
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    now.value = now.value + timedelta(seconds=15)
     window._tick()
+    assert window.getProperty('behind_text') == '-01:00'
 
-    assert window.getProperty('behind_live') == '1'
-    assert window.getProperty('behind_text') == '-00:15'
-
-
-def test_pause_emulated_resume_rebuilds_catchup_at_paused_position(tmp_path):
-    conn = _conn(tmp_path)
-    provider_id, snapshot = _setup_channel_with_programmes(conn)
-    now = FakeNow(datetime(2026, 1, 1, 12, 30))  # Show3 12:00-13:00 airing
-    window = _window(conn, snapshot, now_fn=now)
-    window.onInit()
-    window.session.on_av_started()
-    xbmc.set_condition('Player.CanPause', False)
-    plays_before = len(window.player.plays)
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    assert window.getProperty('paused') == '1'
-    assert window.getProperty('state') == 'paused'
-
-    now.value = now.value + timedelta(seconds=15)
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
-
-    assert window.getProperty('paused') == '0'
-    assert len(window.player.plays) == plays_before + 1
-    assert window.catchup is not None
-    assert window.catchup['title'] == 'Show3'
-    assert window.catchup['start_dt'] == datetime(2026, 1, 1, 12, 0)
+    window.player.total_time = 90
+    window._tick()
+    assert window.getProperty('behind_text') == '-01:30'
 
 
-def test_pause_emulated_resume_with_no_programme_zaps_live(tmp_path):
-    conn = _conn(tmp_path)
-    _, snapshot = _setup_channel(conn)  # no programmes/catch-up window
-    now = FakeNow(datetime(2026, 1, 1, 12, 30))
-    window = _window(conn, snapshot, now_fn=now)
-    window.onInit()
-    window.session.on_av_started()
-    xbmc.set_condition('Player.CanPause', False)
-    plays_before = len(window.player.plays)
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    now.value = now.value + timedelta(seconds=15)
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
-
-    assert window.getProperty('paused') == '0'
-    assert window.getProperty('state') != 'paused'
-    assert window.catchup is None
-    assert len(window.player.plays) == plays_before + 1
-
-
-def test_zap_while_emulated_paused_starts_new_session(tmp_path):
+def test_resume_on_live_session_pauses_player_again_without_new_session(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
     window = _window(conn, snapshot)
     window.onInit()
     window.session.on_av_started()
-    xbmc.set_condition('Player.CanPause', False)
     plays_before = len(window.player.plays)
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    assert window.getProperty('paused') == '1'
+    xbmc.set_condition('Player.Paused', True)
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
 
+    assert window.getProperty('paused') == '0'
+    assert window.player.pause_calls == 2
+    assert len(window.player.plays) == plays_before
+
+
+def test_live_button_click_seeks_to_buffer_end_and_clears_paused(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 60
+    window.player.time = 30
+    plays_before = len(window.player.plays)
+
+    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
     window.onClick(BTN_LIVE_ID)
 
+    assert window.player.seek_calls == [60]
     assert window.getProperty('paused') == '0'
-    assert len(window.player.plays) == plays_before + 1
-
-
-def test_pause_emulated_on_catchup_session_resumes_rebuilt(tmp_path):
-    conn = _conn(tmp_path)
-    provider_id, snapshot = _setup_channel_with_programmes(conn)
-    now = datetime(2026, 1, 1, 12, 30)
-    start_dt = datetime(2026, 1, 1, 11, 0)
-    end_dt = datetime(2026, 1, 1, 12, 0)
-    catchup_dict = {
-        'start': _epoch(start_dt), 'end': _epoch(end_dt), 'now': _epoch(now),
-        'title': 'Show2', 'start_dt': start_dt, 'end_dt': end_dt, 'catchup_id': None,
-    }
-    fake_now = FakeNow(now)
-    window = _window(conn, snapshot, now_fn=fake_now, catchup=catchup_dict)
-    window.onInit()
-    window.session.on_av_started()
-    xbmc.set_condition('Player.CanPause', False)
-    plays_before = len(window.player.plays)
-    stop_calls_before = window.player.stop_calls
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    assert window.getProperty('paused') == '1'
-    assert window.getProperty('state') == 'paused'
-    assert window.player.stop_calls == stop_calls_before + 1
-
-    fake_now.value = fake_now.value + timedelta(seconds=15)
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
-
-    assert window.getProperty('paused') == '0'
-    assert len(window.player.plays) == plays_before + 1
-    assert window.catchup is not None
-    assert window.catchup['title'] == 'Show2'
-
-
-def test_pause_emulated_resume_catchup_covers_full_programme(tmp_path):
-    # Regression: the Catch-up range used to be capped at the live edge
-    # captured when the dict was built (min(end, now)), so resuming a
-    # 13s pause ~30 minutes into a still-airing hour-long programme asked
-    # the provider for a ~0-minute stream, which some providers reject
-    # (HTTP 406) and which also makes the OSD think the programme has
-    # already ended a few seconds after resuming.
-    conn = _conn(tmp_path)
-    provider_id, snapshot = _setup_channel_with_programmes(conn)
-    snapshot['catchup_mode'] = 'xc'
-    snapshot['stream_url'] = 'http://host/user/pass/369538'
-    now = FakeNow(datetime(2026, 1, 1, 12, 30))  # Show3 12:00-13:00 airing
-    window = _window(conn, snapshot, now_fn=now)
-    window.onInit()
-    window.session.on_av_started()
-    xbmc.set_condition('Player.CanPause', False)
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    now.value = now.value + timedelta(seconds=13)
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
-    window.session.on_av_started()
-
-    assert window.catchup is not None
-    url = window.player.plays[-1][0]
-    # Requested duration is the remainder of the programme from the
-    # rebuild position to the real end (13:00) -- about 30 minutes -- not
-    # the near-zero duration the old min(end, now) cap would have asked
-    # for (now was captured ~30 minutes into the hour-long programme, the
-    # same position the rebuild resumes from).
-    assert '/timeshift/user/pass/30/' in url
-
-    now.value = now.value + timedelta(seconds=60)
-    window._tick()
-    assert window._catchup_reached_end() is False
+    assert window.getProperty('behind_live') == '0'
+    assert len(window.player.plays) == plays_before
 
 
 def test_start_over_airing_programme_duration_is_full_programme(tmp_path):
@@ -2759,90 +2616,6 @@ def test_start_over_airing_programme_duration_is_full_programme(tmp_path):
     window.session.on_av_started()
 
     assert window._catchup_duration_seconds() == _epoch(end_dt) - _epoch(start_dt)
-
-
-def test_pause_grace_second_cycle_does_not_reuse_stale_lag(tmp_path):
-    conn = _conn(tmp_path)
-    _, snapshot = _setup_channel(conn)
-    now = FakeNow(datetime(2026, 1, 1, 12, 30))
-    window = _window(conn, snapshot, now_fn=now)
-    window.onInit()
-    window.session.on_av_started()
-    window.player.total_time = 0  # live HTTP TS: getTotalTime() reports 0
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    now.value = now.value + timedelta(seconds=10)
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
-    now.value = now.value + timedelta(seconds=5)
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    assert window.getProperty('behind_text') == '-00:10'
-    now.value = now.value + timedelta(seconds=10)
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
-
-    assert window.getProperty('paused') == '0'
-    assert window.getProperty('behind_live') == '1'
-    assert window.getProperty('behind_text') == '-00:20'
-
-
-def test_pause_grace_updates_behind_live_while_still_paused(tmp_path):
-    conn = _conn(tmp_path)
-    _, snapshot = _setup_channel(conn)
-    now = FakeNow(datetime(2026, 1, 1, 12, 30))
-    window = _window(conn, snapshot, now_fn=now)
-    window.onInit()
-    window.session.on_av_started()
-    window.player.total_time = 0
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    now.value = now.value + timedelta(seconds=20)
-    window._update_behind_live()
-
-    assert window.getProperty('behind_live') == '1'
-    assert window.getProperty('behind_text') == '-00:20'
-
-
-def test_pause_beyond_grace_starts_catchup_session(tmp_path):
-    conn = _conn(tmp_path)
-    provider_id, snapshot = _setup_channel_with_programmes(conn)
-    now = FakeNow(datetime(2026, 1, 1, 12, 30))  # Show3 12:00-13:00 airing
-    window = _window(conn, snapshot, now_fn=now)
-    window.onInit()
-    window.session.on_av_started()
-    window.player.total_time = 0
-    plays_before = len(window.player.plays)
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    now.value = now.value + timedelta(seconds=45)
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
-    window.on_stopped()  # old stream's stop callback, arriving after abort()
-
-    assert window.getProperty('paused') == '0'
-    assert window.catchup is not None
-    assert window.catchup['title'] == 'Show3'
-    assert len(window.player.plays) == plays_before + 1
-
-
-def test_back_to_live_after_grace_resume_clears_behind_live(tmp_path):
-    conn = _conn(tmp_path)
-    _, snapshot = _setup_channel(conn)
-    now = FakeNow(datetime(2026, 1, 1, 12, 30))
-    window = _window(conn, snapshot, now_fn=now)
-    window.onInit()
-    window.session.on_av_started()
-    window.player.total_time = 0
-    plays_before = len(window.player.plays)
-
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PAUSE))
-    now.value = now.value + timedelta(seconds=20)
-    window.onAction(xbmcgui.Action(xbmcgui.ACTION_PLAYER_PLAYPAUSE))
-
-    window.onClick(BTN_LIVE_ID)
-    window.on_stopped()  # old stream's stop callback, arriving after abort()
-
-    assert len(window.player.plays) == plays_before + 1
-    window._update_behind_live()
-    assert window.getProperty('behind_live') == '0'
 
 
 def test_programme_live_true_for_start_over_while_programme_still_airing(tmp_path):

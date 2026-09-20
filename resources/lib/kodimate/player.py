@@ -27,7 +27,7 @@ class KodimatePlayer(xbmc.Player):
         if self._session is session:
             self._session = None
 
-    def play(self, url, headers=None, mime_type=None):
+    def play(self, url, headers=None, mime_type=None, properties=None):
         target = url
         if headers:
             target = url + '|' + urlencode(headers)
@@ -35,6 +35,8 @@ class KodimatePlayer(xbmc.Player):
         if mime_type:
             item.setMimeType(mime_type)
             item.setContentLookup(False)
+        for key, value in (properties or {}).items():
+            item.setProperty(key, value)
         # windowed=True: the video renders into our own WindowXML's
         # videowindow control rather than switching Kodi to its
         # fullscreenvideo window, so none of Kodi's own player OSD dialogs

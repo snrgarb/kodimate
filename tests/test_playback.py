@@ -8,11 +8,13 @@ class FakePlayer(object):
     def __init__(self):
         self.plays = []
         self.mime_types = []
+        self.properties = []
         self.stop_calls = 0
 
-    def play(self, url, headers, mime_type=None):
+    def play(self, url, headers, mime_type=None, properties=None):
         self.plays.append((url, headers))
         self.mime_types.append(mime_type)
+        self.properties.append(properties)
 
     def stop(self):
         self.stop_calls += 1
@@ -783,7 +785,7 @@ def test_mime_type_m3u8_passed_to_player():
 
     session.start()
 
-    assert player.mime_types[0] == 'application/vnd.apple.mpegurl'
+    assert player.mime_types[0] == 'application/x-mpegURL'
 
 
 def test_mime_type_ts_ignores_query_string():
@@ -804,6 +806,88 @@ def test_mime_type_none_for_unrecognised_extension():
     session.start()
 
     assert player.mime_types[0] is None
+
+
+_TIMESHIFT_PROPERTIES = {
+    'inputstream': 'inputstream.ffmpegdirect',
+    'inputstream.ffmpegdirect.stream_mode': 'timeshift',
+    'inputstream.ffmpegdirect.is_realtime_stream': 'true',
+}
+
+
+def test_live_xtream_ts_attempt_sets_timeshift_properties_and_mime():
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _xtream_snapshot(allowed_output_formats=['ts']),
+    )
+
+    session.start()
+
+    assert player.mime_types[0] == 'video/mp2t'
+    assert player.properties[0] == _TIMESHIFT_PROPERTIES
+
+
+def test_live_xtream_m3u8_attempt_sets_timeshift_properties_and_hls_mime():
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _xtream_snapshot(stream_format='m3u8'),
+    )
+
+    session.start()
+
+    assert player.mime_types[0] == 'application/x-mpegURL'
+    expected = dict(_TIMESHIFT_PROPERTIES)
+    expected['inputstream.ffmpegdirect.manifest_type'] = 'hls'
+    assert player.properties[0] == expected
+
+
+def test_live_xtream_attempt2_fallback_also_carries_timeshift_properties():
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _xtream_snapshot(), probe_results=[404],
+    )
+    session.start()
+
+    session.on_error()
+
+    assert len(player.plays) == 2
+    assert player.plays[1][0].endswith('.m3u8')
+    expected = dict(_TIMESHIFT_PROPERTIES)
+    expected['inputstream.ffmpegdirect.manifest_type'] = 'hls'
+    assert player.properties[1] == expected
+
+
+def test_live_m3u_attempt_sets_timeshift_properties():
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _m3u_snapshot(stream_url='http://host/live/u/p/42.ts'),
+    )
+
+    session.start()
+
+    assert player.mime_types[0] == 'video/mp2t'
+    assert player.properties[0] == _TIMESHIFT_PROPERTIES
+
+
+def test_live_reconnect_attempt_carries_timeshift_properties():
+    session, player, scheduler, clock, probe, logger, state, persist = _session(
+        _m3u_snapshot(stream_url='http://host/live/u/p/42.ts'),
+    )
+    session.start()
+    session.on_av_started()
+    clock.advance(10)
+
+    session.on_stopped()
+    scheduler.advance(0)
+
+    assert len(player.plays) == 2
+    assert player.properties[1] == _TIMESHIFT_PROPERTIES
+
+
+def test_catchup_attempt_carries_no_timeshift_properties():
+    catchup = {'start': 1000, 'end': 4600, 'now': 1500, 'offset': 0}
+    session, player, scheduler, clock, probe, logger, state, persist_learned, persist_catchup = \
+        _catchup_session(_catchup_xtream_snapshot(), catchup)
+
+    session.start()
+
+    assert player.properties[0] is None
 
 
 def test_reconnect_attempt_calls_resolver_again():
