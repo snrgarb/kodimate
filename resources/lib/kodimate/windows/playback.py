@@ -63,7 +63,9 @@ _BUTTON_ROW_IDS = (BTN_REWIND_ID, BTN_PLAYPAUSE_ID, BTN_FASTFORWARD_ID, BTN_LIVE
 
 _DEFAULT_OSD_HIDE_SECONDS = 3
 _DEFAULT_NUMBER_COMMIT_DELAY = 1.5
-_BEHIND_LIVE_TOLERANCE_SECONDS = 1
+# ffmpegdirect's timeshift buffer end runs ~1s ahead of the decode position at
+# the live edge, so a small tolerance is needed to avoid a false "-00:01" indicator.
+_BEHIND_LIVE_TOLERANCE_SECONDS = 3
 
 # Wide enough to step (Left/Right) back through a Catch-up window.
 _PROGRAMME_WINDOW_BEFORE = timedelta(days=7)

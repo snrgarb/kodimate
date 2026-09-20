@@ -2475,6 +2475,21 @@ def test_behind_live_property_zero_when_at_live_edge(tmp_path):
     assert window.getProperty('behind_text') == ''
 
 
+def test_behind_live_property_zero_within_ffmpegdirect_demux_latency(tmp_path):
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 62
+    window.player.time = 60
+
+    window._update_behind_live()
+
+    assert window.getProperty('behind_live') == '0'
+    assert window.getProperty('behind_text') == ''
+
+
 def test_pause_action_skips_extra_toggle_when_kodi_already_paused(tmp_path):
     # Real Kodi 21: ACTION_PAUSE/PLAYPAUSE reach our onAction *and* are then
     # handled by CApplication::OnAction, which pauses the player itself
