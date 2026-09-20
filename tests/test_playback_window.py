@@ -1992,7 +1992,10 @@ def test_back_while_transition_pending_cancels_it(tmp_path):
 def test_seek_left_in_buffer_on_channel_without_catchup_window_is_native(tmp_path):
     # All live sessions now play through the ffmpegdirect timeshift buffer,
     # so a rewind inside that buffer is native even without a Catch-up
-    # Window -- the window only gates starting a Catch-up session.
+    # Window -- the window only gates starting a Catch-up session. The
+    # rewind/fast-forward on-screen buttons stay hidden on such a channel
+    # (seekable == '0'); remote rewind/skip actions still reach the seek
+    # path directly.
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
     window = _window(conn, snapshot)
@@ -2002,9 +2005,28 @@ def test_seek_left_in_buffer_on_channel_without_catchup_window_is_native(tmp_pat
     window.player.time = 50
     window.setFocusId(SEEK_ROW_ID)
 
-    assert window.getProperty('seekable') == '1'
+    assert window.getProperty('seekable') == '0'
 
     window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))
+    window.scheduler.advance(0.75)
+
+    assert window.player.seek_calls == [40]
+    assert window.catchup is None
+
+
+def test_seek_button_click_in_buffer_on_channel_without_catchup_window_is_native(tmp_path):
+    # The rewind button is hidden (seekable == '0'), but its control id
+    # stays reachable (e.g. a lingering remote/focus click) and must keep
+    # seeking natively rather than being blocked.
+    conn = _conn(tmp_path)
+    _, snapshot = _setup_channel(conn)
+    window = _window(conn, snapshot)
+    window.onInit()
+    window.session.on_av_started()
+    window.player.total_time = 100
+    window.player.time = 50
+
+    window.onClick(BTN_REWIND_ID)
     window.scheduler.advance(0.75)
 
     assert window.player.seek_calls == [40]
@@ -2092,19 +2114,15 @@ def test_seekable_property_set_when_channel_has_catchup_window(tmp_path):
     assert window.player.seek_calls == [40]
 
 
-def test_button_row_includes_rewind_and_fastforward_on_live_session_without_catchup_window(tmp_path):
-    # Every live session now plays through the ffmpegdirect timeshift
-    # buffer, so there is no longer a live state that isn't seekable; a
-    # Catch-up Window only gates starting a Catch-up session, not the
-    # buttons' visibility.
+def test_button_row_excludes_rewind_and_fastforward_when_not_seekable(tmp_path):
     conn = _conn(tmp_path)
     _, snapshot = _setup_channel(conn)
     window = _window(conn, snapshot)
     window.onInit()
-    assert window.getProperty('seekable') == '1'
+    assert window.getProperty('seekable') == '0'
 
-    assert BTN_REWIND_ID in window._visible_button_row_ids()
-    assert BTN_FASTFORWARD_ID in window._visible_button_row_ids()
+    assert BTN_REWIND_ID not in window._visible_button_row_ids()
+    assert BTN_FASTFORWARD_ID not in window._visible_button_row_ids()
 
 
 def test_pause_cancels_pending_seek(tmp_path):

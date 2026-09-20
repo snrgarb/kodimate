@@ -166,7 +166,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
             self.setProperty('channel_name', self.snapshot['name'])
             self.setProperty('channel_number', str(self.snapshot['number']))
             self.setProperty('channel_logo', self.snapshot.get('logo_url') or '')
-            self.setProperty('seekable', '1' if self.catchup is None or self._catchup_window_days() else '0')
+            self.setProperty('seekable', '1' if self._catchup_window_days() else '0')
 
     @classmethod
     def open(cls, **kwargs):
@@ -296,7 +296,7 @@ class PlaybackWindow(xbmcgui.WindowXML):
         self.setProperty('stream_vcodec', '')
         self.setProperty('stream_audio', '')
         self.setProperty('catchup', '1' if self.catchup else '0')
-        self.setProperty('seekable', '1' if self.catchup is None or self._catchup_window_days() else '0')
+        self.setProperty('seekable', '1' if self._catchup_window_days() else '0')
         self._playing = False
         if self.catchup is None and self.conn is not None:
             autoplay.remember_last_channel(
