@@ -567,3 +567,11 @@ msgstr ""
 msgctxt "#32138"
 msgid "Channels"
 msgstr ""
+
+msgctxt "#32139"
+msgid "No Event Scheduled"
+msgstr ""
+
+msgctxt "#32140"
+msgid "Next: %s"
+msgstr ""

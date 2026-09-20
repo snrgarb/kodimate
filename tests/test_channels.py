@@ -567,3 +567,43 @@ def test_list_programmes_icon_none_when_not_set(tmp_path):
         assert result[cid][0]['icon'] is None
     finally:
         conn.close()
+
+
+def test_next_programme_starts_returns_earliest_at_or_after(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        conn.execute("UPDATE channel SET epg_channel_id = 'x1' WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        _programme(conn, eid, "x1", "2026-01-01T18:00:00Z", "2026-01-01T19:00:00Z", "Later Show")
+        _programme(conn, eid, "x1", "2026-01-02T09:00:00Z", "2026-01-02T10:00:00Z", "Even Later Show")
+        result = channels.next_programme_starts(conn, [cid], "2026-01-01T15:00:00Z")
+        assert result[cid] == {'start': "2026-01-01T18:00:00Z", 'title': "Later Show"}
+    finally:
+        conn.close()
+
+
+def test_next_programme_starts_ignores_programme_before_after(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        conn.execute("UPDATE channel SET epg_channel_id = 'x1' WHERE id = ?", (cid,))
+        eid = _epg_source(conn, pid)
+        _programme(conn, eid, "x1", "2026-01-01T10:00:00Z", "2026-01-01T11:00:00Z", "Too Early")
+        result = channels.next_programme_starts(conn, [cid], "2026-01-01T15:00:00Z")
+        assert result[cid] is None
+    finally:
+        conn.close()
+
+
+def test_next_programme_starts_none_for_channel_without_epg_match(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a")
+        result = channels.next_programme_starts(conn, [cid], "2026-01-01T15:00:00Z")
+        assert result[cid] is None
+    finally:
+        conn.close()

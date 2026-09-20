@@ -195,6 +195,31 @@ def list_programmes(conn, channel_ids, window_start, window_end):
     return result
 
 
+def next_programme_starts(conn, channel_ids, after_iso):
+    """{channel_id: {'start', 'title'} or None}: the earliest programme
+    starting at/after after_iso, per channel, for channels with a matched
+    EPG channel. Channel ids with no such programme map to None."""
+    result = {cid: None for cid in channel_ids}
+    if not channel_ids:
+        return result
+
+    placeholders = ','.join('?' for _ in channel_ids)
+    rows = conn.execute(
+        "SELECT c.id, MIN(pr.start), pr.title "
+        "FROM channel c "
+        "JOIN epg_source e ON e.provider_id = c.provider_id "
+        "JOIN programme pr ON pr.epg_source_id = e.id "
+        "AND pr.xmltv_channel_id = c.epg_channel_id "
+        "WHERE c.id IN (" + placeholders + ") AND c.epg_channel_id IS NOT NULL "
+        "AND pr.start >= ? "
+        "GROUP BY c.id",
+        list(channel_ids) + [after_iso],
+    ).fetchall()
+    for row in rows:
+        result[row[0]] = {'start': row[1], 'title': row[2]}
+    return result
+
+
 def now_titles(conn, channel_ids, now_iso):
     """{channel_id: title} for channels with a programme airing at now_iso.
     Where several rows cover now_iso (overlapping EPG data), the

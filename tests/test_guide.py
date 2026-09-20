@@ -915,3 +915,39 @@ def test_cell_progress_matches_cell_layout_when_start_precedes_viewport():
     fraction = guide.cell_progress(cell, now, viewport_start, guide.viewport_end(viewport_start))
     assert fraction == cell['progress']
     assert fraction == 0.5
+
+
+# -- next_programme_hint (issue #62) -----------------------------------------
+
+def test_next_programme_hint_later_today():
+    now = datetime(2026, 9, 18, 10, 0)
+    after = datetime(2026, 9, 18, 15, 0)
+    programmes = [{'start': datetime(2026, 9, 18, 18, 30), 'title': 'Show A'}]
+    hint = guide.next_programme_hint(programmes, after, now, today_label='Today', tz=timezone.utc)
+    assert hint == 'Show A (Today 18:30)'
+
+
+def test_next_programme_hint_tomorrow_uses_weekday_abbreviation():
+    now = datetime(2026, 9, 18, 10, 0)
+    after = datetime(2026, 9, 18, 15, 0)
+    programmes = [{'start': datetime(2026, 9, 19, 9, 0), 'title': 'Show B'}]
+    hint = guide.next_programme_hint(programmes, after, now, today_label='Today', tz=timezone.utc)
+    assert hint == 'Show B (Sat 09:00)'
+
+
+def test_next_programme_hint_none_when_no_qualifying_programme():
+    now = datetime(2026, 9, 18, 10, 0)
+    after = datetime(2026, 9, 18, 15, 0)
+    hint = guide.next_programme_hint([], after, now, today_label='Today', tz=timezone.utc)
+    assert hint is None
+
+
+def test_next_programme_hint_ignores_programme_before_after():
+    now = datetime(2026, 9, 18, 10, 0)
+    after = datetime(2026, 9, 18, 15, 0)
+    programmes = [
+        {'start': datetime(2026, 9, 18, 12, 0), 'title': 'Too Early'},
+        {'start': datetime(2026, 9, 18, 20, 0), 'title': 'Show C'},
+    ]
+    hint = guide.next_programme_hint(programmes, after, now, today_label='Today', tz=timezone.utc)
+    assert hint == 'Show C (Today 20:00)'

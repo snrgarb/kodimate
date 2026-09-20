@@ -184,6 +184,68 @@ def _third_of_grid(grid_width):
     return int(round(grid_width / 3.0))
 
 
+def test_empty_row_shows_next_programme_hint(tmp_path):
+    # Issue #62: a channel with no Programme anywhere in the 3-hour
+    # viewport gets a spanning filler that reads "No Event Scheduled" plus
+    # a "Next: ..." hint for the first later Programme, instead of the
+    # plain "No information" filler.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start + timedelta(hours=5)),
+                   guide.format_iso(viewport_start + timedelta(hours=6)), "Later Show")
+        window._load_programmes()
+        window._relayout()
+
+        cells = window._row_cells[0]
+        assert len(cells) == 1
+        assert cells[0]['filler'] is True
+        assert cells[0]['title'] == 'String 32139'
+        assert 'Later Show' in cells[0]['secondary']
+        assert 'String 32140' not in cells[0]['secondary']
+        # The fake addon's strings.po has no '%s' placeholder, so the
+        # fallback returns the hint unformatted rather than fabricating
+        # English text (mirrors _format_remaining's own fallback).
+        assert cells[0]['secondary'] == 'Later Show (String 32130 18:00)'
+
+        _no_event_image, no_event_label, no_event_desc = window._pool[0][0]
+        assert no_event_label.getLabel() == '[COLOR FFCCCCCC]String 32139[/COLOR]'
+        assert 'Later Show' in no_event_desc.getLabel()
+    finally:
+        conn.close()
+
+
+def test_channel_with_only_past_programme_shows_no_information_not_stale_hint(tmp_path):
+    # A channel with a matched EPG source whose only Programme row ended
+    # before the viewport (nothing upcoming) must still fall back to the
+    # plain "No information" filler, proving next_programme_starts's own
+    # start >= after_iso filter -- not just the absence of any programme
+    # row at all -- is what keeps a past show from being mistaken for a
+    # "Next: ..." hint.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn)
+        cid = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        eid = _epg_source(conn, pid)
+        window = _window(conn)
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start - timedelta(hours=2)),
+                   guide.format_iso(viewport_start - timedelta(hours=1)), "Earlier Show")
+        window._load_programmes()
+        window._relayout()
+
+        assert window._next_by_channel[cid] is None
+        cells = window._row_cells[0]
+        assert len(cells) == 1
+        assert cells[0]['title'] == 'String 32083'
+    finally:
+        conn.close()
+
+
 def test_left_right_move_cursor_between_programmes(tmp_path):
     conn = _conn(tmp_path)
     try:

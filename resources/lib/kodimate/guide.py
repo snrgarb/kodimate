@@ -541,6 +541,22 @@ def hint_text(zone, get_string, panel_mode='channels'):
     return u' · '.join(fragments)
 
 
+def next_programme_hint(programmes, after, now, today_label, tz=None):
+    """"<title> (<day> <HH:MM>)" for the earliest-starting programme (each a
+    dict with datetime 'start' and 'title') with start >= after, or None
+    when no programme qualifies. <day> follows date_label's convention:
+    today_label when the programme's local date matches now's local date,
+    else the weekday abbreviation."""
+    qualifying = [p for p in programmes if p['start'] >= after]
+    if not qualifying:
+        return None
+    programme = min(qualifying, key=lambda p: p['start'])
+    local_start = utc_to_local(programme['start'], tz)
+    local_now = utc_to_local(now, tz)
+    day = today_label if local_start.date() == local_now.date() else _WEEKDAY_ABBR[local_start.weekday()]
+    return '%s (%s %s)' % (programme['title'], day, local_start.strftime('%H:%M'))
+
+
 def date_label(at_time, now, today_label, tz=None):
     """"Today, 18 Sep" when at_time's local date matches now's local date,
     else "Thu, 18 Sep"."""

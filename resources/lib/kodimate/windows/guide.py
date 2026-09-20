@@ -24,6 +24,8 @@ PANEL_HEADER_ID = 521
 PANEL_CHANNELS_ID = 522
 
 _STR_NO_INFO = 32083
+_STR_NO_EVENT = 32139
+_STR_NEXT = 32140
 _STR_ALL_CHANNELS = 32038
 _STR_FAVOURITES = 32039
 _STR_GROUPS = 32125
@@ -125,6 +127,9 @@ class GuideWindow(BaseWindow):
         addon = xbmcaddon.Addon()
         addon_path = addon.getAddonInfo('path')
         self._no_info_title = addon.getLocalizedString(_STR_NO_INFO)
+        self._no_event_title = addon.getLocalizedString(_STR_NO_EVENT)
+        self._next_template = addon.getLocalizedString(_STR_NEXT)
+        self._today_label = addon.getLocalizedString(_STR_TODAY)
         self._tex_cell = _abs_path(addon_path, _NOW_LINE_RELPATH)
 
         self._group_id = self.group_id
@@ -883,6 +888,17 @@ class GuideWindow(BaseWindow):
                 for row in rows
             ]
 
+        next_starts = channels.next_programme_starts(
+            self.conn, channel_ids, guide.format_iso(guide.viewport_end(self._viewport_start)),
+        )
+        self._next_by_channel = {
+            channel_id: (
+                {'start': guide.parse_iso(entry['start']), 'title': entry['title']}
+                if entry is not None else None
+            )
+            for channel_id, entry in next_starts.items()
+        }
+
     def _channel_programmes(self, channel_index):
         if 0 <= channel_index < len(self._channel_rows):
             channel_id = self._channel_rows[channel_index]['id']
@@ -926,6 +942,17 @@ class GuideWindow(BaseWindow):
                     layout_cells = guide.cell_layout(
                         programmes, self._viewport_start, _GRID_WIDTH, self._no_info_title, now=now,
                     )
+                    channel_id = self._channel_rows[channel_index]['id']
+                    if len(layout_cells) == 1 and layout_cells[0]['filler']:
+                        next_programme = self._next_by_channel.get(channel_id)
+                        if next_programme is not None:
+                            hint = guide.next_programme_hint(
+                                [next_programme], guide.viewport_end(self._viewport_start), now,
+                                self._today_label, tz=self._tz,
+                            )
+                            if hint is not None:
+                                layout_cells[0]['title'] = self._no_event_title
+                                layout_cells[0]['secondary'] = _format_localized(self._next_template, hint)
                     window_days = self._window_days_for_channel(channel_index)
                     y = _STRIP_HEIGHT + _HEADER_HEIGHT + row * _ROW_HEIGHT
                     row_pool = self._pool[row]
@@ -961,6 +988,9 @@ class GuideWindow(BaseWindow):
                 progress_image.setVisible(True)
             self._update_now_line()
             self._update_strip()
+
+    def _cell_secondary(self, cell):
+        return cell.get('secondary') or guide.cell_time_range(cell, self._tz)
 
     def _state_for_cell(self, cell, window_days, now):
         if cell['filler']:
@@ -1004,7 +1034,7 @@ class GuideWindow(BaseWindow):
         desc_label.setPosition(label_x, y + _TITLE_HEIGHT)
         desc_label.setWidth(label_width)
         desc_label.setHeight(_ROW_HEIGHT - _TITLE_HEIGHT)
-        time_range = guide.cell_time_range(cell, self._tz)
+        time_range = self._cell_secondary(cell)
         desc_label.setLabel(_colored(time_range, desc_color) if time_range else '')
         return True
 
@@ -1101,12 +1131,12 @@ class GuideWindow(BaseWindow):
             self._cell_title(old_cell, old_state), self._label_color_for(old_cell, old_state, False)
         ))
         old_desc_color = self._desc_color_for(old_cell, old_state, False)
-        old_time_range = guide.cell_time_range(old_cell, self._tz)
+        old_time_range = self._cell_secondary(old_cell)
         old_pool[2].setLabel(_colored(old_time_range, old_desc_color) if old_time_range else '')
         new_pool = self._pool[row][new_cell['pool_index']]
         new_pool[0].setColorDiffuse(_CURSOR_CELL_COLOR)
         new_pool[1].setLabel(_colored(self._cell_title(new_cell, new_state), _CURSOR_TEXT_COLOR))
-        new_time_range = guide.cell_time_range(new_cell, self._tz)
+        new_time_range = self._cell_secondary(new_cell)
         new_pool[2].setLabel(
             _colored(new_time_range, _DESC_CURSOR_TEXT_COLOR) if new_time_range else ''
         )
@@ -1159,14 +1189,14 @@ class GuideWindow(BaseWindow):
                 self._cell_title(old_cell, old_state), self._label_color_for(old_cell, old_state, False)
             ))
             old_desc_color = self._desc_color_for(old_cell, old_state, False)
-            old_time_range = guide.cell_time_range(old_cell, self._tz)
+            old_time_range = self._cell_secondary(old_cell)
             old_pool[2].setLabel(
                 _colored(old_time_range, old_desc_color) if old_time_range else ''
             )
         new_pool = self._pool[new_row][new_cell['pool_index']]
         new_pool[0].setColorDiffuse(_CURSOR_CELL_COLOR)
         new_pool[1].setLabel(_colored(self._cell_title(new_cell, new_state), _CURSOR_TEXT_COLOR))
-        new_time_range = guide.cell_time_range(new_cell, self._tz)
+        new_time_range = self._cell_secondary(new_cell)
         new_pool[2].setLabel(
             _colored(new_time_range, _DESC_CURSOR_TEXT_COLOR) if new_time_range else ''
         )
@@ -1183,10 +1213,13 @@ def _epoch(dt):
     return calendar.timegm(dt.utctimetuple())
 
 
-def _format_remaining(addon, duration):
+def _format_localized(template, value):
     # Guards against a stale/untranslated strings.po (no '%s' in the
     # localized format) raising TypeError on '%' and aborting onInit.
-    template = addon.getLocalizedString(_STR_REMAINING)
     if '%s' not in template:
-        return duration
-    return template % duration
+        return value
+    return template % value
+
+
+def _format_remaining(addon, duration):
+    return _format_localized(addon.getLocalizedString(_STR_REMAINING), duration)
