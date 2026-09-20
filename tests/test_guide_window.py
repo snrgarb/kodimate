@@ -1792,6 +1792,224 @@ def test_refresh_in_place_relists_panel_and_keeps_active_filter(tmp_path):
         conn.close()
 
 
+def test_refresh_in_place_selects_active_group_row_not_its_old_position(tmp_path):
+    # Review fix: the panel re-render after a non-fallback generation change
+    # must re-select the active filter's row, not keep the panel selection
+    # by position -- a new group sorting before it would otherwise land the
+    # selection on the wrong row.
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn, name="P1")
+        gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 5)",
+            (pid,),
+        ).lastrowid
+        cid_a = _channel(conn, pid, "a", "Alpha", 0)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_a))
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, group_id=gid, provider_id=pid)
+        window.onInit()
+        panel = window.getControl(win_guide.PANEL_LIST_ID)
+
+        alpha_gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Alpha', 0)",
+            (pid,),
+        ).lastrowid
+        cid_b = _channel(conn, pid, "b", "Beta", 1)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (alpha_gid, cid_b))
+        _bump_generation(2)
+        _notify_refreshed(window)
+
+        labels = [item.getLabel() for item in panel._items]
+        assert labels == ['String 32141', 'String 32039', 'P1', 'Alpha', 'Sports']
+        assert window.getProperty('guide_filter') == 'Sports'
+        sports_index = labels.index('Sports')
+        assert panel.getSelectedPosition() == sports_index
+        active_flags = [item.getProperty('active') for item in panel._items]
+        assert active_flags == ['1' if i == sports_index else '0' for i in range(len(labels))]
+        assert [row['name'] for row in window._channel_rows] == ['Alpha']
+    finally:
+        conn.close()
+
+
+def test_refresh_in_place_drops_removed_group_keeps_active_filter_selected(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn, name="P1")
+        gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 5)",
+            (pid,),
+        ).lastrowid
+        cid_a = _channel(conn, pid, "a", "Alpha", 0)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_a))
+        news_gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'News', 0)",
+            (pid,),
+        ).lastrowid
+        cid_b = _channel(conn, pid, "b", "Beta", 1)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (news_gid, cid_b))
+        window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
+                              conn=conn, group_id=gid, provider_id=pid)
+        window.onInit()
+        panel = window.getControl(win_guide.PANEL_LIST_ID)
+        assert [item.getLabel() for item in panel._items] == [
+            'String 32141', 'String 32039', 'P1', 'News', 'Sports',
+        ]
+
+        conn.execute("UPDATE channel SET stale_since = '2026-01-01T00:00:00' WHERE id = ?", (cid_b,))
+        conn.execute("DELETE FROM channel_group WHERE id = ?", (news_gid,))
+        _bump_generation(2)
+        _notify_refreshed(window)
+
+        labels = [item.getLabel() for item in panel._items]
+        assert labels == ['String 32141', 'String 32039', 'P1', 'Sports']
+        assert window.getProperty('guide_filter') == 'Sports'
+        sports_index = labels.index('Sports')
+        assert panel.getSelectedPosition() == sports_index
+        assert panel.getListItem(sports_index).getProperty('active') == '1'
+    finally:
+        conn.close()
+
+
+def test_refresh_in_place_keeps_collapsed_provider_header_across_relist(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn, name="P1")
+        gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
+            (pid,),
+        ).lastrowid
+        cid = _channel(conn, pid, "a", "Alpha", 0)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid))
+        window = _window(conn)
+        window.onAction(xbmcgui.Action(xbmcgui.ACTION_MOVE_LEFT))  # column -> panel
+        panel = window.getControl(win_guide.PANEL_LIST_ID)
+        panel.selectItem(2)  # provider header 'P1'
+        window.onClick(win_guide.PANEL_LIST_ID)  # collapse
+        assert [item.getLabel() for item in panel._items] == ['String 32141', 'String 32039', 'P1']
+
+        news_gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'News', 1)",
+            (pid,),
+        ).lastrowid
+        cid_b = _channel(conn, pid, "b", "Beta", 1)
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (news_gid, cid_b))
+        _bump_generation(2)
+        _notify_refreshed(window)
+
+        labels = [item.getLabel() for item in panel._items]
+        assert labels == ['String 32141', 'String 32039', 'P1']
+    finally:
+        conn.close()
+
+
+def test_generation_change_under_modal_relists_panel_and_keeps_active_filter(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn, name="P1")
+        gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 5)",
+            (pid,),
+        ).lastrowid
+        cid_a = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_a))
+        eid = _epg_source(conn, pid)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+        window._group_id = gid
+        window._provider_id = pid
+        window._channel_rows = window._query_rows()
+        window._populate_channel_list()
+        window._update_filter_header()
+        window._render_panel()
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
+        window._load_programmes()
+        window._relayout()
+        window._zone = 'grid'
+        panel = window.getControl(win_guide.PANEL_LIST_ID)
+
+        class _BumpingDialog(_FakeDialog):
+            result = None
+
+            @classmethod
+            def open(cls, **kwargs):
+                alpha_gid = conn.execute(
+                    "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Alpha', 0)",
+                    (pid,),
+                ).lastrowid
+                cid_b = _channel(conn, pid, "b", "Beta", 1)
+                conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (alpha_gid, cid_b))
+                _bump_generation(2)
+                _notify_refreshed(window)
+                return super(_BumpingDialog, cls).open(**kwargs)
+
+        window.dialog_cls = _BumpingDialog
+
+        labels_before = [item.getLabel() for item in panel._items]
+        assert 'Alpha' not in labels_before
+
+        window.onClick(CHANNEL_LIST_ID)
+
+        labels = [item.getLabel() for item in panel._items]
+        assert labels == ['String 32141', 'String 32039', 'P1', 'Alpha', 'Sports']
+        assert window.getProperty('guide_filter') == 'Sports'
+        sports_index = labels.index('Sports')
+        assert panel.getSelectedPosition() == sports_index
+        assert panel.getListItem(sports_index).getProperty('active') == '1'
+    finally:
+        conn.close()
+
+
+def test_generation_change_under_modal_deleting_active_group_falls_back_to_all(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        pid = _provider(conn, name="P1")
+        gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'Sports', 0)",
+            (pid,),
+        ).lastrowid
+        cid_a = _channel(conn, pid, "a", "Alpha", 0, epg_channel_id="x1")
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid_a))
+        eid = _epg_source(conn, pid)
+        window, dialog_cls, playback_cls = _guide_window_with_fakes(conn, None)
+        window._group_id = gid
+        window._channel_rows = window._query_rows()
+        window._populate_channel_list()
+        window._update_filter_header()
+        window._render_panel()
+        viewport_start = window._viewport_start
+        _programme(conn, eid, "x1", guide.format_iso(viewport_start),
+                   guide.format_iso(viewport_start + timedelta(hours=1)), "Show A")
+        window._load_programmes()
+        window._relayout()
+        window._zone = 'grid'
+        panel = window.getControl(win_guide.PANEL_LIST_ID)
+
+        class _BumpingDialog(_FakeDialog):
+            result = None
+
+            @classmethod
+            def open(cls, **kwargs):
+                conn.execute(
+                    "UPDATE channel SET stale_since = '2026-01-01T00:00:00' WHERE id = ?", (cid_a,)
+                )
+                conn.execute("DELETE FROM channel_group WHERE id = ?", (gid,))
+                _bump_generation(2)
+                _notify_refreshed(window)
+                return super(_BumpingDialog, cls).open(**kwargs)
+
+        window.dialog_cls = _BumpingDialog
+
+        window.onClick(CHANNEL_LIST_ID)
+
+        assert window.getProperty('guide_filter') == 'String 32141'
+        assert panel.getSelectedPosition() == 0
+        assert panel.getListItem(0).getProperty('active') == '1'
+    finally:
+        conn.close()
+
+
 def test_applying_empty_favourites_yields_empty_list_no_exception(tmp_path):
     conn = _conn(tmp_path)
     try:
@@ -1854,12 +2072,19 @@ def test_generation_change_falls_back_and_reselects_all_row_in_panel(tmp_path):
         ).lastrowid
         cid = _channel(conn, pid, "a", "Alpha", 0)
         conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (gid, cid))
+        news_gid = conn.execute(
+            "INSERT INTO channel_group (provider_id, name, sort_order) VALUES (?, 'News', 1)",
+            (pid,),
+        ).lastrowid
+        _channel(conn, pid, "b", "Beta", 1)  # outside the vanishing group, no group
+        cid_c = _channel(conn, pid, "c", "Gamma", 2)  # in a different, surviving group
+        conn.execute("UPDATE channel SET group_id = ? WHERE id = ?", (news_gid, cid_c))
         window = GuideWindow('script-kodimate-guide.xml', '/addon', 'Main', '1080i',
                               conn=conn, group_id=gid)
         window.onInit()
         panel = window.getControl(win_guide.PANEL_LIST_ID)
         assert [item.getLabel() for item in panel._items] == [
-            'String 32141', 'String 32039', 'P1', 'Sports',
+            'String 32141', 'String 32039', 'P1', 'Sports', 'News',
         ]
         panel.selectItem(3)  # 'Sports'
 
@@ -1873,6 +2098,8 @@ def test_generation_change_falls_back_and_reselects_all_row_in_panel(tmp_path):
         assert 'Sports' not in labels
         assert panel.getSelectedPosition() == 0
         assert panel.getListItem(0).getProperty('active') == '1'
+        channel_labels = [item.getLabel() for item in window.getControl(CHANNEL_LIST_ID)._items]
+        assert channel_labels == ['Beta', 'Gamma']
     finally:
         conn.close()
 

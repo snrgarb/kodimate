@@ -273,11 +273,7 @@ class GuideWindow(BaseWindow):
         self._update_filter_header()
         self._load_programmes()
         self._relayout()
-        if fell_back:
-            self._render_panel()
-        else:
-            selected_panel = self.getControl(PANEL_LIST_ID).getSelectedPosition()
-            self._render_panel(keep_index=selected_panel)
+        self._render_panel()
 
     def close(self):
         with self._lock:
